@@ -36,15 +36,16 @@ export default function RestorationSafariAdmin() {
   // RESTORED + EXPANDED: Toggle State for every block (NEW blocks added, none removed)
   const [visibleBlocks, setVisibleBlocks] = useState({
     hero: true,
-    heroTopMeta: true, // NEW: social proof + location + rooms (above hero)
-    heroTradeProfile: true, // NEW: "Nyumbani-Collections Trade profile." box (above hero)
+    heroTopMeta: true, // social proof + location + rooms
+    heroTradeProfile: true, // "Nyumbani-Collections Trade profile." + class/name/vibe
+    heroHeaderStack: true, // NEW: wrapper container for above-hero area
     matrix: true,
     inclusions: true,
     exclusions: true,
     experiences: true,
     offers: true,
     terms: true,
-    leadCapture: true, // NEW: bring back lead capture section (bottom)
+    leadCapture: true, // Lead capture section (bottom)
   });
 
   const [portfolio, setPortfolio] = useState([
@@ -63,7 +64,7 @@ export default function RestorationSafariAdmin() {
       offersText: "Stay 5 Pay 4 during Green Season.",
       terms: "30% non-refundable deposit.",
 
-      // NEW: Meta + Social Proof + Trade profile headline text
+      // Meta + Social Proof + Trade profile headline text
       tradeProfileLabel: "Nyumbani-Collections",
       tradeProfileSub: "Trade profile.",
       locationLabel: "Serengeti National Park, Tanzania",
@@ -73,7 +74,7 @@ export default function RestorationSafariAdmin() {
       instagramHandle: "@nyumbani.collections",
       website: "https://example.com",
 
-      // NEW: Lead capture content (editable)
+      // Lead capture content (editable)
       leadHeadline: "Get rates, availability & trade support in one reply.",
       leadSubcopy:
         "Leave your details and we’ll send a trade-ready fact sheet, inclusions, and a quick quote.",
@@ -176,10 +177,7 @@ export default function RestorationSafariAdmin() {
                 Accents
               </p>
               {Object.entries(theme).map(([k, v]) => (
-                <div
-                  key={k}
-                  className="flex justify-between items-center"
-                >
+                <div key={k} className="flex justify-between items-center">
                   <span className="text-[9px] uppercase font-medium">{k}</span>
                   <input
                     type="color"
@@ -214,179 +212,182 @@ export default function RestorationSafariAdmin() {
           </button>
         )}
 
-        {/* NEW: ABOVE-HERO STACKED BOXES (so NOTHING sits on the hero image) */}
-        <div className="max-w-6xl mx-auto px-6 pt-10 space-y-6">
-          {/* Social proof + location + room totals */}
-          {visibleBlocks.heroTopMeta && (
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                {/* Social Proof */}
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
-                    Social proof
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <Star size={16} style={{ color: theme.highlight }} />
-                    <input
-                      className="text-3xl font-black italic outline-none w-24 bg-transparent"
-                      value={camp.rating}
-                      onChange={(e) =>
-                        updateField("rating", parseFloat(e.target.value))
-                      }
-                    />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      / 5
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-                      Reviews
-                    </span>
-                    <input
-                      className="text-sm font-black outline-none bg-transparent w-20"
-                      value={camp.reviewCount}
-                      onChange={(e) =>
-                        updateField("reviewCount", parseInt(e.target.value))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Instagram size={14} className="text-slate-400" />
-                    <input
-                      className="text-xs font-bold uppercase tracking-wider outline-none bg-transparent w-full"
-                      value={camp.instagramHandle}
-                      onChange={(e) =>
-                        updateField("instagramHandle", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Globe size={14} className="text-slate-400" />
-                    <input
-                      className="text-xs font-bold outline-none bg-transparent w-full"
-                      value={camp.website}
-                      onChange={(e) => updateField("website", e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
-                    Location
-                  </p>
-                  <div className="flex items-start gap-3">
-                    <MapPin size={16} style={{ color: theme.highlight }} />
-                    <textarea
-                      className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full resize-none leading-snug"
-                      value={camp.locationLabel}
-                      onChange={(e) =>
-                        updateField("locationLabel", e.target.value)
-                      }
-                      rows={2}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Compass size={14} className="text-slate-400" />
-                    <input
-                      className="text-xs font-bold outline-none bg-transparent w-full"
-                      value={camp.mapLink}
-                      onChange={(e) => updateField("mapLink", e.target.value)}
-                    />
-                  </div>
-                  <p className="text-[10px] font-medium text-slate-400">
-                    Tip: paste a Google Maps link for quick access.
-                  </p>
-                </div>
-
-                {/* Rooms */}
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
-                    Rooms & capacity
-                  </p>
-                  <div className="flex items-center justify-between p-5 rounded-2xl border border-slate-100 bg-slate-50">
-                    <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                        Total rooms
+        {/* ✅ NEW: ONE COMBINED "ABOVE HERO" CONTAINER */}
+        {visibleBlocks.heroHeaderStack && (
+          <div className="max-w-6xl mx-auto px-6 pt-10">
+            <div className="rounded-[3rem] border border-slate-100 bg-white/60 backdrop-blur p-6 md:p-8 shadow-sm space-y-6">
+              {/* Social proof + location + rooms */}
+              {visibleBlocks.heroTopMeta && (
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                    {/* Social Proof */}
+                    <div className="space-y-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
+                        Social proof
                       </p>
-                      <input
-                        className="text-4xl font-black italic outline-none bg-transparent w-24"
-                        value={camp.rooms}
-                        onChange={(e) =>
-                          updateField("rooms", parseInt(e.target.value))
-                        }
+                      <div className="flex items-center gap-3">
+                        <Star size={16} style={{ color: theme.highlight }} />
+                        <input
+                          className="text-3xl font-black italic outline-none w-24 bg-transparent"
+                          value={camp.rating}
+                          onChange={(e) =>
+                            updateField("rating", parseFloat(e.target.value))
+                          }
+                        />
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          / 5
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                          Reviews
+                        </span>
+                        <input
+                          className="text-sm font-black outline-none bg-transparent w-20"
+                          value={camp.reviewCount}
+                          onChange={(e) =>
+                            updateField("reviewCount", parseInt(e.target.value))
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Instagram size={14} className="text-slate-400" />
+                        <input
+                          className="text-xs font-bold uppercase tracking-wider outline-none bg-transparent w-full"
+                          value={camp.instagramHandle}
+                          onChange={(e) =>
+                            updateField("instagramHandle", e.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Globe size={14} className="text-slate-400" />
+                        <input
+                          className="text-xs font-bold outline-none bg-transparent w-full"
+                          value={camp.website}
+                          onChange={(e) => updateField("website", e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Location */}
+                    <div className="space-y-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
+                        Location
+                      </p>
+                      <div className="flex items-start gap-3">
+                        <MapPin size={16} style={{ color: theme.highlight }} />
+                        <textarea
+                          className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full resize-none leading-snug"
+                          value={camp.locationLabel}
+                          onChange={(e) =>
+                            updateField("locationLabel", e.target.value)
+                          }
+                          rows={2}
+                        />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Compass size={14} className="text-slate-400" />
+                        <input
+                          className="text-xs font-bold outline-none bg-transparent w-full"
+                          value={camp.mapLink}
+                          onChange={(e) => updateField("mapLink", e.target.value)}
+                        />
+                      </div>
+                      <p className="text-[10px] font-medium text-slate-400">
+                        Tip: paste a Google Maps link for quick access.
+                      </p>
+                    </div>
+
+                    {/* Rooms */}
+                    <div className="space-y-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">
+                        Rooms & capacity
+                      </p>
+                      <div className="flex items-center justify-between p-5 rounded-2xl border border-slate-100 bg-slate-50">
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                            Total rooms
+                          </p>
+                          <input
+                            className="text-4xl font-black italic outline-none bg-transparent w-24"
+                            value={camp.rooms}
+                            onChange={(e) =>
+                              updateField("rooms", parseInt(e.target.value))
+                            }
+                          />
+                        </div>
+                        <div className="h-12 w-px bg-slate-200" />
+                        <div className="text-right">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                            Total units
+                          </p>
+                          <p className="text-4xl font-black italic">{totalUnits}</p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] font-medium text-slate-400">
+                        Units = family + double + single.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trade Profile box */}
+              {visibleBlocks.heroTradeProfile && (
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 p-10 shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-300 mb-6">
+                    <input
+                      className="outline-none bg-transparent w-full"
+                      value={`${camp.tradeProfileLabel} ${camp.tradeProfileSub}`}
+                      onChange={(e) => {
+                        updateField("tradeProfileLabel", e.target.value);
+                      }}
+                    />
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Property class
+                        </p>
+                        <input
+                          className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full border-b border-slate-100 pb-2"
+                          value={camp.class}
+                          onChange={(e) => updateField("class", e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Camp name
+                        </p>
+                        <input
+                          className="text-2xl md:text-3xl font-black italic tracking-tighter outline-none bg-transparent w-full border-b border-slate-100 pb-2"
+                          value={camp.name}
+                          onChange={(e) => updateField("name", e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Vibe
+                      </p>
+                      <textarea
+                        className="text-sm font-medium outline-none bg-transparent w-full border border-slate-100 rounded-2xl p-4 resize-none"
+                        value={camp.vibe}
+                        onChange={(e) => updateField("vibe", e.target.value)}
+                        rows={3}
                       />
                     </div>
-                    <div className="h-12 w-px bg-slate-200" />
-                    <div className="text-right">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                        Total units
-                      </p>
-                      <p className="text-4xl font-black italic">{totalUnits}</p>
-                    </div>
                   </div>
-                  <p className="text-[10px] font-medium text-slate-400">
-                    Units = family + double + single.
-                  </p>
                 </div>
-              </div>
+              )}
             </div>
-          )}
-
-          {/* Trade Profile box (the writings that used to be on hero) */}
-          {visibleBlocks.heroTradeProfile && (
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 p-10 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-300 mb-6">
-                <input
-                  className="outline-none bg-transparent w-full"
-                  value={`${camp.tradeProfileLabel} ${camp.tradeProfileSub}`}
-                  onChange={(e) => {
-                    // Keep it simple: store whole line back into label, and keep sub as "Trade profile."
-                    updateField("tradeProfileLabel", e.target.value);
-                  }}
-                />
-              </p>
-
-              <div className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                      Property class
-                    </p>
-                    <input
-                      className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full border-b border-slate-100 pb-2"
-                      value={camp.class}
-                      onChange={(e) => updateField("class", e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                      Camp name
-                    </p>
-                    <input
-                      className="text-2xl md:text-3xl font-black italic tracking-tighter outline-none bg-transparent w-full border-b border-slate-100 pb-2"
-                      value={camp.name}
-                      onChange={(e) => updateField("name", e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    Vibe
-                  </p>
-                  <textarea
-                    className="text-sm font-medium outline-none bg-transparent w-full border border-slate-100 rounded-2xl p-4 resize-none"
-                    value={camp.vibe}
-                    onChange={(e) => updateField("vibe", e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* HERO (image-only: nothing on top of it) */}
         {visibleBlocks.hero && (
@@ -562,6 +563,7 @@ export default function RestorationSafariAdmin() {
                     </div>
                   ))}
                 </div>
+
                 {/* PAID */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
@@ -618,7 +620,7 @@ export default function RestorationSafariAdmin() {
             </div>
           )}
 
-          {/* NEW: LEAD CAPTURE SECTION (toggleable) */}
+          {/* LEAD CAPTURE */}
           {visibleBlocks.leadCapture && (
             <div className="rounded-[3rem] border border-slate-100 bg-white p-10 md:p-14 shadow-sm">
               <div className="grid md:grid-cols-2 gap-10 items-start">
@@ -665,7 +667,6 @@ export default function RestorationSafariAdmin() {
                   </div>
                 </div>
 
-                {/* Form UI (admin-editable labels, but the inputs mimic a real capture form) */}
                 <div className="rounded-[2.5rem] border border-slate-100 bg-slate-50 p-8 space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
