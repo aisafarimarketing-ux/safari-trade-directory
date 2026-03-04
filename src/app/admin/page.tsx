@@ -11,7 +11,7 @@ import {
   ShieldAlert,
   Eye,
   EyeOff,
-  Star as StarIcon, // ✅ FIX: alias prevents "Cannot find name 'Star'" + avoids collisions
+  Star as StarIcon, // ✅ Always safe (prevents TS name collision)
   Compass,
   MapPin,
   Trash2,
@@ -23,7 +23,11 @@ import {
   Download,
   Share2,
   Contact,
+  Layout,
+  FileText,
 } from "lucide-react";
+
+type RoomKey = "family" | "double" | "single";
 
 export default function RestorationSafariAdmin() {
   const [isPreview, setIsPreview] = useState(false);
@@ -98,6 +102,7 @@ export default function RestorationSafariAdmin() {
       leadDisclaimer:
         "By submitting, you agree to be contacted by our reservations team.",
 
+      // Contact card (QR / NFC)
       contactName: "Nyumbani Reservations",
       contactTitle: "Trade Desk",
       contactCompany: "Nyumbani Collections",
@@ -105,10 +110,11 @@ export default function RestorationSafariAdmin() {
       contactPhone: "+255 000 000 000",
       contactWebsite: "https://example.com",
 
-      // ✅ NEW: Hero image (data URL)
       heroImage: "" as string,
     },
   ]);
+
+  const camp = portfolio[selectedCampIndex];
 
   const toggleBlock = (key: keyof typeof visibleBlocks) => {
     setVisibleBlocks((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -128,20 +134,16 @@ export default function RestorationSafariAdmin() {
 
   const deleteItem = (listKey: string, index: number) => {
     const updated = [...portfolio];
-    (updated[selectedCampIndex] as any)[listKey] = (updated[
-      selectedCampIndex
-    ] as any)[listKey].filter((_: any, i: number) => i !== index);
+    (updated[selectedCampIndex] as any)[listKey] = (updated[selectedCampIndex] as any)[
+      listKey
+    ].filter((_: any, i: number) => i !== index);
     setPortfolio(updated);
   };
 
-  const camp = portfolio[selectedCampIndex];
-
   const totalUnits =
-    (Number(camp.family) || 0) +
-    (Number(camp.double) || 0) +
-    (Number(camp.single) || 0);
+    (Number(camp.family) || 0) + (Number(camp.double) || 0) + (Number(camp.single) || 0);
 
-  // THEME HELPERS (applied beyond pageBg)
+  // THEME (fix: apply beyond pageBg)
   const cardStyle: React.CSSProperties = {
     backgroundColor: theme.blockBg,
     borderColor: theme.borderColor,
@@ -158,40 +160,42 @@ export default function RestorationSafariAdmin() {
   const highlightText: React.CSSProperties = { color: theme.highlight };
   const highlightBg: React.CSSProperties = { backgroundColor: theme.highlight };
 
-  // ---- Room Photo Upload ----
-  const addRoomPhotos = async (
-    roomKey: "family" | "double" | "single",
-    files: FileList | null
-  ) => {
-    if (!files || files.length === 0) return;
+  // ---- Image utils ----
+  const toDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    const toDataUrl = (file: File) =>
-      new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+  // ---- Room photo upload + modal preview ----
+  const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string; title?: string }>({
+    open: false,
+    src: "",
+    title: "",
+  });
+
+  const openPhoto = (src: string, title?: string) => setPhotoModal({ open: true, src, title });
+  const closePhoto = () => setPhotoModal({ open: false, src: "", title: "" });
+
+  const addRoomPhotos = async (roomKey: RoomKey, files: FileList | null) => {
+    if (!files || files.length === 0) return;
 
     const urls: string[] = [];
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/")) continue;
-      const url = await toDataUrl(file);
-      urls.push(url);
+      urls.push(await toDataUrl(file));
     }
 
     const updated = [...portfolio];
     const current = updated[selectedCampIndex] as any;
-
     const existing: string[] = current.roomPhotos?.[roomKey] ?? [];
-    current.roomPhotos =
-      current.roomPhotos || ({"family": [], "double": [], "single": []} as any);
     current.roomPhotos[roomKey] = [...existing, ...urls].slice(0, 6);
-
     setPortfolio(updated);
   };
 
-  const removeRoomPhoto = (roomKey: "family" | "double" | "single", index: number) => {
+  const removeRoomPhoto = (roomKey: RoomKey, index: number) => {
     const updated = [...portfolio];
     const current = updated[selectedCampIndex] as any;
     current.roomPhotos[roomKey] = (current.roomPhotos?.[roomKey] ?? []).filter(
@@ -200,29 +204,19 @@ export default function RestorationSafariAdmin() {
     setPortfolio(updated);
   };
 
-  // ✅ NEW: Photo preview modal (big window)
-  const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string; title?: string }>({
-    open: false,
-    src: "",
-    title: "",
-  });
-
-  const openPhoto = (src: string, title?: string) => {
-    setPhotoModal({ open: true, src, title });
+  // ---- Hero change: right click / double click ----
+  const heroFileRef = useRef<HTMLInputElement | null>(null);
+  const setHeroFromFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    if (!f.type.startsWith("image/")) return;
+    updateField("heroImage", await toDataUrl(f));
   };
 
-  const closePhoto = () => {
-    setPhotoModal({ open: false, src: "", title: "" });
-  };
-
-  // ---- vCard for NFC/QR ----
+  // ---- vCard (Download/Share/Save) ----
   const vcardText = useMemo(() => {
     const esc = (s: string) =>
-      String(s ?? "")
-        .replace(/\n/g, "\\n")
-        .replace(/,/g, "\\,")
-        .replace(/;/g, "\\;");
-
+      String(s ?? "").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
     return [
       "BEGIN:VCARD",
       "VERSION:3.0",
@@ -258,15 +252,10 @@ export default function RestorationSafariAdmin() {
     try {
       const blob = new Blob([vcardText], { type: "text/vcard;charset=utf-8" });
       const file = new File([blob], "contact.vcf", { type: "text/vcard" });
-
       // @ts-ignore
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         // @ts-ignore
-        await navigator.share({
-          title: camp.contactName,
-          text: "Contact card",
-          files: [file],
-        });
+        await navigator.share({ title: camp.contactName, text: "Contact card", files: [file] });
       } else {
         if (vcardUrl) window.open(vcardUrl, "_blank");
       }
@@ -284,42 +273,65 @@ export default function RestorationSafariAdmin() {
     a.remove();
   };
 
-  // ✅ NEW: Hero image chooser (double click OR right click)
-  const heroFileRef = useRef<HTMLInputElement | null>(null);
+  // ✅ NEW: Upload a .vcf file to prefill contact fields (real integration)
+  const parseVcf = (text: string) => {
+    const lines = text.split(/\r?\n/);
+    const get = (prefix: string) => {
+      const hit = lines.find((l) => l.toUpperCase().startsWith(prefix.toUpperCase()));
+      if (!hit) return "";
+      return hit.split(":").slice(1).join(":").trim();
+    };
 
-  const setHeroFromFiles = async (files: FileList | null) => {
+    // Very pragmatic parsing (enough for your use case)
+    const fn = get("FN");
+    const org = get("ORG");
+    const title = get("TITLE");
+    const emailLine = lines.find((l) => l.toUpperCase().includes("EMAIL"));
+    const telLine = lines.find((l) => l.toUpperCase().includes("TEL"));
+    const urlLine = lines.find((l) => l.toUpperCase().startsWith("URL"));
+
+    const email = emailLine ? emailLine.split(":").slice(1).join(":").trim() : "";
+    const tel = telLine ? telLine.split(":").slice(1).join(":").trim() : "";
+    const url = urlLine ? urlLine.split(":").slice(1).join(":").trim() : "";
+
+    return {
+      contactName: fn || "",
+      contactCompany: org || "",
+      contactTitle: title || "",
+      contactEmail: email || "",
+      contactPhone: tel || "",
+      contactWebsite: url || "",
+    };
+  };
+
+  const loadVcfFile = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (!file.type.startsWith("image/")) return;
+    if (!file.name.toLowerCase().endsWith(".vcf")) return;
 
-    const toDataUrl = (f: File) =>
-      new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(f);
-      });
+    const text = await file.text();
+    const parsed = parseVcf(text);
 
-    const url = await toDataUrl(file);
-    updateField("heroImage", url);
+    const updated = [...portfolio];
+    const current = updated[selectedCampIndex] as any;
+    Object.entries(parsed).forEach(([k, v]) => {
+      if (v) current[k] = v;
+    });
+    setPortfolio(updated);
   };
 
   return (
     <div className="flex min-h-screen font-sans transition-all" style={{ backgroundColor: theme.pageBg }}>
-      {/* PHOTO MODAL (big preview) */}
+      {/* ROOM PHOTO MODAL */}
       {photoModal.open && (
         <div
           className="fixed inset-0 z-[999] flex items-center justify-center p-4"
           style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
           onMouseDown={(e) => {
-            // click backdrop closes
             if (e.target === e.currentTarget) closePhoto();
           }}
         >
-          <div
-            className="w-full max-w-6xl rounded-3xl overflow-hidden border shadow-2xl"
-            style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
-          >
+          <div className="w-full max-w-6xl rounded-3xl overflow-hidden border shadow-2xl" style={cardStyle}>
             <div className="flex items-center justify-between px-6 py-4 border-b" style={borderStyle}>
               <div className="text-xs font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.6 }}>
                 {photoModal.title || "Preview"}
@@ -328,12 +340,12 @@ export default function RestorationSafariAdmin() {
                 onClick={closePhoto}
                 className="p-2 rounded-xl border"
                 style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}
+                type="button"
               >
                 <X size={16} style={accentText} />
               </button>
             </div>
             <div className="p-4">
-              {/* Real-size friendly: no forced crop; scroll if huge */}
               <div className="max-h-[75vh] overflow-auto rounded-2xl border" style={borderStyle}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photoModal.src} alt="Preview" className="w-full h-auto block" />
@@ -343,10 +355,10 @@ export default function RestorationSafariAdmin() {
         </div>
       )}
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR (Restoration Hub style) */}
       {!isPreview && (
         <aside
-          className="w-64 fixed h-screen top-0 left-0 z-[100] p-5 flex flex-col shadow-2xl border-r"
+          className="w-64 bg-white border-r fixed h-screen top-0 left-0 z-[100] p-5 flex flex-col shadow-2xl"
           style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
         >
           <div className="flex items-center justify-between mb-8">
@@ -357,12 +369,14 @@ export default function RestorationSafariAdmin() {
               onClick={() => setIsPreview(true)}
               className="p-2 rounded-lg border"
               style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}
+              type="button"
             >
               <Eye size={14} style={accentText} />
             </button>
           </div>
 
           <div className="flex-1 space-y-6 overflow-y-auto pr-2">
+            {/* Toggles */}
             <div>
               <p className="text-[9px] font-bold uppercase mb-4 tracking-[0.2em]" style={{ color: theme.accent, opacity: 0.45 }}>
                 View Toggles
@@ -372,8 +386,9 @@ export default function RestorationSafariAdmin() {
                   <button
                     key={key}
                     onClick={() => toggleBlock(key as any)}
-                    className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
+                    className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all hover:opacity-90"
                     style={{ backgroundColor: "transparent" }}
+                    type="button"
                   >
                     <span
                       style={{
@@ -393,6 +408,7 @@ export default function RestorationSafariAdmin() {
               </div>
             </div>
 
+            {/* Theme */}
             <div className="pt-6 border-t space-y-3" style={borderStyle}>
               <p className="text-[9px] font-bold uppercase" style={{ color: theme.accent, opacity: 0.45 }}>
                 Accents
@@ -416,8 +432,9 @@ export default function RestorationSafariAdmin() {
           <button
             className="mt-6 w-full py-4 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center"
             style={highlightBg}
+            type="button"
           >
-            <Save size={14} className="inline mr-2" /> Save Global
+            <Save size={14} className="inline mr-2" /> Save Changes
           </button>
         </aside>
       )}
@@ -427,8 +444,8 @@ export default function RestorationSafariAdmin() {
         {isPreview && (
           <button
             onClick={() => setIsPreview(false)}
-            className="fixed top-6 right-6 z-[200] px-5 py-2.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-2xl border"
-            style={{ backgroundColor: theme.accent, color: "#fff", borderColor: theme.accent }}
+            className="fixed top-6 right-6 z-[200] bg-slate-900 text-white px-5 py-2.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-2xl"
+            type="button"
           >
             <Monitor size={14} /> Open Admin
           </button>
@@ -440,14 +457,21 @@ export default function RestorationSafariAdmin() {
             <div className="rounded-[3rem] border p-6 md:p-8 shadow-sm space-y-6" style={cardStyle}>
               {visibleBlocks.heroTopMeta && (
                 <div className="rounded-[2.5rem] border p-8 shadow-sm" style={cardStyle}>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-[10px] font-black uppercase tracking-widest opacity-50" style={accentText}>
+                      Brand & Trust
+                    </h2>
+                    <Layout size={16} style={{ color: theme.accent, opacity: 0.4 }} />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Social proof */}
                     <div className="space-y-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent, opacity: 0.5 }}>
                         Social proof
                       </p>
                       <div className="flex items-center gap-3">
-                        {/* ✅ FIXED: use StarIcon */}
-                        <StarIcon size={16} style={highlightText} />
+                        <StarIcon size={18} style={highlightText} />
                         <input
                           className="text-3xl font-black italic outline-none w-24 bg-transparent"
                           value={camp.rating}
@@ -457,17 +481,6 @@ export default function RestorationSafariAdmin() {
                         <span className="text-xs font-bold uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.45 }}>
                           / 5
                         </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.25 }}>
-                          Reviews
-                        </span>
-                        <input
-                          className="text-sm font-black outline-none bg-transparent w-20"
-                          value={camp.reviewCount}
-                          onChange={(e) => updateField("reviewCount", parseInt(e.target.value))}
-                          style={accentText}
-                        />
                       </div>
                       <div className="flex items-center gap-3">
                         <Instagram size={14} style={{ color: theme.accent, opacity: 0.45 }} />
@@ -489,6 +502,7 @@ export default function RestorationSafariAdmin() {
                       </div>
                     </div>
 
+                    {/* Location */}
                     <div className="space-y-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent, opacity: 0.5 }}>
                         Location
@@ -512,147 +526,153 @@ export default function RestorationSafariAdmin() {
                           style={accentText}
                         />
                       </div>
-                      <p className="text-[10px] font-medium" style={{ color: theme.accent, opacity: 0.45 }}>
-                        Tip: paste a Google Maps link for quick access.
-                      </p>
                     </div>
 
+                    {/* Inventory summary */}
                     <div className="space-y-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent, opacity: 0.5 }}>
-                        Rooms & capacity
+                        Inventory
                       </p>
-                      <div
-                        className="flex items-center justify-between p-5 rounded-2xl border"
-                        style={{ borderColor: theme.borderColor, backgroundColor: theme.pageBg }}
-                      >
-                        <div>
-                          <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
-                            Total rooms
-                          </p>
-                          <input
-                            className="text-4xl font-black italic outline-none bg-transparent w-24"
-                            value={camp.rooms}
-                            onChange={(e) => updateField("rooms", parseInt(e.target.value))}
-                            style={accentText}
-                          />
-                        </div>
-                        <div className="h-12 w-px" style={{ backgroundColor: theme.borderColor }} />
-                        <div className="text-right">
-                          <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
-                            Total units
-                          </p>
-                          <p className="text-4xl font-black italic" style={accentText}>
-                            {totalUnits}
-                          </p>
+                      <div className="rounded-2xl border p-5" style={{ borderColor: theme.borderColor, backgroundColor: theme.pageBg }}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
+                              Total rooms
+                            </p>
+                            <input
+                              className="text-4xl font-black italic outline-none bg-transparent w-24"
+                              value={camp.rooms}
+                              onChange={(e) => updateField("rooms", parseInt(e.target.value))}
+                              style={accentText}
+                            />
+                          </div>
+                          <div className="h-12 w-px" style={{ backgroundColor: theme.borderColor }} />
+                          <div className="text-right">
+                            <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
+                              Total units
+                            </p>
+                            <p className="text-4xl font-black italic" style={accentText}>
+                              {totalUnits}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      <p className="text-[10px] font-medium" style={{ color: theme.accent, opacity: 0.45 }}>
-                        Units = family + double + single.
-                      </p>
                     </div>
                   </div>
                 </div>
               )}
 
               {visibleBlocks.heroTradeProfile && (
-                <div className="rounded-[2.5rem] border p-10 shadow-sm" style={cardStyle}>
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-6" style={{ color: theme.accent, opacity: 0.3 }}>
+                <div className="rounded-[2.5rem] border p-10 shadow-sm space-y-6" style={cardStyle}>
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em]" style={{ color: theme.accent, opacity: 0.35 }}>
                     <input
                       className="outline-none bg-transparent w-full"
                       value={`${camp.tradeProfileLabel} ${camp.tradeProfileSub}`}
                       onChange={(e) => updateField("tradeProfileLabel", e.target.value)}
-                      style={{ color: theme.accent, opacity: 0.9 }}
+                      style={{ color: theme.accent }}
                     />
                   </p>
 
-                  <div className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: theme.accent, opacity: 0.5 }}>
-                          Property class
-                        </p>
-                        <input
-                          className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full border-b pb-2"
-                          value={camp.class}
-                          onChange={(e) => updateField("class", e.target.value)}
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        />
-                      </div>
-
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: theme.accent, opacity: 0.5 }}>
-                          Camp name
-                        </p>
-                        <input
-                          className="text-2xl md:text-3xl font-black italic tracking-tighter outline-none bg-transparent w-full border-b pb-2"
-                          value={camp.name}
-                          onChange={(e) => updateField("name", e.target.value)}
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        />
-                      </div>
-                    </div>
-
+                  <div className="grid md:grid-cols-2 gap-6">
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: theme.accent, opacity: 0.5 }}>
-                        Vibe
+                        Property class
                       </p>
-                      <textarea
-                        className="text-sm font-medium outline-none bg-transparent w-full border rounded-2xl p-4 resize-none"
-                        value={camp.vibe}
-                        onChange={(e) => updateField("vibe", e.target.value)}
-                        rows={3}
+                      <input
+                        className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full border-b pb-2"
+                        value={camp.class}
+                        onChange={(e) => updateField("class", e.target.value)}
                         style={{ borderColor: theme.borderColor, color: theme.accent }}
                       />
                     </div>
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: theme.accent, opacity: 0.5 }}>
+                        Camp name
+                      </p>
+                      <input
+                        className="text-2xl md:text-3xl font-black italic tracking-tighter outline-none bg-transparent w-full border-b pb-2"
+                        value={camp.name}
+                        onChange={(e) => updateField("name", e.target.value)}
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                      />
+                    </div>
+                  </div>
 
-                    <div className="pt-4 border-t" style={borderStyle}>
-                      <p className="text-[9px] font-black uppercase tracking-widest mb-4" style={{ color: theme.accent, opacity: 0.5 }}>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: theme.accent, opacity: 0.5 }}>
+                      Vibe
+                    </p>
+                    <textarea
+                      className="text-sm font-medium outline-none bg-transparent w-full border rounded-2xl p-4 resize-none"
+                      value={camp.vibe}
+                      onChange={(e) => updateField("vibe", e.target.value)}
+                      rows={3}
+                      style={{ borderColor: theme.borderColor, color: theme.accent }}
+                    />
+                  </div>
+
+                  {/* ✅ VCF Upload to prefill contact */}
+                  <div className="pt-4 border-t space-y-4" style={borderStyle}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
                         Contact card (QR / NFC)
                       </p>
-                      <div className="grid md:grid-cols-2 gap-4">
+
+                      <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                        <FileText size={12} style={highlightText} />
+                        <span style={highlightText}>Upload .VCF</span>
                         <input
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={camp.contactName}
-                          onChange={(e) => updateField("contactName", e.target.value)}
-                          placeholder="Contact name"
+                          type="file"
+                          accept=".vcf,text/vcard"
+                          className="hidden"
+                          onChange={(e) => loadVcfFile(e.target.files)}
                         />
-                        <input
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={camp.contactTitle}
-                          onChange={(e) => updateField("contactTitle", e.target.value)}
-                          placeholder="Title"
-                        />
-                        <input
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={camp.contactCompany}
-                          onChange={(e) => updateField("contactCompany", e.target.value)}
-                          placeholder="Company"
-                        />
-                        <input
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={camp.contactPhone}
-                          onChange={(e) => updateField("contactPhone", e.target.value)}
-                          placeholder="Phone"
-                        />
-                        <input
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={camp.contactEmail}
-                          onChange={(e) => updateField("contactEmail", e.target.value)}
-                          placeholder="Email"
-                        />
-                        <input
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={camp.contactWebsite}
-                          onChange={(e) => updateField("contactWebsite", e.target.value)}
-                          placeholder="Website"
-                        />
-                      </div>
+                      </label>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <input
+                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                        value={camp.contactName}
+                        onChange={(e) => updateField("contactName", e.target.value)}
+                        placeholder="Contact name"
+                      />
+                      <input
+                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                        value={camp.contactTitle}
+                        onChange={(e) => updateField("contactTitle", e.target.value)}
+                        placeholder="Title"
+                      />
+                      <input
+                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                        value={camp.contactCompany}
+                        onChange={(e) => updateField("contactCompany", e.target.value)}
+                        placeholder="Company"
+                      />
+                      <input
+                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                        value={camp.contactPhone}
+                        onChange={(e) => updateField("contactPhone", e.target.value)}
+                        placeholder="Phone"
+                      />
+                      <input
+                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                        value={camp.contactEmail}
+                        onChange={(e) => updateField("contactEmail", e.target.value)}
+                        placeholder="Email"
+                      />
+                      <input
+                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                        style={{ borderColor: theme.borderColor, color: theme.accent }}
+                        value={camp.contactWebsite}
+                        onChange={(e) => updateField("contactWebsite", e.target.value)}
+                        placeholder="Website"
+                      />
                     </div>
                   </div>
                 </div>
@@ -661,19 +681,18 @@ export default function RestorationSafariAdmin() {
           </div>
         )}
 
-        {/* HERO (double click / right click to change image) */}
+        {/* HERO (double-click / right-click to change) */}
         {visibleBlocks.hero && (
           <section
             className="relative h-[70vh] w-full overflow-hidden mt-8 select-none"
             style={{ backgroundColor: theme.accent }}
             onDoubleClick={() => heroFileRef.current?.click()}
             onContextMenu={(e) => {
-              e.preventDefault(); // open picker instead of browser context menu
+              e.preventDefault();
               heroFileRef.current?.click();
             }}
             title="Double-click or right-click to change hero image"
           >
-            {/* hidden input that picks hero image */}
             <input
               ref={heroFileRef}
               type="file"
@@ -682,13 +701,13 @@ export default function RestorationSafariAdmin() {
               onChange={(e) => setHeroFromFiles(e.target.files)}
             />
 
-            {/* hero image */}
             {camp.heroImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={camp.heroImage} alt="Hero" className="absolute inset-0 w-full h-full object-cover" />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="rounded-2xl border px-6 py-4 text-[10px] font-black uppercase tracking-widest"
+                <div
+                  className="rounded-2xl border px-6 py-4 text-[10px] font-black uppercase tracking-widest"
                   style={{ borderColor: theme.borderColor, color: "#fff", backgroundColor: "rgba(0,0,0,0.25)" }}
                 >
                   Double-click / Right-click to upload hero image
@@ -696,34 +715,31 @@ export default function RestorationSafariAdmin() {
               </div>
             )}
 
-            {/* overlay */}
             <div className="absolute inset-0 bg-black/40 z-10" />
           </section>
         )}
 
         <div className="max-w-5xl mx-auto py-16 px-6 space-y-20">
-          {/* ROOM MATRIX + photo previews */}
+          {/* Inventory Matrix + Room photos */}
           {visibleBlocks.matrix && (
             <div className="space-y-6">
-              <h2 className="text-[10px] font-black uppercase tracking-widest opacity-30 italic border-b pb-4" style={{ borderColor: theme.borderColor }}>
-                <span style={{ color: theme.accent, opacity: 0.5 }}>Room Orientation</span>
-              </h2>
+              <div className="flex items-center justify-between border-b pb-4" style={borderStyle}>
+                <h2 className="text-[10px] font-black uppercase tracking-widest opacity-50" style={accentText}>
+                  Inventory Matrix
+                </h2>
+                <Layout size={16} style={{ color: theme.accent, opacity: 0.4 }} />
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {(["family", "double", "single"] as const).map((type) => (
-                  <div
-                    key={type}
-                    className="p-8 rounded-[2rem] border flex flex-col justify-between min-h-[22rem] group transition-all"
-                    style={cardStyle}
-                  >
+                  <div key={type} className="p-8 rounded-[2rem] border min-h-[22rem]" style={cardStyle}>
                     <input
                       className="text-[10px] font-black uppercase outline-none bg-transparent"
-                      value={camp.roomTypeLabels?.[type] ?? `${type} setup`}
+                      value={camp.roomTypeLabels[type]}
                       onChange={(e) => {
                         const updated = [...portfolio];
-                        const current = updated[selectedCampIndex] as any;
-                        current.roomTypeLabels = current.roomTypeLabels || { family: "", double: "", single: "" };
-                        current.roomTypeLabels[type] = e.target.value;
+                        const cur = updated[selectedCampIndex] as any;
+                        cur.roomTypeLabels[type] = e.target.value;
                         setPortfolio(updated);
                       }}
                       style={{ color: theme.accent, opacity: 0.55 }}
@@ -732,7 +748,7 @@ export default function RestorationSafariAdmin() {
                     <div className="flex items-center gap-4 mt-6">
                       <input
                         className="text-5xl font-black italic outline-none w-16 bg-transparent"
-                        value={camp[type] as number}
+                        value={camp[type]}
                         onChange={(e) => updateField(type, parseInt(e.target.value))}
                         style={accentText}
                       />
@@ -749,7 +765,6 @@ export default function RestorationSafariAdmin() {
                         <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.45 }}>
                           Room setup photos
                         </p>
-
                         <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
                           <Upload size={12} style={highlightText} />
                           <span style={highlightText}>Upload</span>
@@ -764,14 +779,13 @@ export default function RestorationSafariAdmin() {
                       </div>
 
                       <div className="grid grid-cols-3 gap-2">
-                        {(camp.roomPhotos?.[type] ?? []).map((src: string, i: number) => (
+                        {(camp.roomPhotos[type] ?? []).map((src: string, i: number) => (
                           <button
                             key={i}
                             className="relative rounded-xl overflow-hidden border text-left"
                             style={borderStyle}
-                            onClick={() => openPhoto(src, `${camp.roomTypeLabels?.[type] ?? type} photo ${i + 1}`)}
+                            onClick={() => openPhoto(src, `${camp.roomTypeLabels[type]} — Photo ${i + 1}`)}
                             type="button"
-                            title="Click to preview"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={src} alt={`${type}-${i}`} className="w-full h-20 object-cover" />
@@ -798,7 +812,7 @@ export default function RestorationSafariAdmin() {
                       </div>
 
                       <p className="text-[10px] font-medium" style={{ color: theme.accent, opacity: 0.45 }}>
-                        Click any thumbnail to open full-size preview.
+                        Click any thumbnail for full-size preview.
                       </p>
                     </div>
                   </div>
@@ -807,15 +821,15 @@ export default function RestorationSafariAdmin() {
             </div>
           )}
 
-          {/* INCLUSIONS & EXCLUSIONS */}
+          {/* Inclusions / Exclusions kept (same as before style) */}
           <div className="grid md:grid-cols-2 gap-8">
             {visibleBlocks.inclusions && (
               <div className="p-10 rounded-[2.5rem] border space-y-6" style={cardStyle}>
                 <div className="flex items-center justify-between border-b pb-4" style={borderStyle}>
                   <div className="flex items-center gap-2">
                     <Utensils size={14} style={accentText} />
-                    <h3 className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent }}>
-                      Included (Inclusions)
+                    <h3 className="text-[10px] font-black uppercase tracking-widest" style={accentText}>
+                      Inclusions
                     </h3>
                   </div>
                   <button onClick={() => addItem("inclusions")} style={highlightText} type="button">
@@ -842,7 +856,7 @@ export default function RestorationSafariAdmin() {
                         style={{ color: "#f87171" }}
                         type="button"
                       >
-                        <X size={12} />
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   ))}
@@ -856,7 +870,7 @@ export default function RestorationSafariAdmin() {
                   <div className="flex items-center gap-2">
                     <Ban size={14} style={{ color: "#f87171" }} />
                     <h3 className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.9 }}>
-                      Not Included (Exclusions)
+                      Exclusions
                     </h3>
                   </div>
                   <button onClick={() => addItem("exclusions")} style={{ color: theme.accent, opacity: 0.5 }} type="button">
@@ -883,7 +897,7 @@ export default function RestorationSafariAdmin() {
                         style={{ color: "#f87171" }}
                         type="button"
                       >
-                        <X size={12} />
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   ))}
@@ -892,99 +906,7 @@ export default function RestorationSafariAdmin() {
             )}
           </div>
 
-          {/* EXPERIENCES */}
-          {visibleBlocks.experiences && (
-            <div className="space-y-8">
-              <h2 className="text-[10px] font-black uppercase tracking-widest opacity-30 italic border-b pb-4" style={{ borderColor: theme.borderColor, color: theme.accent }}>
-                The Guest Experience
-              </h2>
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <p className="text-[9px] font-black uppercase" style={{ color: theme.accent, opacity: 0.5 }}>
-                      Included (Free)
-                    </p>
-                    <button onClick={() => addItem("freeActivities")} style={highlightText} type="button">
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                  {camp.freeActivities.map((act: string, i: number) => (
-                    <div key={i} className="flex items-center gap-4 p-5 rounded-2xl border group" style={cardStyle}>
-                      <Compass size={14} style={highlightText} />
-                      <input
-                        className="text-xs font-black uppercase tracking-tighter outline-none w-full bg-transparent"
-                        value={act}
-                        onChange={(e) => {
-                          const updated = [...portfolio];
-                          updated[selectedCampIndex].freeActivities[i] = e.target.value;
-                          setPortfolio(updated);
-                        }}
-                        style={accentText}
-                      />
-                      <button
-                        onClick={() => deleteItem("freeActivities", i)}
-                        className="opacity-0 group-hover:opacity-100"
-                        style={{ color: "#f87171" }}
-                        type="button"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <p className="text-[9px] font-black uppercase" style={{ color: theme.accent, opacity: 0.5 }}>
-                      Premium (Paid Add-ons)
-                    </p>
-                    <button onClick={() => addItem("paidActivities")} style={highlightText} type="button">
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                  {camp.paidActivities.map((act: string, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-4 p-5 rounded-2xl group shadow-xl border"
-                      style={{ backgroundColor: theme.accent, borderColor: theme.accent, color: "#fff" }}
-                    >
-                      <MapPin size={14} className="text-white/40" />
-                      <input
-                        className="text-xs font-black uppercase tracking-tighter outline-none w-full bg-transparent text-white"
-                        value={act}
-                        onChange={(e) => {
-                          const updated = [...portfolio];
-                          updated[selectedCampIndex].paidActivities[i] = e.target.value;
-                          setPortfolio(updated);
-                        }}
-                      />
-                      <button
-                        onClick={() => deleteItem("paidActivities", i)}
-                        className="opacity-0 group-hover:opacity-100 text-white/60"
-                        type="button"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* OFFERS */}
-          {visibleBlocks.offers && (
-            <div className="p-16 rounded-[4rem] text-white flex flex-col items-center text-center shadow-2xl" style={highlightBg}>
-              <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/40 mb-4">Trade Incentive</span>
-              <textarea
-                className="bg-transparent text-5xl font-black italic tracking-tighter outline-none w-full h-24 text-center resize-none leading-none"
-                value={camp.offersText}
-                onChange={(e) => updateField("offersText", e.target.value)}
-              />
-            </div>
-          )}
-
-          {/* LEAD CAPTURE with Share/Download/Save */}
+          {/* Lead capture with Share/Download/Save */}
           {visibleBlocks.leadCapture && (
             <div className="rounded-[3rem] border p-10 md:p-14 shadow-sm" style={cardStyle}>
               <div className="grid md:grid-cols-2 gap-10 items-start">
@@ -992,7 +914,6 @@ export default function RestorationSafariAdmin() {
                   <p className="text-[9px] font-black uppercase tracking-[0.4em]" style={{ color: theme.accent, opacity: 0.3 }}>
                     Lead capture
                   </p>
-
                   <textarea
                     className="text-3xl md:text-4xl font-black italic tracking-tighter outline-none w-full resize-none leading-tight bg-transparent"
                     value={camp.leadHeadline}
@@ -1007,7 +928,6 @@ export default function RestorationSafariAdmin() {
                     rows={3}
                     style={{ color: theme.accent, opacity: 0.7 }}
                   />
-
                   <div className="space-y-3">
                     {["leadBullet1", "leadBullet2", "leadBullet3"].map((k) => (
                       <div key={k} className="flex items-center gap-3">
@@ -1021,7 +941,6 @@ export default function RestorationSafariAdmin() {
                       </div>
                     ))}
                   </div>
-
                   <div className="flex items-center gap-3 pt-2">
                     <ShieldAlert size={14} style={{ color: theme.accent, opacity: 0.25 }} />
                     <input
@@ -1044,79 +963,27 @@ export default function RestorationSafariAdmin() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none"
-                      style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg, color: theme.accent }}
-                      placeholder="Full name"
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none"
-                      style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg, color: theme.accent }}
-                      placeholder="Agency"
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2"
-                      style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg, color: theme.accent }}
-                      placeholder="Email"
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2"
-                      style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg, color: theme.accent }}
-                      placeholder="WhatsApp / Phone"
-                    />
-                    <textarea
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2 resize-none"
-                      style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg, color: theme.accent }}
-                      placeholder="Message (dates, pax, preferences...)"
-                      rows={4}
-                    />
+                    <input className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none" style={cardStyle} placeholder="Full name" />
+                    <input className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none" style={cardStyle} placeholder="Agency" />
+                    <input className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2" style={cardStyle} placeholder="Email" />
+                    <input className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2" style={cardStyle} placeholder="WhatsApp / Phone" />
+                    <textarea className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2 resize-none" style={cardStyle} placeholder="Message..." rows={4} />
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-                    <button
-                      className="flex-1 py-4 rounded-2xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center"
-                      style={highlightBg}
-                      type="button"
-                    >
-                      <input
-                        className="bg-transparent outline-none text-center w-full cursor-text"
-                        value={camp.leadCta}
-                        onChange={(e) => updateField("leadCta", e.target.value)}
-                      />
+                    <button className="flex-1 py-4 rounded-2xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center" style={highlightBg} type="button">
+                      <input className="bg-transparent outline-none text-center w-full cursor-text" value={camp.leadCta} onChange={(e) => updateField("leadCta", e.target.value)} />
                     </button>
 
                     <div className="flex gap-2">
-                      <button
-                        onClick={shareContact}
-                        className="px-4 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor, color: theme.accent }}
-                        title="Share my contacts"
-                        type="button"
-                      >
-                        <Share2 size={14} />
-                        Share
+                      <button onClick={shareContact} className="px-4 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={cardStyle} type="button">
+                        <Share2 size={14} /> Share
                       </button>
-
-                      <a
-                        href={vcardUrl || "data:text/vcard;charset=utf-8," + encodeURIComponent(vcardText)}
-                        download={`${(camp.contactName || "contact").replace(/\s+/g, "_")}.vcf`}
-                        className="px-4 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor, color: theme.accent }}
-                        title="Downloadable"
-                      >
-                        <Download size={14} />
-                        Download
+                      <a href={vcardUrl || "data:text/vcard;charset=utf-8," + encodeURIComponent(vcardText)} download={`${(camp.contactName || "contact").replace(/\s+/g, "_")}.vcf`} className="px-4 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={cardStyle}>
+                        <Download size={14} /> Download
                       </a>
-
-                      <button
-                        onClick={saveContact}
-                        className="px-4 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor, color: theme.accent }}
-                        title="Save contacts"
-                        type="button"
-                      >
-                        <Contact size={14} />
-                        Save
+                      <button onClick={saveContact} className="px-4 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={cardStyle} type="button">
+                        <Contact size={14} /> Save
                       </button>
                     </div>
                   </div>
