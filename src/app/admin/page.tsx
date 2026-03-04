@@ -1146,11 +1146,5 @@ export default function RestorationSafariAdmin() {
           )}
 
           {/* Reference: layout tightening + “framed” look aligned to your screenshot */}
-          <div className="text-[10px] font-semibold" style={{ color: theme.accent, opacity: 0.35 }}>
-            Layout tightened and framed to match your admin UI screenshots. :contentReference[oaicite:0]{index=0}
-          </div>
-        </div>
-      </main>
-    </div>
   );
 }
