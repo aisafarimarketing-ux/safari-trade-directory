@@ -1136,15 +1136,31 @@ export default function RestorationSafariAdmin() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-center gap-2 text-[10px] font-bold" style={{ color: theme.accent, opacity: 0.6 }}>
-                    <Percent size={12} />
-                    Trade-friendly response timing: <span style={{ color: theme.accent, opacity: 1 }}>same day</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+                npm run build
+2s
+npm warn config production Use `--omit=dev` instead.
+> safari-trade-directory@0.1.0 build
+> next build
+   ▲ Next.js 14.0.3
+   Creating an optimized production build ...
+Failed to compile.
+./src/app/admin/page.tsx
+Error: 
 
-          {/* Reference: layout tightening + “framed” look aligned to your screenshot */}
-  );
-}
+  x Unexpected token `div`. Expected jsx identifier
+     ,-[/app/src/app/admin/page.tsx:331:1]
+ 331 |   };
+ 332 | 
+ 333 |   return (
+ 334 |     <div className="flex min-h-screen font-sans" style={{ backgroundColor: theme.pageBg }}>
+     :      ^^^
+ 335 |       {/* PHOTO MODAL */}
+ 336 |       {photoModal.open && (
+ 337 |         <div
+     `----
+Caused by:
+    Syntax Error
+Import trace for requested module:
+./src/app/admin/page.tsx
+> Build failed because of webpack errors
+ERROR: failed to build: failed to solve: process "npm run build" did not complete successfully: exit code: 1
