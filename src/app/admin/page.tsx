@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Save,
   Camera,
@@ -11,7 +11,7 @@ import {
   ShieldAlert,
   Eye,
   EyeOff,
-  Star,
+  Star as StarIcon, // ✅ FIX: alias prevents "Cannot find name 'Star'" + avoids collisions
   Compass,
   MapPin,
   Trash2,
@@ -37,7 +37,6 @@ export default function RestorationSafariAdmin() {
     borderColor: "#E2E8F0",
   });
 
-  // Toggle State for every block (NEW blocks added, none removed)
   const [visibleBlocks, setVisibleBlocks] = useState({
     hero: true,
     heroTopMeta: true,
@@ -68,7 +67,6 @@ export default function RestorationSafariAdmin() {
       offersText: "Stay 5 Pay 4 during Green Season.",
       terms: "30% non-refundable deposit.",
 
-      // Meta + Social Proof + Trade profile headline text
       tradeProfileLabel: "Nyumbani-Collections",
       tradeProfileSub: "Trade profile.",
       locationLabel: "Serengeti National Park, Tanzania",
@@ -78,21 +76,18 @@ export default function RestorationSafariAdmin() {
       instagramHandle: "@nyumbani.collections",
       website: "https://example.com",
 
-      // NEW: Editable room type labels
       roomTypeLabels: {
         family: "Family setup",
         double: "Double setup",
         single: "Single setup",
       },
 
-      // NEW: Room setup photo galleries (data URLs)
       roomPhotos: {
         family: [] as string[],
         double: [] as string[],
         single: [] as string[],
       },
 
-      // Lead capture content (editable)
       leadHeadline: "Get rates, availability & trade support in one reply.",
       leadSubcopy:
         "Leave your details and we’ll send a trade-ready fact sheet, inclusions, and a quick quote.",
@@ -103,13 +98,15 @@ export default function RestorationSafariAdmin() {
       leadDisclaimer:
         "By submitting, you agree to be contacted by our reservations team.",
 
-      // NEW: Contact card data (for QR/NFC)
       contactName: "Nyumbani Reservations",
       contactTitle: "Trade Desk",
       contactCompany: "Nyumbani Collections",
       contactEmail: "trade@nyumbani.example",
       contactPhone: "+255 000 000 000",
       contactWebsite: "https://example.com",
+
+      // ✅ NEW: Hero image (data URL)
+      heroImage: "" as string,
     },
   ]);
 
@@ -117,7 +114,6 @@ export default function RestorationSafariAdmin() {
     setVisibleBlocks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // CRUD Helpers
   const updateField = (field: string, value: any) => {
     const updated = [...portfolio];
     (updated[selectedCampIndex] as any)[field] = value;
@@ -145,7 +141,7 @@ export default function RestorationSafariAdmin() {
     (Number(camp.double) || 0) +
     (Number(camp.single) || 0);
 
-  // THEME HELPERS (fix: apply theme beyond pageBg)
+  // THEME HELPERS (applied beyond pageBg)
   const cardStyle: React.CSSProperties = {
     backgroundColor: theme.blockBg,
     borderColor: theme.borderColor,
@@ -161,10 +157,12 @@ export default function RestorationSafariAdmin() {
   const accentText: React.CSSProperties = { color: theme.accent };
   const highlightText: React.CSSProperties = { color: theme.highlight };
   const highlightBg: React.CSSProperties = { backgroundColor: theme.highlight };
-  const highlightBorder: React.CSSProperties = { borderColor: theme.highlight };
 
   // ---- Room Photo Upload ----
-  const addRoomPhotos = async (roomKey: "family" | "double" | "single", files: FileList | null) => {
+  const addRoomPhotos = async (
+    roomKey: "family" | "double" | "single",
+    files: FileList | null
+  ) => {
     if (!files || files.length === 0) return;
 
     const toDataUrl = (file: File) =>
@@ -177,7 +175,6 @@ export default function RestorationSafariAdmin() {
 
     const urls: string[] = [];
     for (const file of Array.from(files)) {
-      // Keep it neat: only images
       if (!file.type.startsWith("image/")) continue;
       const url = await toDataUrl(file);
       urls.push(url);
@@ -187,8 +184,8 @@ export default function RestorationSafariAdmin() {
     const current = updated[selectedCampIndex] as any;
 
     const existing: string[] = current.roomPhotos?.[roomKey] ?? [];
-    // allow 2+; keep it neat by capping at 6 thumbnails per room type
-    current.roomPhotos = current.roomPhotos || { family: [], double: [], single: [] };
+    current.roomPhotos =
+      current.roomPhotos || ({"family": [], "double": [], "single": []} as any);
     current.roomPhotos[roomKey] = [...existing, ...urls].slice(0, 6);
 
     setPortfolio(updated);
@@ -197,8 +194,25 @@ export default function RestorationSafariAdmin() {
   const removeRoomPhoto = (roomKey: "family" | "double" | "single", index: number) => {
     const updated = [...portfolio];
     const current = updated[selectedCampIndex] as any;
-    current.roomPhotos[roomKey] = (current.roomPhotos?.[roomKey] ?? []).filter((_: any, i: number) => i !== index);
+    current.roomPhotos[roomKey] = (current.roomPhotos?.[roomKey] ?? []).filter(
+      (_: any, i: number) => i !== index
+    );
     setPortfolio(updated);
+  };
+
+  // ✅ NEW: Photo preview modal (big window)
+  const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string; title?: string }>({
+    open: false,
+    src: "",
+    title: "",
+  });
+
+  const openPhoto = (src: string, title?: string) => {
+    setPhotoModal({ open: true, src, title });
+  };
+
+  const closePhoto = () => {
+    setPhotoModal({ open: false, src: "", title: "" });
   };
 
   // ---- vCard for NFC/QR ----
@@ -241,7 +255,6 @@ export default function RestorationSafariAdmin() {
   }, [vcardText]);
 
   const shareContact = async () => {
-    // Web Share API (best effort)
     try {
       const blob = new Blob([vcardText], { type: "text/vcard;charset=utf-8" });
       const file = new File([blob], "contact.vcf", { type: "text/vcard" });
@@ -255,7 +268,6 @@ export default function RestorationSafariAdmin() {
           files: [file],
         });
       } else {
-        // fallback: download
         if (vcardUrl) window.open(vcardUrl, "_blank");
       }
     } catch {
@@ -264,7 +276,6 @@ export default function RestorationSafariAdmin() {
   };
 
   const saveContact = () => {
-    // Same as download: it triggers OS "Save contact" flows on many devices.
     const a = document.createElement("a");
     a.href = vcardUrl || "data:text/vcard;charset=utf-8," + encodeURIComponent(vcardText);
     a.download = `${(camp.contactName || "contact").replace(/\s+/g, "_")}.vcf`;
@@ -273,22 +284,73 @@ export default function RestorationSafariAdmin() {
     a.remove();
   };
 
+  // ✅ NEW: Hero image chooser (double click OR right click)
+  const heroFileRef = useRef<HTMLInputElement | null>(null);
+
+  const setHeroFromFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.type.startsWith("image/")) return;
+
+    const toDataUrl = (f: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(f);
+      });
+
+    const url = await toDataUrl(file);
+    updateField("heroImage", url);
+  };
+
   return (
-    <div
-      className="flex min-h-screen font-sans transition-all"
-      style={{ backgroundColor: theme.pageBg }}
-    >
-      {/* 1. SIDEBAR WITH TOGGLES */}
+    <div className="flex min-h-screen font-sans transition-all" style={{ backgroundColor: theme.pageBg }}>
+      {/* PHOTO MODAL (big preview) */}
+      {photoModal.open && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
+          onMouseDown={(e) => {
+            // click backdrop closes
+            if (e.target === e.currentTarget) closePhoto();
+          }}
+        >
+          <div
+            className="w-full max-w-6xl rounded-3xl overflow-hidden border shadow-2xl"
+            style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={borderStyle}>
+              <div className="text-xs font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.6 }}>
+                {photoModal.title || "Preview"}
+              </div>
+              <button
+                onClick={closePhoto}
+                className="p-2 rounded-xl border"
+                style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}
+              >
+                <X size={16} style={accentText} />
+              </button>
+            </div>
+            <div className="p-4">
+              {/* Real-size friendly: no forced crop; scroll if huge */}
+              <div className="max-h-[75vh] overflow-auto rounded-2xl border" style={borderStyle}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photoModal.src} alt="Preview" className="w-full h-auto block" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SIDEBAR */}
       {!isPreview && (
         <aside
           className="w-64 fixed h-screen top-0 left-0 z-[100] p-5 flex flex-col shadow-2xl border-r"
           style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
         >
           <div className="flex items-center justify-between mb-8">
-            <span
-              className="text-[10px] font-black uppercase tracking-widest"
-              style={{ color: theme.accent, opacity: 0.5 }}
-            >
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
               Restoration Hub
             </span>
             <button
@@ -301,7 +363,6 @@ export default function RestorationSafariAdmin() {
           </div>
 
           <div className="flex-1 space-y-6 overflow-y-auto pr-2">
-            {/* TOGGLE SECTION */}
             <div>
               <p className="text-[9px] font-bold uppercase mb-4 tracking-[0.2em]" style={{ color: theme.accent, opacity: 0.45 }}>
                 View Toggles
@@ -312,9 +373,7 @@ export default function RestorationSafariAdmin() {
                     key={key}
                     onClick={() => toggleBlock(key as any)}
                     className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
-                    style={{
-                      backgroundColor: "transparent",
-                    }}
+                    style={{ backgroundColor: "transparent" }}
                   >
                     <span
                       style={{
@@ -334,7 +393,6 @@ export default function RestorationSafariAdmin() {
               </div>
             </div>
 
-            {/* THEME SECTION */}
             <div className="pt-6 border-t space-y-3" style={borderStyle}>
               <p className="text-[9px] font-bold uppercase" style={{ color: theme.accent, opacity: 0.45 }}>
                 Accents
@@ -364,7 +422,7 @@ export default function RestorationSafariAdmin() {
         </aside>
       )}
 
-      {/* 2. MAIN CONTENT AREA */}
+      {/* MAIN */}
       <main className={`flex-1 transition-all ${!isPreview ? "ml-64" : "ml-0"}`}>
         {isPreview && (
           <button
@@ -376,28 +434,20 @@ export default function RestorationSafariAdmin() {
           </button>
         )}
 
-        {/* ABOVE HERO CONTAINER */}
+        {/* ABOVE HERO */}
         {visibleBlocks.heroHeaderStack && (
           <div className="max-w-6xl mx-auto px-6 pt-10">
-            <div
-              className="rounded-[3rem] border p-6 md:p-8 shadow-sm space-y-6"
-              style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
-            >
-              {/* Social proof + location + rooms */}
+            <div className="rounded-[3rem] border p-6 md:p-8 shadow-sm space-y-6" style={cardStyle}>
               {visibleBlocks.heroTopMeta && (
                 <div className="rounded-[2.5rem] border p-8 shadow-sm" style={cardStyle}>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                    {/* Social Proof */}
                     <div className="space-y-3">
-                      <input
-                        className="bg-transparent text-[9px] font-black uppercase tracking-[0.3em] outline-none w-full"
-                        value={"Social proof"}
-                        onChange={() => {}}
-                        style={{ color: theme.accent, opacity: 0.5 }}
-                        readOnly
-                      />
+                      <p className="text-[9px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent, opacity: 0.5 }}>
+                        Social proof
+                      </p>
                       <div className="flex items-center gap-3">
-                        <Star size={16} style={highlightText} />
+                        {/* ✅ FIXED: use StarIcon */}
+                        <StarIcon size={16} style={highlightText} />
                         <input
                           className="text-3xl font-black italic outline-none w-24 bg-transparent"
                           value={camp.rating}
@@ -439,7 +489,6 @@ export default function RestorationSafariAdmin() {
                       </div>
                     </div>
 
-                    {/* Location */}
                     <div className="space-y-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent, opacity: 0.5 }}>
                         Location
@@ -468,7 +517,6 @@ export default function RestorationSafariAdmin() {
                       </p>
                     </div>
 
-                    {/* Rooms */}
                     <div className="space-y-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.3em]" style={{ color: theme.accent, opacity: 0.5 }}>
                         Rooms & capacity
@@ -506,7 +554,6 @@ export default function RestorationSafariAdmin() {
                 </div>
               )}
 
-              {/* Trade Profile box */}
               {visibleBlocks.heroTradeProfile && (
                 <div className="rounded-[2.5rem] border p-10 shadow-sm" style={cardStyle}>
                   <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-6" style={{ color: theme.accent, opacity: 0.3 }}>
@@ -558,7 +605,6 @@ export default function RestorationSafariAdmin() {
                       />
                     </div>
 
-                    {/* NEW: Contact card fields (so the QR/NFC buttons make sense) */}
                     <div className="pt-4 border-t" style={borderStyle}>
                       <p className="text-[9px] font-black uppercase tracking-widest mb-4" style={{ color: theme.accent, opacity: 0.5 }}>
                         Contact card (QR / NFC)
@@ -615,26 +661,52 @@ export default function RestorationSafariAdmin() {
           </div>
         )}
 
-        {/* HERO (image-only: nothing on top) */}
+        {/* HERO (double click / right click to change image) */}
         {visibleBlocks.hero && (
-          <section className="relative h-[70vh] w-full overflow-hidden mt-8" style={{ backgroundColor: theme.accent }}>
+          <section
+            className="relative h-[70vh] w-full overflow-hidden mt-8 select-none"
+            style={{ backgroundColor: theme.accent }}
+            onDoubleClick={() => heroFileRef.current?.click()}
+            onContextMenu={(e) => {
+              e.preventDefault(); // open picker instead of browser context menu
+              heroFileRef.current?.click();
+            }}
+            title="Double-click or right-click to change hero image"
+          >
+            {/* hidden input that picks hero image */}
+            <input
+              ref={heroFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => setHeroFromFiles(e.target.files)}
+            />
+
+            {/* hero image */}
+            {camp.heroImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={camp.heroImage} alt="Hero" className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="rounded-2xl border px-6 py-4 text-[10px] font-black uppercase tracking-widest"
+                  style={{ borderColor: theme.borderColor, color: "#fff", backgroundColor: "rgba(0,0,0,0.25)" }}
+                >
+                  Double-click / Right-click to upload hero image
+                </div>
+              </div>
+            )}
+
+            {/* overlay */}
             <div className="absolute inset-0 bg-black/40 z-10" />
-            {/* Intentionally empty */}
           </section>
         )}
 
         <div className="max-w-5xl mx-auto py-16 px-6 space-y-20">
-          {/* ACCOMMODATION MATRIX + ROOM SETUP PHOTOS */}
+          {/* ROOM MATRIX + photo previews */}
           {visibleBlocks.matrix && (
             <div className="space-y-6">
               <h2 className="text-[10px] font-black uppercase tracking-widest opacity-30 italic border-b pb-4" style={{ borderColor: theme.borderColor }}>
-                <input
-                  className="bg-transparent outline-none w-full"
-                  value={"Room Orientation"}
-                  onChange={() => {}}
-                  readOnly
-                  style={{ color: theme.accent, opacity: 0.5 }}
-                />
+                <span style={{ color: theme.accent, opacity: 0.5 }}>Room Orientation</span>
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -644,7 +716,6 @@ export default function RestorationSafariAdmin() {
                     className="p-8 rounded-[2rem] border flex flex-col justify-between min-h-[22rem] group transition-all"
                     style={cardStyle}
                   >
-                    {/* Editable room label */}
                     <input
                       className="text-[10px] font-black uppercase outline-none bg-transparent"
                       value={camp.roomTypeLabels?.[type] ?? `${type} setup`}
@@ -658,7 +729,6 @@ export default function RestorationSafariAdmin() {
                       style={{ color: theme.accent, opacity: 0.55 }}
                     />
 
-                    {/* Count (already editable) */}
                     <div className="flex items-center gap-4 mt-6">
                       <input
                         className="text-5xl font-black italic outline-none w-16 bg-transparent"
@@ -674,7 +744,6 @@ export default function RestorationSafariAdmin() {
                       </span>
                     </div>
 
-                    {/* NEW: Photo upload + thumbnails */}
                     <div className="mt-8 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.45 }}>
@@ -696,23 +765,40 @@ export default function RestorationSafariAdmin() {
 
                       <div className="grid grid-cols-3 gap-2">
                         {(camp.roomPhotos?.[type] ?? []).map((src: string, i: number) => (
-                          <div key={i} className="relative rounded-xl overflow-hidden border" style={borderStyle}>
+                          <button
+                            key={i}
+                            className="relative rounded-xl overflow-hidden border text-left"
+                            style={borderStyle}
+                            onClick={() => openPhoto(src, `${camp.roomTypeLabels?.[type] ?? type} photo ${i + 1}`)}
+                            type="button"
+                            title="Click to preview"
+                          >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={src} alt={`${type}-${i}`} className="w-full h-20 object-cover" />
+                            <span
+                              className="absolute bottom-1 left-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest"
+                              style={{ backgroundColor: "rgba(0,0,0,0.55)", color: "#fff" }}
+                            >
+                              View
+                            </span>
                             <button
-                              onClick={() => removeRoomPhoto(type, i)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeRoomPhoto(type, i);
+                              }}
                               className="absolute top-1 right-1 p-1 rounded-lg"
                               style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
                               title="Remove"
+                              type="button"
                             >
                               <X size={12} className="text-white" />
                             </button>
-                          </div>
+                          </button>
                         ))}
                       </div>
 
                       <p className="text-[10px] font-medium" style={{ color: theme.accent, opacity: 0.45 }}>
-                        Upload 2+ photos per setup (max 6).
+                        Click any thumbnail to open full-size preview.
                       </p>
                     </div>
                   </div>
@@ -721,7 +807,7 @@ export default function RestorationSafariAdmin() {
             </div>
           )}
 
-          {/* INCLUSIONS & EXCLUSIONS (theme-fixed) */}
+          {/* INCLUSIONS & EXCLUSIONS */}
           <div className="grid md:grid-cols-2 gap-8">
             {visibleBlocks.inclusions && (
               <div className="p-10 rounded-[2.5rem] border space-y-6" style={cardStyle}>
@@ -732,7 +818,7 @@ export default function RestorationSafariAdmin() {
                       Included (Inclusions)
                     </h3>
                   </div>
-                  <button onClick={() => addItem("inclusions")} style={highlightText}>
+                  <button onClick={() => addItem("inclusions")} style={highlightText} type="button">
                     <Plus size={14} />
                   </button>
                 </div>
@@ -754,6 +840,7 @@ export default function RestorationSafariAdmin() {
                         onClick={() => deleteItem("inclusions", i)}
                         className="opacity-0 group-hover:opacity-100"
                         style={{ color: "#f87171" }}
+                        type="button"
                       >
                         <X size={12} />
                       </button>
@@ -772,7 +859,7 @@ export default function RestorationSafariAdmin() {
                       Not Included (Exclusions)
                     </h3>
                   </div>
-                  <button onClick={() => addItem("exclusions")} style={{ color: theme.accent, opacity: 0.5 }}>
+                  <button onClick={() => addItem("exclusions")} style={{ color: theme.accent, opacity: 0.5 }} type="button">
                     <Plus size={14} />
                   </button>
                 </div>
@@ -794,6 +881,7 @@ export default function RestorationSafariAdmin() {
                         onClick={() => deleteItem("exclusions", i)}
                         className="opacity-0 group-hover:opacity-100"
                         style={{ color: "#f87171" }}
+                        type="button"
                       >
                         <X size={12} />
                       </button>
@@ -804,29 +892,24 @@ export default function RestorationSafariAdmin() {
             )}
           </div>
 
-          {/* EXPERIENCES (kept; theme touches) */}
+          {/* EXPERIENCES */}
           {visibleBlocks.experiences && (
             <div className="space-y-8">
               <h2 className="text-[10px] font-black uppercase tracking-widest opacity-30 italic border-b pb-4" style={{ borderColor: theme.borderColor, color: theme.accent }}>
                 The Guest Experience
               </h2>
               <div className="grid md:grid-cols-2 gap-8">
-                {/* FREE */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <p className="text-[9px] font-black uppercase" style={{ color: theme.accent, opacity: 0.5 }}>
                       Included (Free)
                     </p>
-                    <button onClick={() => addItem("freeActivities")} style={highlightText}>
+                    <button onClick={() => addItem("freeActivities")} style={highlightText} type="button">
                       <Plus size={12} />
                     </button>
                   </div>
                   {camp.freeActivities.map((act: string, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-4 p-5 rounded-2xl border group"
-                      style={cardStyle}
-                    >
+                    <div key={i} className="flex items-center gap-4 p-5 rounded-2xl border group" style={cardStyle}>
                       <Compass size={14} style={highlightText} />
                       <input
                         className="text-xs font-black uppercase tracking-tighter outline-none w-full bg-transparent"
@@ -842,6 +925,7 @@ export default function RestorationSafariAdmin() {
                         onClick={() => deleteItem("freeActivities", i)}
                         className="opacity-0 group-hover:opacity-100"
                         style={{ color: "#f87171" }}
+                        type="button"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -849,13 +933,12 @@ export default function RestorationSafariAdmin() {
                   ))}
                 </div>
 
-                {/* PAID */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <p className="text-[9px] font-black uppercase" style={{ color: theme.accent, opacity: 0.5 }}>
                       Premium (Paid Add-ons)
                     </p>
-                    <button onClick={() => addItem("paidActivities")} style={highlightText}>
+                    <button onClick={() => addItem("paidActivities")} style={highlightText} type="button">
                       <Plus size={12} />
                     </button>
                   </div>
@@ -878,6 +961,7 @@ export default function RestorationSafariAdmin() {
                       <button
                         onClick={() => deleteItem("paidActivities", i)}
                         className="opacity-0 group-hover:opacity-100 text-white/60"
+                        type="button"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -888,12 +972,10 @@ export default function RestorationSafariAdmin() {
             </div>
           )}
 
-          {/* OFFERS (theme-fixed) */}
+          {/* OFFERS */}
           {visibleBlocks.offers && (
             <div className="p-16 rounded-[4rem] text-white flex flex-col items-center text-center shadow-2xl" style={highlightBg}>
-              <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/40 mb-4">
-                Trade Incentive
-              </span>
+              <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/40 mb-4">Trade Incentive</span>
               <textarea
                 className="bg-transparent text-5xl font-black italic tracking-tighter outline-none w-full h-24 text-center resize-none leading-none"
                 value={camp.offersText}
@@ -902,7 +984,7 @@ export default function RestorationSafariAdmin() {
             </div>
           )}
 
-          {/* LEAD CAPTURE (now includes Share/Download/Save on same line as the form CTA) */}
+          {/* LEAD CAPTURE with Share/Download/Save */}
           {visibleBlocks.leadCapture && (
             <div className="rounded-[3rem] border p-10 md:p-14 shadow-sm" style={cardStyle}>
               <div className="grid md:grid-cols-2 gap-10 items-start">
@@ -956,7 +1038,7 @@ export default function RestorationSafariAdmin() {
                     <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
                       Enquiry form
                     </p>
-                    <button className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}>
+                    <button className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }} type="button">
                       <Camera size={14} style={{ color: theme.accent, opacity: 0.5 }} />
                     </button>
                   </div>
@@ -990,11 +1072,11 @@ export default function RestorationSafariAdmin() {
                     />
                   </div>
 
-                  {/* ✅ SAME LINE: form CTA + (Share contact / Downloadable / Save contact) */}
                   <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
                     <button
                       className="flex-1 py-4 rounded-2xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center"
                       style={highlightBg}
+                      type="button"
                     >
                       <input
                         className="bg-transparent outline-none text-center w-full cursor-text"
