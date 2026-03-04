@@ -1,0 +1,31 @@
+{
+  "properties": [
+    {
+      "id": "nyumbani-serengeti",
+      "name": "Nyumbani Serengeti Camp",
+      "location": "Central Serengeti (Ngarenanyuki 2)",
+      "rooms": 10,
+      "room_type": "Luxury Tented Suites",
+      "orientation": "King / Twin / Triple",
+      "meal_plans": {
+        "fb": "Full Board: B, L, D, Water, Coffee/Tea",
+        "ai": "All Inclusive: FB + House Wine, Beer, Spirits (+$35)"
+      },
+      "offers": [
+        "10% Circuit Discount (5+ nights combined) [cite: 3, 4]",
+        "Green Season: Stay 3 Pay 2.5 [cite: 8]",
+        "Green Season: Stay 5 Pay 4 [cite: 8]"
+      ],
+      "activities": [
+        {"name": "Sundowner", "price": "Included"},
+        {"name": "Bush Dinner", "price": "On Request"},
+        {"name": "Hamper Lunch", "price": "Included"}
+      ],
+      "terms": {
+        "hold": "14-Day Provisional",
+        "cancel": "100% if <30 days",
+        "payment": "Exim Bank / Credit Card"
+      }
+    }
+  ]
+}
