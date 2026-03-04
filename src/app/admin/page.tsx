@@ -1,9 +1,8 @@
 "use client";
 import React, { useState } from 'react';
 import { 
-  Save, Plus, Camera, Check, Percent, Instagram, Facebook, 
-  Globe, Phone, LogIn, Utensils, ShieldAlert, Eye, EyeOff, 
-  Trash2, Star, X, ChevronRight, List
+  Save, Camera, Check, Percent, Instagram, Globe, LogIn, 
+  Utensils, ShieldAlert, Eye, EyeOff, Star, Compass, MapPin
 } from 'lucide-react';
 
 export default function ShadcnArchitecturalHub() {
@@ -12,7 +11,7 @@ export default function ShadcnArchitecturalHub() {
   const [theme, setTheme] = useState({
     pageBg: '#FBFBFA',
     blockBg: '#FFFFFF',
-    accent: '#0F172A', // Slate 900 for a sharper look
+    accent: '#0F172A', 
     text: '#0F172A',
     borderColor: '#E2E8F0'
   });
@@ -32,8 +31,8 @@ export default function ShadcnArchitecturalHub() {
       mealAI: ["Premium spirits & cellar wines", "Private bush dinners", "All laundry services", "Private guide option"],
       terms: "30% non-refundable deposit. Balance due 45 days prior.",
       offersText: "Stay 5 Pay 4 during Green Season.",
-      freeActivities: ["Morning Game Drive", "Guided Nature Walk"],
-      paidActivities: ["Hot Air Balloon", "Night Game Drive"]
+      freeActivities: ["Morning Game Drive", "Guided Nature Walk", "Sundowners"],
+      paidActivities: ["Hot Air Balloon Safari", "Night Game Drive", "Walking Safari Add-on"]
     }
   ]);
 
@@ -44,7 +43,7 @@ export default function ShadcnArchitecturalHub() {
   return (
     <div className="flex min-h-screen font-sans transition-all duration-300" style={{ backgroundColor: theme.pageBg, color: theme.text }}>
       
-      {/* 1. SHARP CONTROL SIDEBAR (Left) */}
+      {/* 1. SHARP SIDEBAR */}
       <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col fixed h-screen top-0 left-0 z-[100]">
         <div className="mb-10">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6">Theme Config</p>
@@ -58,7 +57,7 @@ export default function ShadcnArchitecturalHub() {
           </div>
         </div>
         
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 space-y-1">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">View Blocks</p>
           {Object.keys(visibleBlocks).map((key) => (
             <button key={key} onClick={() => toggleBlock(key as any)} className="w-full flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 text-[10px] font-bold uppercase tracking-widest transition-all">
@@ -76,12 +75,12 @@ export default function ShadcnArchitecturalHub() {
       {/* 2. THE CANVAS */}
       <main className="flex-1 ml-64">
         
-        {/* FULL BLEED HERO WITH INTEGRATED TOP BAR */}
-        <section className="relative h-[90vh] w-full overflow-hidden bg-slate-900 group">
+        {/* HERO SECTION */}
+        <section className="relative h-[85vh] w-full overflow-hidden bg-slate-900 group">
            {visibleBlocks.trust && (
              <div className="absolute top-0 left-0 right-0 z-50 p-10 flex justify-between items-center">
                 <div className="flex items-center gap-8 bg-black/10 backdrop-blur-md border border-white/10 p-2 pl-6 rounded-full text-white">
-                   <span className="text-[10px] font-black tracking-tighter">BRAND.IDENTITY</span>
+                   <span className="text-[10px] font-black tracking-tighter uppercase italic">Safari.Engine</span>
                    <div className="flex gap-4 pr-4 border-l border-white/20 pl-6 text-white/50">
                       <Instagram size={14} className="hover:text-white cursor-pointer" />
                       <Globe size={14} className="hover:text-white cursor-pointer" />
@@ -89,7 +88,7 @@ export default function ShadcnArchitecturalHub() {
                 </div>
                 <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md p-2 rounded-full border border-white/10 text-white px-6">
                    <div className="flex items-center gap-2 border-r border-white/20 pr-6">
-                      <span className="text-[8px] font-bold uppercase opacity-50">TripAdvisor</span>
+                      <Star size={10} fill="#FFC107" stroke="#FFC107"/>
                       <span className="text-xs font-black">5.0</span>
                    </div>
                    <button className="text-[9px] font-bold uppercase tracking-widest">Login</button>
@@ -97,54 +96,55 @@ export default function ShadcnArchitecturalHub() {
              </div>
            )}
 
-           <div className="absolute inset-0 bg-black/40" />
+           <div className="absolute inset-0 bg-black/30" />
            
-           <div className="absolute bottom-20 left-20 z-30 max-w-3xl">
+           <div className="absolute bottom-20 left-20 z-30 max-w-4xl">
               <span className="inline-block px-4 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-[10px] font-bold uppercase tracking-[0.3em] text-white mb-6">
                 {portfolio[selectedCamp].class}
               </span>
               <h1 className="text-9xl font-black text-white italic tracking-tighter leading-[0.85] mb-8">
                 {portfolio[selectedCamp].name}
               </h1>
-              <p className="text-xl text-white/60 font-serif italic max-w-xl">
+              <p className="text-xl text-white/70 font-serif italic max-w-xl">
                 {portfolio[selectedCamp].vibe}
               </p>
            </div>
         </section>
 
-        {/* ARCHITECTURAL LIST VIEW */}
-        <div className="max-w-6xl mx-auto py-24 px-20 space-y-24">
+        {/* LIST VIEW CONTENT */}
+        <div className="max-w-6xl mx-auto py-32 px-20 space-y-32">
            
-           {/* ROOM MATRIX - SHARP LIST VIEW */}
+           {/* ROOM MATRIX */}
            {visibleBlocks.matrix && (
              <div className="space-y-12">
                 <div className="flex justify-between items-end border-b pb-6" style={{ borderColor: theme.borderColor }}>
-                   <h2 className="text-[11px] font-bold uppercase tracking-[0.4em] opacity-40">Accommodations</h2>
-                   <span className="text-[10px] font-black uppercase">{portfolio[selectedCamp].rooms} Total Keys</span>
+                   <h2 className="text-[11px] font-black uppercase tracking-[0.4em] opacity-40 italic">Room Allocation</h2>
+                   <div className="flex items-center gap-2">
+                      <span className="text-2xl font-black italic">{portfolio[selectedCamp].rooms}</span>
+                      <span className="text-[9px] font-bold uppercase opacity-30">Keys Total</span>
+                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 gap-6">
                    {['family', 'double', 'single'].map((type) => (
-                     <div key={type} className="flex gap-12 p-8 rounded-2xl border border-slate-100 hover:border-slate-300 transition-all group" style={{ backgroundColor: theme.blockBg }}>
+                     <div key={type} className="flex gap-12 p-10 rounded-[2.5rem] border border-slate-100 hover:border-slate-300 transition-all" style={{ backgroundColor: theme.blockBg }}>
                         <div className="w-1/3 flex flex-col justify-between">
                            <div>
-                             <p className="text-[9px] font-bold uppercase text-slate-400 mb-1">{type} category</p>
-                             <h3 className="text-2xl font-black uppercase tracking-tight">{type} Luxury Suite</h3>
-                             <p className="text-xs text-slate-500 mt-2 italic font-serif">Tailored for {type} occupancy with bespoke linen.</p>
+                             <p className="text-[9px] font-bold uppercase text-slate-400 mb-1">{type} setup</p>
+                             <h3 className="text-2xl font-black uppercase tracking-tight italic">Luxury {type} Suite</h3>
                            </div>
-                           <div className="flex items-center gap-4 mt-8">
-                              <span className="text-4xl font-black italic" style={{ color: theme.accent }}>0{portfolio[selectedCamp][type as keyof typeof portfolio[0]] as number}</span>
-                              <span className="text-[9px] font-bold uppercase opacity-30">Keys Available</span>
+                           <div className="flex items-baseline gap-2 mt-8">
+                              <span className="text-5xl font-black italic tracking-tighter" style={{ color: theme.accent }}>{portfolio[selectedCamp][type as keyof typeof portfolio[0]] as number}</span>
+                              <span className="text-[10px] font-bold uppercase opacity-20">Units</span>
                            </div>
                         </div>
                         
-                        {/* PHOTOS ONLY UNDER SPECIFIC TYPES */}
+                        {/* PHOTOS ONLY FOR SETUP TYPES */}
                         <div className="flex-1 grid grid-cols-2 gap-4">
-                           <div className="aspect-video bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center relative group/img overflow-hidden">
+                           <div className="aspect-video bg-slate-50 rounded-[1.5rem] border border-dashed border-slate-200 flex items-center justify-center relative group/img overflow-hidden">
                               <Camera className="opacity-10 group-hover/img:opacity-100 transition-all" size={20} />
-                              <div className="absolute inset-0 bg-black/0 hover:bg-black/5 cursor-pointer" />
                            </div>
-                           <div className="aspect-video bg-slate-50 rounded-xl border border-dashed border-slate-200 flex items-center justify-center relative group/img overflow-hidden">
+                           <div className="aspect-video bg-slate-50 rounded-[1.5rem] border border-dashed border-slate-200 flex items-center justify-center relative group/img overflow-hidden">
                               <Camera className="opacity-10 group-hover/img:opacity-100 transition-all" size={20} />
                            </div>
                         </div>
@@ -154,72 +154,105 @@ export default function ShadcnArchitecturalHub() {
              </div>
            )}
 
-           {/* MEAL PLANS - POINT FORM */}
+           {/* MEAL PLANS */}
            {visibleBlocks.meals && (
-             <div className="grid md:grid-cols-2 gap-8">
-                <div className="p-10 rounded-3xl border border-slate-100 space-y-6" style={{ backgroundColor: theme.blockBg }}>
+             <div className="grid md:grid-cols-2 gap-6">
+                <div className="p-12 rounded-[3rem] border border-slate-100 space-y-8" style={{ backgroundColor: theme.blockBg }}>
                    <div className="flex items-center gap-3 border-b pb-4" style={{ borderColor: theme.borderColor }}>
-                      <Utensils size={16} />
-                      <h3 className="text-[10px] font-black uppercase tracking-widest">Full Board Stay</h3>
+                      <Utensils size={14} />
+                      <h3 className="text-[10px] font-black uppercase tracking-widest">Full Board (FB)</h3>
                    </div>
-                   <ul className="space-y-3">
+                   <ul className="space-y-4">
                       {portfolio[selectedCamp].mealFB.map((item, i) => (
-                        <li key={i} className="text-xs text-slate-500 flex items-start gap-3">
+                        <li key={i} className="text-xs text-slate-500 flex items-start gap-4">
                           <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-300" />
-                          <input className="bg-transparent outline-none w-full" defaultValue={item} />
+                          <input className="bg-transparent outline-none w-full font-medium" defaultValue={item} />
                         </li>
                       ))}
-                      <button className="text-[9px] font-bold uppercase opacity-30 hover:opacity-100 pt-4">+ Add Provision</button>
+                      <button className="text-[9px] font-bold uppercase opacity-20 hover:opacity-100 pt-2">+ Add Item</button>
                    </ul>
                 </div>
-                <div className="p-10 rounded-3xl border border-slate-100 space-y-6" style={{ backgroundColor: theme.blockBg }}>
+                <div className="p-12 rounded-[3rem] border border-slate-100 space-y-8" style={{ backgroundColor: theme.blockBg }}>
                    <div className="flex items-center gap-3 border-b pb-4" style={{ borderColor: theme.borderColor }}>
-                      <Star size={16} fill={theme.accent} />
-                      <h3 className="text-[10px] font-black uppercase tracking-widest">All Inclusive</h3>
+                      <Star size={14} fill={theme.accent} stroke={theme.accent} />
+                      <h3 className="text-[10px] font-black uppercase tracking-widest">All Inclusive (AI)</h3>
                    </div>
-                   <ul className="space-y-3">
+                   <ul className="space-y-4">
                       {portfolio[selectedCamp].mealAI.map((item, i) => (
-                        <li key={i} className="text-xs text-slate-500 flex items-start gap-3">
+                        <li key={i} className="text-xs text-slate-500 flex items-start gap-4">
                           <span className="mt-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.accent }} />
-                          <input className="bg-transparent outline-none w-full" defaultValue={item} />
+                          <input className="bg-transparent outline-none w-full font-bold" defaultValue={item} />
                         </li>
                       ))}
-                      <button className="text-[9px] font-bold uppercase opacity-30 hover:opacity-100 pt-4">+ Add Provision</button>
+                      <button className="text-[9px] font-bold uppercase opacity-20 hover:opacity-100 pt-2">+ Add Item</button>
                    </ul>
                 </div>
              </div>
            )}
 
-           {/* TRADE OFFERS - ULTRA SHARP */}
-           {visibleBlocks.offers && (
-             <div className="p-16 rounded-[2.5rem] text-white flex justify-between items-center shadow-xl relative overflow-hidden" style={{ backgroundColor: theme.accent }}>
-                <div className="z-20 flex-1">
-                   <div className="flex items-center gap-2 text-white/40 text-[9px] font-bold uppercase tracking-widest mb-4">
-                      <Percent size={12}/> Trade Incentives Active
-                   </div>
-                   <textarea className="bg-transparent text-5xl font-black italic tracking-tighter outline-none w-full h-24 resize-none leading-[1]" defaultValue={portfolio[selectedCamp].offersText} />
+           {/* ACTIVITIES - RESTORED AND FIXED */}
+           {visibleBlocks.activities && (
+             <div className="space-y-12">
+                <div className="flex justify-between items-end border-b pb-6" style={{ borderColor: theme.borderColor }}>
+                   <h2 className="text-[11px] font-black uppercase tracking-[0.4em] opacity-40 italic">Experiences</h2>
+                   <Compass size={16} className="opacity-20" />
                 </div>
-                <div className="z-20 w-32 h-32 rounded-full border border-white/10 flex items-center justify-center text-4xl font-black">%</div>
-                <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+                <div className="grid md:grid-cols-2 gap-12">
+                   <div className="space-y-6">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Included Experiences</p>
+                      <div className="grid grid-cols-1 gap-3">
+                         {portfolio[selectedCamp].freeActivities.map((a, i) => (
+                           <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100">
+                              <Check size={12} style={{ color: theme.accent }} />
+                              <input className="text-xs font-bold outline-none bg-transparent w-full" defaultValue={a} />
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                   <div className="space-y-6">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Premium Add-ons</p>
+                      <div className="grid grid-cols-1 gap-3">
+                         {portfolio[selectedCamp].paidActivities.map((a, i) => (
+                           <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50/50 border border-slate-100">
+                              <MapPin size={12} className="text-slate-300" />
+                              <input className="text-xs font-bold outline-none bg-transparent w-full" defaultValue={a} />
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                </div>
              </div>
            )}
 
-           {/* TERMS - MINIMALIST FOOTER ITEM */}
+           {/* OFFERS */}
+           {visibleBlocks.offers && (
+             <div className="p-20 rounded-[4rem] text-white flex justify-between items-center shadow-2xl relative overflow-hidden" style={{ backgroundColor: theme.accent }}>
+                <div className="z-20 flex-1">
+                   <div className="flex items-center gap-2 text-white/30 text-[9px] font-bold uppercase tracking-[0.3em] mb-6">
+                      <Percent size={14}/> Trade Incentives
+                   </div>
+                   <textarea className="bg-transparent text-6xl font-black italic tracking-tighter outline-none w-full h-24 resize-none leading-[0.9]" defaultValue={portfolio[selectedCamp].offersText} />
+                </div>
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full -mr-48 -mt-48 blur-[100px]" />
+             </div>
+           )}
+
+           {/* TERMS */}
            {visibleBlocks.terms && (
-             <div className="p-10 rounded-3xl border border-slate-100 flex items-start gap-8" style={{ backgroundColor: theme.blockBg }}>
-                <ShieldAlert size={20} className="text-slate-300" />
+             <div className="p-12 rounded-[3rem] border border-slate-100 flex items-start gap-10" style={{ backgroundColor: theme.blockBg }}>
+                <div className="p-4 bg-slate-50 rounded-2xl"><ShieldAlert size={20} className="text-slate-400" /></div>
                 <div className="flex-1">
-                   <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2">Terms of Reservation</p>
-                   <textarea className="bg-transparent text-[11px] font-bold outline-none w-full h-12 resize-none text-slate-500" defaultValue={portfolio[selectedCamp].terms} />
+                   <p className="text-[9px] font-black uppercase tracking-widest opacity-30 mb-2 italic">Standard Reservation Policy</p>
+                   <textarea className="bg-transparent text-[11px] font-bold outline-none w-full h-12 resize-none text-slate-500 leading-relaxed" defaultValue={portfolio[selectedCamp].terms} />
                 </div>
              </div>
            )}
         </div>
 
-        {/* FLOATING ACTION BAR */}
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 ml-32 flex gap-2 bg-slate-900/95 backdrop-blur-3xl p-2 rounded-2xl shadow-2xl border border-white/10 z-[150]">
+        {/* FIXED FOOTER BAR */}
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 ml-32 flex gap-3 bg-slate-900/95 backdrop-blur-3xl p-3 rounded-[2rem] shadow-2xl border border-white/10 z-[150]">
            {['Shortlist', 'Request STO', 'Contacts', 'Downloads'].map((label, i) => (
-             <button key={label} className={`px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${i === 0 ? 'text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`} style={i === 0 ? {backgroundColor: theme.accent} : {}}>{label}</button>
+             <button key={label} className={`px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${i === 0 ? 'text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} style={i === 0 ? {backgroundColor: theme.accent} : {}}>{label}</button>
            ))}
         </div>
 
