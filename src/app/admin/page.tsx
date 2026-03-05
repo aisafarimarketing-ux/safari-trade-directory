@@ -36,13 +36,12 @@ import {
 type RoomKey = "family" | "double" | "single";
 type NumDraft = number | "";
 
-// NEW: downloadables
 type DownloadableType = "file" | "link";
 type Downloadable = {
   id: string;
   title: string;
   type: DownloadableType;
-  url: string; // object URL for file OR external link
+  url: string; // blob url for file OR external link
   mime?: string;
   fileName?: string;
 };
@@ -104,11 +103,19 @@ type Camp = {
   logoImage: string;
   coverImage: string;
 
-  // NEW
   downloadables: Downloadable[];
+
+  // Tripadvisor block
+  taLogoUrl: string;
+  taLink: string;
+  taRating: NumDraft;
+  taStyle: "dots" | "stars";
 };
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+const DEFAULT_TA_LOGO =
+  "https://static.tacdn.com/img2/brand_refresh/Tripadvisor_lockup_horizontal_secondary_registered.svg";
 
 const makeNewCamp = (): Camp => ({
   name: "New Camp",
@@ -179,11 +186,16 @@ const makeNewCamp = (): Camp => ({
   downloadables: [
     {
       id: uid(),
-      title: "Trade Fact Sheet (PDF)",
+      title: "Trade Fact Sheet (Google Drive)",
       type: "link",
       url: "https://drive.google.com/",
     },
   ],
+
+  taLogoUrl: DEFAULT_TA_LOGO,
+  taLink: "https://www.tripadvisor.com/",
+  taRating: "",
+  taStyle: "dots",
 });
 
 function CompactPanel({
@@ -205,7 +217,10 @@ function CompactPanel({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border rounded-2xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.06)]" style={style}>
+    <div
+      className="border rounded-2xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.06)]"
+      style={style}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -214,12 +229,20 @@ function CompactPanel({
         aria-expanded={open}
       >
         <div className="text-left">
-          <div className="text-[10px] font-black uppercase tracking-[0.28em] opacity-80">{title}</div>
-          {subtitle ? <div className="text-xs font-semibold opacity-75 mt-0.5">{subtitle}</div> : null}
+          <div className="text-[10px] font-black uppercase tracking-[0.28em] opacity-80">
+            {title}
+          </div>
+          {subtitle ? (
+            <div className="text-xs font-semibold opacity-75 mt-0.5">{subtitle}</div>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {right}
-          {open ? <ChevronUp size={16} className="opacity-70" /> : <ChevronDown size={16} className="opacity-70" />}
+          {open ? (
+            <ChevronUp size={16} className="opacity-70" />
+          ) : (
+            <ChevronDown size={16} className="opacity-70" />
+          )}
         </div>
       </button>
       {open && <div className="px-4 py-3">{children}</div>}
@@ -249,6 +272,91 @@ function AdminHint({
   );
 }
 
+function RatingPips({
+  value,
+  onChange,
+  highlight,
+  mode,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  highlight: string;
+  mode: "dots" | "stars";
+}) {
+  const full = Math.floor(value);
+  const half = value - full >= 0.5;
+
+  const renderDots = () => {
+    const total = 5;
+    return (
+      <div className="flex items-center gap-1.5">
+        {Array.from({ length: total }).map((_, i) => {
+          const idx = i + 1;
+          const isFull = idx <= full;
+          const isHalf = idx === full + 1 && half;
+          return (
+            <div
+              key={i}
+              className="w-2.5 h-2.5 rounded-full border cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const shift = (e as any).shiftKey;
+                if (shift) onChange(idx - 0.5);
+                else onChange(idx);
+              }}
+              style={{
+                borderColor: "rgba(0,0,0,0.15)",
+                background: isFull
+                  ? highlight
+                  : isHalf
+                  ? `linear-gradient(90deg, ${highlight} 50%, rgba(0,0,0,0.08) 50%)`
+                  : "rgba(0,0,0,0.08)",
+              }}
+              title="Click for full, Shift+Click for half"
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderStars = () => (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((n) => {
+        const fill = value >= n ? highlight : "rgba(0,0,0,0.10)";
+        return (
+          <button
+            key={n}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onChange(n);
+            }}
+            className="leading-none"
+            title="Click to set rating"
+          >
+            <StarIcon size={16} fill={fill} color={fill} />
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="text-[11px] font-black tabular-nums" style={{ opacity: 0.85 }}>
+        {value.toFixed(1)}
+      </div>
+      {mode === "stars" ? renderStars() : renderDots()}
+      <div className="text-[10px] font-bold uppercase tracking-widest opacity-60 hidden sm:block">
+        (click / shift+click)
+      </div>
+    </div>
+  );
+}
+
 export default function RestorationSafariAdmin() {
   const [isPreview, setIsPreview] = useState(false);
   const [selectedCampIndex, setSelectedCampIndex] = useState(0);
@@ -261,8 +369,10 @@ export default function RestorationSafariAdmin() {
     borderColor: "#E2E8F0",
   });
 
+  // Toggles (kept + extended)
   const [visibleBlocks, setVisibleBlocks] = useState({
     header: true,
+    tripadvisor: true,
     tradeDetails: true,
     matrix: true,
     inclusions: true,
@@ -272,9 +382,7 @@ export default function RestorationSafariAdmin() {
     terms: true,
     leadCapture: true,
     contactCard: true,
-    // NEW
     downloadables: true,
-    // kept for compatibility
     hero: false,
   });
 
@@ -311,6 +419,8 @@ export default function RestorationSafariAdmin() {
       contactWebsite: "https://example.com",
       enquiryEmail: "trade@nyumbani.example",
       enquiryWhatsApp: "+255000000000",
+      taLink: "https://www.tripadvisor.com/",
+      taRating: 4.5,
     },
   ]);
 
@@ -345,6 +455,7 @@ export default function RestorationSafariAdmin() {
     (typeof camp.double === "number" ? camp.double : 0) +
     (typeof camp.single === "number" ? camp.single : 0);
 
+  // Theme applied everywhere
   const cardStyle: React.CSSProperties = {
     backgroundColor: theme.blockBg,
     borderColor: theme.borderColor,
@@ -359,7 +470,7 @@ export default function RestorationSafariAdmin() {
   const highlightText: React.CSSProperties = { color: theme.highlight };
   const highlightBg: React.CSSProperties = { backgroundColor: theme.highlight };
 
-  // ---------- images ----------
+  // ---------- file helpers ----------
   const toDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
       const r = new FileReader();
@@ -368,11 +479,13 @@ export default function RestorationSafariAdmin() {
       r.readAsDataURL(file);
     });
 
+  // ---------- image modal ----------
   const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string; title?: string }>({
     open: false,
     src: "",
     title: "",
   });
+
   const openPhoto = (src: string, title?: string) => setPhotoModal({ open: true, src, title });
   const closePhoto = () => setPhotoModal({ open: false, src: "", title: "" });
 
@@ -384,6 +497,7 @@ export default function RestorationSafariAdmin() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // ---------- room photos ----------
   const addRoomPhotos = async (roomKey: RoomKey, files: FileList | null) => {
     if (!files || files.length === 0) return;
     const urls: string[] = [];
@@ -410,7 +524,7 @@ export default function RestorationSafariAdmin() {
     }));
   };
 
-  // Logo + cover replace
+  // ---------- logo + cover ----------
   const logoFileRef = useRef<HTMLInputElement | null>(null);
   const coverFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -426,6 +540,23 @@ export default function RestorationSafariAdmin() {
     const f = files[0];
     if (!f.type.startsWith("image/")) return;
     updateField("coverImage", await toDataUrl(f));
+  };
+
+  // ---------- Tripadvisor ----------
+  const taLogoFileRef = useRef<HTMLInputElement | null>(null);
+  const [taLogoPromptOpen, setTaLogoPromptOpen] = useState(false);
+  const [taLogoUrlDraft, setTaLogoUrlDraft] = useState("");
+
+  const setTaLogoFromFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    if (!f.type.startsWith("image/")) return;
+    updateField("taLogoUrl", await toDataUrl(f));
+  };
+
+  const openTripadvisor = () => {
+    if (!camp.taLink) return;
+    window.open(camp.taLink, "_blank");
   };
 
   // ---------- vCard ----------
@@ -491,7 +622,58 @@ export default function RestorationSafariAdmin() {
     a.remove();
   };
 
-  // ---------- downloadables (NEW) ----------
+  // ---------- vCard upload/parse ----------
+  const parseVcf = (text: string) => {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+    const pick = (startsWith: string) => {
+      const hit = lines.find((l) => l.toUpperCase().startsWith(startsWith.toUpperCase()));
+      if (!hit) return "";
+      return hit.split(":").slice(1).join(":").trim();
+    };
+
+    const fn = pick("FN");
+    const org = pick("ORG");
+    const title = pick("TITLE");
+
+    const emailLine = lines.find((l) => l.toUpperCase().includes("EMAIL"));
+    const telLine = lines.find((l) => l.toUpperCase().includes("TEL"));
+    const urlLine = lines.find((l) => l.toUpperCase().startsWith("URL"));
+
+    const email = emailLine ? emailLine.split(":").slice(1).join(":").trim() : "";
+    const tel = telLine ? telLine.split(":").slice(1).join(":").trim() : "";
+    const url = urlLine ? urlLine.split(":").slice(1).join(":").trim() : "";
+
+    return {
+      contactName: fn,
+      contactCompany: org,
+      contactTitle: title,
+      contactEmail: email,
+      contactPhone: tel,
+      contactWebsite: url,
+    };
+  };
+
+  const loadVcfFile = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.name.toLowerCase().endsWith(".vcf")) return;
+
+    const text = await file.text();
+    const parsed = parseVcf(text);
+
+    updateNested((c) => ({
+      ...c,
+      contactName: parsed.contactName || c.contactName,
+      contactCompany: parsed.contactCompany || c.contactCompany,
+      contactTitle: parsed.contactTitle || c.contactTitle,
+      contactEmail: parsed.contactEmail || c.contactEmail,
+      contactPhone: parsed.contactPhone || c.contactPhone,
+      contactWebsite: parsed.contactWebsite || c.contactWebsite,
+    }));
+  };
+
+  // ---------- downloadables ----------
   const downloadableFileRef = useRef<HTMLInputElement | null>(null);
 
   const addDownloadableLink = () => {
@@ -509,7 +691,6 @@ export default function RestorationSafariAdmin() {
 
     const added: Downloadable[] = [];
     for (const f of Array.from(files)) {
-      // allow pdf + images + common docs
       const ok =
         f.type.startsWith("image/") ||
         f.type === "application/pdf" ||
@@ -546,7 +727,6 @@ export default function RestorationSafariAdmin() {
   const removeDownloadable = (id: string) => {
     updateNested((c) => {
       const hit = c.downloadables.find((d) => d.id === id);
-      // revoke object URL if it is a file
       if (hit?.type === "file" && hit.url.startsWith("blob:")) {
         try {
           URL.revokeObjectURL(hit.url);
@@ -557,7 +737,6 @@ export default function RestorationSafariAdmin() {
   };
 
   const openDownloadable = (d: Downloadable) => {
-    // PDFs/images open in new tab; links open as normal
     window.open(d.url, "_blank");
   };
 
@@ -664,7 +843,10 @@ export default function RestorationSafariAdmin() {
             style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b" style={borderStyle}>
-              <div className="text-[11px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.8 }}>
+              <div
+                className="text-[11px] font-black uppercase tracking-widest"
+                style={{ color: theme.accent, opacity: 0.8 }}
+              >
                 {photoModal.title || "Preview"}
               </div>
               <button
@@ -679,13 +861,78 @@ export default function RestorationSafariAdmin() {
             </div>
 
             <div className="p-3">
-              <div className="w-full h-[78vh] md:h-[80vh] flex items-center justify-center rounded-2xl border overflow-hidden" style={borderStyle}>
+              <div
+                className="w-full h-[78vh] md:h-[80vh] flex items-center justify-center rounded-2xl border overflow-hidden"
+                style={borderStyle}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photoModal.src} alt="Preview" className="max-w-full max-h-full object-contain" />
               </div>
               <div className="mt-2 text-[10px] font-semibold" style={{ color: theme.accent, opacity: 0.65 }}>
                 Tip: press <span style={{ opacity: 0.9 }}>Esc</span> to close.
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tripadvisor Logo URL prompt */}
+      {taLogoPromptOpen && (
+        <div
+          className="fixed inset-0 z-[950] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setTaLogoPromptOpen(false);
+          }}
+        >
+          <div className="w-full max-w-lg rounded-3xl border p-4" style={cardStyle}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[10px] font-black uppercase tracking-widest" style={{ opacity: 0.75 }}>
+                Paste Logo Image URL
+              </div>
+              <button
+                type="button"
+                className="p-2 rounded-xl border"
+                style={cardStyle}
+                onClick={() => setTaLogoPromptOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <input
+              className="w-full p-3 rounded-2xl border outline-none text-sm font-semibold bg-transparent"
+              style={cardStyle}
+              value={taLogoUrlDraft}
+              onChange={(e) => setTaLogoUrlDraft(e.target.value)}
+              placeholder="https://..."
+            />
+
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                className="flex-1 py-3 rounded-2xl text-white text-[10px] font-black uppercase tracking-widest"
+                style={{ backgroundColor: theme.highlight }}
+                onClick={() => {
+                  const next = taLogoUrlDraft.trim();
+                  updateField("taLogoUrl", next || DEFAULT_TA_LOGO);
+                  setTaLogoPromptOpen(false);
+                }}
+              >
+                Save URL
+              </button>
+              <button
+                type="button"
+                className="py-3 px-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest"
+                style={cardStyle}
+                onClick={() => setTaLogoPromptOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="mt-3 text-[10px] font-semibold" style={{ opacity: 0.65 }}>
+              Tip: you can also right/double click the logo to upload from device.
             </div>
           </div>
         </div>
@@ -837,7 +1084,7 @@ export default function RestorationSafariAdmin() {
           </button>
         )}
 
-        {/* Header */}
+        {/* Header: Logo left + circular cover center */}
         {visibleBlocks.header && (
           <div className="max-w-6xl mx-auto px-6 pt-6">
             <div className="relative border rounded-2xl px-4 py-4 shadow-[0_10px_30px_rgba(0,0,0,0.06)]" style={cardStyle}>
@@ -871,7 +1118,12 @@ export default function RestorationSafariAdmin() {
                 </div>
 
                 {!isPreview && (
-                  <AdminHint text="Double/right click logo to replace" borderColor={theme.borderColor} bg={theme.blockBg} color={theme.accent} />
+                  <AdminHint
+                    text="Double/right click logo to replace"
+                    borderColor={theme.borderColor}
+                    bg={theme.blockBg}
+                    color={theme.accent}
+                  />
                 )}
               </div>
 
@@ -901,10 +1153,6 @@ export default function RestorationSafariAdmin() {
                       </div>
                     )}
                   </div>
-
-                  {!isPreview && (
-                    <AdminHint text="Double/right click cover to replace" borderColor={theme.borderColor} bg={theme.blockBg} color={theme.accent} />
-                  )}
                 </div>
 
                 <div className="mt-2 text-center space-y-1 w-full max-w-2xl">
@@ -918,18 +1166,37 @@ export default function RestorationSafariAdmin() {
                   </div>
 
                   <div className="text-base md:text-lg font-black italic" style={{ color: theme.accent, opacity: 0.95 }}>
-                    <input className="bg-transparent outline-none text-center w-full" value={camp.name} onChange={(e) => updateField("name", e.target.value)} style={{ color: theme.accent }} />
+                    <input
+                      className="bg-transparent outline-none text-center w-full"
+                      value={camp.name}
+                      onChange={(e) => updateField("name", e.target.value)}
+                      style={{ color: theme.accent }}
+                    />
                   </div>
 
                   <div className="text-[11px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.7 }}>
-                    <input className="bg-transparent outline-none text-center w-full" value={camp.class} onChange={(e) => updateField("class", e.target.value)} style={{ color: theme.accent }} />
+                    <input
+                      className="bg-transparent outline-none text-center w-full"
+                      value={camp.class}
+                      onChange={(e) => updateField("class", e.target.value)}
+                      style={{ color: theme.accent }}
+                    />
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] font-black uppercase tracking-widest px-2" style={{ color: theme.accent, opacity: 0.8 }}>
+                {/* Micro meta row */}
+                <div
+                  className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] font-black uppercase tracking-widest px-2"
+                  style={{ color: theme.accent, opacity: 0.8 }}
+                >
                   <div className="flex items-center gap-2">
                     <StarIcon size={14} style={highlightText} />
-                    <input className="w-14 bg-transparent outline-none font-black text-center" value={camp.rating} onChange={(e) => updateField("rating", numDraft(e.target.value))} style={accentText} />
+                    <input
+                      className="w-14 bg-transparent outline-none font-black text-center"
+                      value={camp.rating}
+                      onChange={(e) => updateField("rating", numDraft(e.target.value))}
+                      style={accentText}
+                    />
                     <span style={{ opacity: 0.55 }}>({camp.reviewCount || 0})</span>
                   </div>
 
@@ -937,53 +1204,198 @@ export default function RestorationSafariAdmin() {
 
                   <div className="flex items-center gap-2">
                     <MapPin size={14} style={highlightText} />
-                    <input className="bg-transparent outline-none font-black text-center w-[240px] max-w-[70vw]" value={camp.locationLabel} onChange={(e) => updateField("locationLabel", e.target.value)} style={accentText} />
+                    <input
+                      className="bg-transparent outline-none font-black text-center w-[240px] max-w-[70vw]"
+                      value={camp.locationLabel}
+                      onChange={(e) => updateField("locationLabel", e.target.value)}
+                      style={accentText}
+                    />
                   </div>
 
                   <div className="hidden sm:block h-4 w-px" style={{ backgroundColor: theme.borderColor }} />
 
                   <div>
                     Rooms:{" "}
-                    <input className="w-12 bg-transparent outline-none font-black text-center" value={camp.rooms} onChange={(e) => updateField("rooms", numDraft(e.target.value))} style={accentText} />
-                    <span style={{ opacity: 0.55 }}> • Units:</span> <span style={{ opacity: 0.95 }}>{totalUnits}</span>
+                    <input
+                      className="w-12 bg-transparent outline-none font-black text-center"
+                      value={camp.rooms}
+                      onChange={(e) => updateField("rooms", numDraft(e.target.value))}
+                      style={accentText}
+                    />
+                    <span style={{ opacity: 0.55 }}> • Units:</span>{" "}
+                    <span style={{ opacity: 0.95 }}>{totalUnits}</span>
                   </div>
                 </div>
+
+                {/* Tripadvisor block */}
+                {visibleBlocks.tripadvisor && (
+                  <div
+                    className="mt-3 w-full max-w-3xl border rounded-2xl px-4 py-3 cursor-pointer"
+                    style={{ borderColor: theme.borderColor, backgroundColor: "rgba(255,255,255,0.65)" }}
+                    onClick={openTripadvisor}
+                    title="Open Tripadvisor"
+                  >
+                    <input
+                      ref={taLogoFileRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => setTaLogoFromFiles(e.target.files)}
+                    />
+
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-[220px]">
+                        <div
+                          className="w-32 h-10 rounded-xl border overflow-hidden flex items-center justify-center"
+                          style={{ borderColor: "rgba(0,0,0,0.12)", backgroundColor: "rgba(255,255,255,0.85)" }}
+                          onDoubleClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            taLogoFileRef.current?.click();
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            taLogoFileRef.current?.click();
+                          }}
+                          title="Double-click or right-click to upload logo"
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={camp.taLogoUrl || DEFAULT_TA_LOGO}
+                            alt="Tripadvisor"
+                            className="w-full h-full object-contain p-2"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          className="px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest"
+                          style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg, color: theme.accent }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setTaLogoUrlDraft(camp.taLogoUrl || DEFAULT_TA_LOGO);
+                            setTaLogoPromptOpen(true);
+                          }}
+                          title="Paste logo URL"
+                        >
+                          Paste URL
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={camp.taStyle}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => updateField("taStyle", e.target.value as any)}
+                          className="px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest bg-transparent outline-none"
+                          style={{ borderColor: theme.borderColor, color: theme.accent, backgroundColor: theme.blockBg }}
+                          title="Dots or Stars"
+                        >
+                          <option value="dots">Dots</option>
+                          <option value="stars">Stars</option>
+                        </select>
+
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <RatingPips
+                            value={typeof camp.taRating === "number" ? camp.taRating : 0}
+                            onChange={(v) => updateField("taRating", v)}
+                            highlight="#34A853"
+                            mode={camp.taStyle}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.55 }}>
+                        Tripadvisor Link
+                      </div>
+                      <input
+                        className="flex-1 bg-transparent outline-none text-[10px] font-semibold"
+                        value={camp.taLink}
+                        onChange={(e) => updateField("taLink", e.target.value)}
+                        style={{ color: theme.accent, opacity: 0.85 }}
+                        placeholder="Paste Tripadvisor property link here"
+                      />
+                    </div>
+
+                    <div className="mt-2 text-[10px] font-semibold" style={{ color: theme.accent, opacity: 0.55 }}>
+                      Click the card to open Tripadvisor.
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Main grid */}
+        {/* Compact grid */}
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-            {/* Left column */}
+            {/* Left */}
             <div className="lg:col-span-7 space-y-3">
               {visibleBlocks.tradeDetails && (
-                <CompactPanel title="Trade Profile Details" subtitle="Vibe + links (editable)" defaultOpen={false} style={cardStyle} headerStyle={headerStyle}>
+                <CompactPanel
+                  title="Trade Profile Details"
+                  subtitle="Vibe + links (editable)"
+                  defaultOpen={false}
+                  style={cardStyle}
+                  headerStyle={headerStyle}
+                >
                   <div className="grid md:grid-cols-2 gap-2">
                     <div className="border rounded-xl p-3" style={borderStyle}>
                       <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Map link</div>
-                      <input className="mt-1 w-full bg-transparent outline-none text-sm font-black" value={camp.mapLink} onChange={(e) => updateField("mapLink", e.target.value)} style={accentText} />
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.mapLink}
+                        onChange={(e) => updateField("mapLink", e.target.value)}
+                        style={accentText}
+                      />
                     </div>
 
                     <div className="border rounded-xl p-3" style={borderStyle}>
                       <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Website</div>
-                      <input className="mt-1 w-full bg-transparent outline-none text-sm font-black" value={camp.website} onChange={(e) => updateField("website", e.target.value)} style={accentText} />
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.website}
+                        onChange={(e) => updateField("website", e.target.value)}
+                        style={accentText}
+                      />
                     </div>
 
                     <div className="border rounded-xl p-3" style={borderStyle}>
                       <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Instagram</div>
-                      <input className="mt-1 w-full bg-transparent outline-none text-sm font-black" value={camp.instagramHandle} onChange={(e) => updateField("instagramHandle", e.target.value)} style={accentText} />
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.instagramHandle}
+                        onChange={(e) => updateField("instagramHandle", e.target.value)}
+                        style={accentText}
+                      />
                     </div>
 
                     <div className="border rounded-xl p-3" style={borderStyle}>
                       <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Reviews</div>
-                      <input className="mt-1 w-full bg-transparent outline-none text-sm font-black" value={camp.reviewCount} onChange={(e) => updateField("reviewCount", numDraft(e.target.value))} style={accentText} />
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.reviewCount}
+                        onChange={(e) => updateField("reviewCount", numDraft(e.target.value))}
+                        style={accentText}
+                      />
                     </div>
 
                     <div className="border rounded-xl p-3 md:col-span-2" style={borderStyle}>
                       <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Vibe</div>
-                      <textarea className="mt-1 w-full bg-transparent outline-none text-sm font-semibold resize-none" rows={2} value={camp.vibe} onChange={(e) => updateField("vibe", e.target.value)} style={{ color: theme.accent, opacity: 0.92 }} />
+                      <textarea
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-semibold resize-none"
+                        rows={2}
+                        value={camp.vibe}
+                        onChange={(e) => updateField("vibe", e.target.value)}
+                        style={{ color: theme.accent, opacity: 0.92 }}
+                      />
                     </div>
                   </div>
                 </CompactPanel>
@@ -991,7 +1403,13 @@ export default function RestorationSafariAdmin() {
 
               {/* Inventory + photos */}
               {visibleBlocks.matrix && (
-                <CompactPanel title="Inventory + Room Photos" subtitle="Counts + multi-photo + responsive preview" defaultOpen={true} style={cardStyle} headerStyle={headerStyle}>
+                <CompactPanel
+                  title="Inventory + Room Photos"
+                  subtitle="Counts + multi-photo + responsive preview"
+                  defaultOpen={true}
+                  style={cardStyle}
+                  headerStyle={headerStyle}
+                >
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {(["family", "double", "single"] as const).map((type) => (
                       <div key={type} className="border rounded-xl p-3" style={borderStyle}>
@@ -1008,17 +1426,39 @@ export default function RestorationSafariAdmin() {
                         />
 
                         <div className="flex items-center justify-between mt-2">
-                          <input inputMode="numeric" className="text-3xl font-black italic outline-none bg-transparent w-16" value={camp[type]} onChange={(e) => updateField(type, numDraft(e.target.value) as any)} style={{ color: theme.accent, opacity: 0.95 }} />
-                          <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest" style={highlightText}>
+                          <input
+                            inputMode="numeric"
+                            className="text-3xl font-black italic outline-none bg-transparent w-16"
+                            value={camp[type]}
+                            onChange={(e) => updateField(type, numDraft(e.target.value) as any)}
+                            style={{ color: theme.accent, opacity: 0.95 }}
+                          />
+                          <label
+                            className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                            style={highlightText}
+                          >
                             <Upload size={12} />
                             Upload
-                            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => addRoomPhotos(type, e.target.files)} />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => addRoomPhotos(type, e.target.files)}
+                            />
                           </label>
                         </div>
 
                         <div className="grid grid-cols-4 gap-1.5 mt-3">
                           {(camp.roomPhotos[type] ?? []).slice(0, 12).map((src, i) => (
-                            <button key={i} className="relative rounded-lg overflow-hidden border" style={borderStyle} onClick={() => openPhoto(src, `${camp.roomTypeLabels[type]} — Photo ${i + 1}`)} type="button" title="Click to preview">
+                            <button
+                              key={i}
+                              className="relative rounded-lg overflow-hidden border"
+                              style={borderStyle}
+                              onClick={() => openPhoto(src, `${camp.roomTypeLabels[type]} — Photo ${i + 1}`)}
+                              type="button"
+                              title="Click to preview"
+                            >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={src} alt={`${type}-${i}`} className="w-full aspect-square object-cover" />
                               <button
@@ -1039,10 +1479,28 @@ export default function RestorationSafariAdmin() {
                       </div>
                     ))}
                   </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Total rooms</div>
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.rooms}
+                        onChange={(e) => updateField("rooms", numDraft(e.target.value))}
+                        style={accentText}
+                      />
+                    </div>
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Total units (computed)</div>
+                      <div className="mt-1 text-sm font-black" style={{ color: theme.accent, opacity: 0.95 }}>
+                        {totalUnits}
+                      </div>
+                    </div>
+                  </div>
                 </CompactPanel>
               )}
 
-              {/* Inclusions & Exclusions */}
+              {/* Inclusions + Exclusions */}
               <div className="grid md:grid-cols-2 gap-3">
                 {visibleBlocks.inclusions && (
                   <CompactPanel
@@ -1051,7 +1509,13 @@ export default function RestorationSafariAdmin() {
                     style={cardStyle}
                     headerStyle={headerStyle}
                     right={
-                      <button onClick={() => addListItem("inclusions")} type="button" title="Add" className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}>
+                      <button
+                        onClick={() => addListItem("inclusions")}
+                        type="button"
+                        title="Add"
+                        className="p-2 rounded-xl border"
+                        style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}
+                      >
                         <Plus size={14} style={highlightText} />
                       </button>
                     }
@@ -1060,8 +1524,19 @@ export default function RestorationSafariAdmin() {
                       {camp.inclusions.map((item, i) => (
                         <div key={i} className="flex items-center gap-2 group">
                           <Check size={12} className="text-green-500" />
-                          <input className="w-full bg-transparent outline-none text-sm font-semibold" value={item} onChange={(e) => updateListItem("inclusions", i, e.target.value)} style={{ color: theme.accent, opacity: 0.9 }} />
-                          <button onClick={() => removeListItem("inclusions", i)} className="opacity-0 group-hover:opacity-100" style={{ color: "#f87171" }} type="button" title="Remove">
+                          <input
+                            className="w-full bg-transparent outline-none text-sm font-semibold"
+                            value={item}
+                            onChange={(e) => updateListItem("inclusions", i, e.target.value)}
+                            style={{ color: theme.accent, opacity: 0.9 }}
+                          />
+                          <button
+                            onClick={() => removeListItem("inclusions", i)}
+                            className="opacity-0 group-hover:opacity-100"
+                            style={{ color: "#f87171" }}
+                            type="button"
+                            title="Remove"
+                          >
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -1077,7 +1552,13 @@ export default function RestorationSafariAdmin() {
                     style={cardStyle}
                     headerStyle={headerStyle}
                     right={
-                      <button onClick={() => addListItem("exclusions")} type="button" title="Add" className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}>
+                      <button
+                        onClick={() => addListItem("exclusions")}
+                        type="button"
+                        title="Add"
+                        className="p-2 rounded-xl border"
+                        style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}
+                      >
                         <Plus size={14} style={highlightText} />
                       </button>
                     }
@@ -1086,8 +1567,19 @@ export default function RestorationSafariAdmin() {
                       {camp.exclusions.map((item, i) => (
                         <div key={i} className="flex items-center gap-2 group">
                           <Ban size={12} style={{ color: theme.accent, opacity: 0.5 }} />
-                          <input className="w-full bg-transparent outline-none text-sm font-semibold italic" value={item} onChange={(e) => updateListItem("exclusions", i, e.target.value)} style={{ color: theme.accent, opacity: 0.85 }} />
-                          <button onClick={() => removeListItem("exclusions", i)} className="opacity-0 group-hover:opacity-100" style={{ color: "#f87171" }} type="button" title="Remove">
+                          <input
+                            className="w-full bg-transparent outline-none text-sm font-semibold italic"
+                            value={item}
+                            onChange={(e) => updateListItem("exclusions", i, e.target.value)}
+                            style={{ color: theme.accent, opacity: 0.85 }}
+                          />
+                          <button
+                            onClick={() => removeListItem("exclusions", i)}
+                            className="opacity-0 group-hover:opacity-100"
+                            style={{ color: "#f87171" }}
+                            type="button"
+                            title="Remove"
+                          >
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -1097,14 +1589,25 @@ export default function RestorationSafariAdmin() {
                 )}
               </div>
 
-              {/* Experiences */}
+              {/* Experiences (free vs paid) */}
               {visibleBlocks.experiences && (
-                <CompactPanel title="Services & Experiences" subtitle="Included vs Paid" defaultOpen={false} style={cardStyle} headerStyle={headerStyle}>
+                <CompactPanel
+                  title="Services & Experiences"
+                  subtitle="Included vs Paid"
+                  defaultOpen={false}
+                  style={cardStyle}
+                  headerStyle={headerStyle}
+                >
                   <div className="grid md:grid-cols-2 gap-3">
                     <div className="border rounded-xl p-3" style={borderStyle}>
                       <div className="flex items-center justify-between">
                         <div className="text-[10px] font-black uppercase tracking-widest opacity-70">Included</div>
-                        <button onClick={() => addListItem("freeActivities")} type="button" className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}>
+                        <button
+                          onClick={() => addListItem("freeActivities")}
+                          type="button"
+                          className="p-2 rounded-xl border"
+                          style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }}
+                        >
                           <Plus size={14} style={highlightText} />
                         </button>
                       </div>
@@ -1112,8 +1615,18 @@ export default function RestorationSafariAdmin() {
                         {camp.freeActivities.map((act, i) => (
                           <div key={i} className="flex items-center gap-2 group">
                             <Compass size={12} style={highlightText} />
-                            <input className="w-full bg-transparent outline-none text-sm font-semibold uppercase tracking-tight" value={act} onChange={(e) => updateListItem("freeActivities", i, e.target.value)} style={{ color: theme.accent, opacity: 0.9 }} />
-                            <button onClick={() => removeListItem("freeActivities", i)} className="opacity-0 group-hover:opacity-100" style={{ color: "#f87171" }} type="button">
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-semibold uppercase tracking-tight"
+                              value={act}
+                              onChange={(e) => updateListItem("freeActivities", i, e.target.value)}
+                              style={{ color: theme.accent, opacity: 0.9 }}
+                            />
+                            <button
+                              onClick={() => removeListItem("freeActivities", i)}
+                              className="opacity-0 group-hover:opacity-100"
+                              style={{ color: "#f87171" }}
+                              type="button"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -1121,10 +1634,18 @@ export default function RestorationSafariAdmin() {
                       </div>
                     </div>
 
-                    <div className="border rounded-xl p-3" style={{ borderColor: theme.borderColor, backgroundColor: theme.accent, color: "#fff" }}>
+                    <div
+                      className="border rounded-xl p-3"
+                      style={{ borderColor: theme.borderColor, backgroundColor: theme.accent, color: "#fff" }}
+                    >
                       <div className="flex items-center justify-between">
                         <div className="text-[10px] font-black uppercase tracking-widest text-white/80">Paid</div>
-                        <button onClick={() => addListItem("paidActivities")} type="button" className="p-2 rounded-xl border" style={{ borderColor: "rgba(255,255,255,0.25)", backgroundColor: "rgba(255,255,255,0.06)" }}>
+                        <button
+                          onClick={() => addListItem("paidActivities")}
+                          type="button"
+                          className="p-2 rounded-xl border"
+                          style={{ borderColor: "rgba(255,255,255,0.25)", backgroundColor: "rgba(255,255,255,0.06)" }}
+                        >
                           <Plus size={14} className="text-white/80" />
                         </button>
                       </div>
@@ -1132,8 +1653,16 @@ export default function RestorationSafariAdmin() {
                         {camp.paidActivities.map((act, i) => (
                           <div key={i} className="flex items-center gap-2 group">
                             <MapPin size={12} className="text-white/60" />
-                            <input className="w-full bg-transparent outline-none text-sm font-semibold uppercase tracking-tight text-white" value={act} onChange={(e) => updateListItem("paidActivities", i, e.target.value)} />
-                            <button onClick={() => removeListItem("paidActivities", i)} className="opacity-0 group-hover:opacity-100 text-white/70" type="button">
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-semibold uppercase tracking-tight text-white"
+                              value={act}
+                              onChange={(e) => updateListItem("paidActivities", i, e.target.value)}
+                            />
+                            <button
+                              onClick={() => removeListItem("paidActivities", i)}
+                              className="opacity-0 group-hover:opacity-100 text-white/70"
+                              type="button"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -1144,48 +1673,112 @@ export default function RestorationSafariAdmin() {
                 </CompactPanel>
               )}
 
-              {/* Offers & Terms */}
+              {/* Offer + Terms */}
               <div className="grid md:grid-cols-2 gap-3">
                 {visibleBlocks.offers && (
                   <CompactPanel title="Offer" defaultOpen={false} style={cardStyle} headerStyle={headerStyle}>
                     <div className="rounded-xl p-3 text-white" style={highlightBg}>
-                      <div className="text-[9px] font-black uppercase tracking-[0.35em] text-white/70 mb-2">Trade incentive</div>
-                      <textarea className="bg-transparent w-full outline-none resize-none text-xl md:text-2xl font-black italic tracking-tight leading-snug" rows={3} value={camp.offersText} onChange={(e) => updateField("offersText", e.target.value)} />
+                      <div className="text-[9px] font-black uppercase tracking-[0.35em] text-white/70 mb-2">
+                        Trade incentive
+                      </div>
+                      <textarea
+                        className="bg-transparent w-full outline-none resize-none text-xl md:text-2xl font-black italic tracking-tight leading-snug"
+                        rows={3}
+                        value={camp.offersText}
+                        onChange={(e) => updateField("offersText", e.target.value)}
+                      />
                     </div>
                   </CompactPanel>
                 )}
+
                 {visibleBlocks.terms && (
                   <CompactPanel title="Terms" defaultOpen={false} style={cardStyle} headerStyle={headerStyle}>
-                    <textarea className="w-full rounded-xl border p-3 text-sm font-semibold outline-none bg-transparent resize-none" style={{ borderColor: theme.borderColor, color: theme.accent }} rows={6} value={camp.terms} onChange={(e) => updateField("terms", e.target.value)} />
+                    <textarea
+                      className="w-full rounded-xl border p-3 text-sm font-semibold outline-none bg-transparent resize-none"
+                      style={{ borderColor: theme.borderColor, color: theme.accent }}
+                      rows={6}
+                      value={camp.terms}
+                      onChange={(e) => updateField("terms", e.target.value)}
+                    />
                   </CompactPanel>
                 )}
               </div>
             </div>
 
-            {/* Right column */}
+            {/* Right */}
             <div className="lg:col-span-5 space-y-3">
-              {/* Lead Capture */}
+              {/* Lead capture */}
               {visibleBlocks.leadCapture && (
-                <CompactPanel title="Lead Capture" subtitle="Send by Email or WhatsApp" defaultOpen={true} style={cardStyle} headerStyle={headerStyle}>
+                <CompactPanel
+                  title="Lead Capture"
+                  subtitle="Send by Email or WhatsApp"
+                  defaultOpen={true}
+                  style={cardStyle}
+                  headerStyle={headerStyle}
+                >
                   <div className="border rounded-xl p-3" style={borderStyle}>
                     <div className="text-[10px] font-black uppercase tracking-widest opacity-65" style={{ color: theme.accent }}>
                       Enquiry form
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                      <input className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent" style={cardStyle} placeholder="Full name" value={lead.fullName} onChange={(e) => setLead((p) => ({ ...p, fullName: e.target.value }))} />
-                      <input className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent" style={cardStyle} placeholder="Agency" value={lead.agency} onChange={(e) => setLead((p) => ({ ...p, agency: e.target.value }))} />
-                      <input className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent md:col-span-2" style={cardStyle} placeholder="Email" value={lead.email} onChange={(e) => setLead((p) => ({ ...p, email: e.target.value }))} />
-                      <input className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent md:col-span-2" style={cardStyle} placeholder="WhatsApp / Phone" value={lead.phone} onChange={(e) => setLead((p) => ({ ...p, phone: e.target.value }))} />
-                      <textarea className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent md:col-span-2 resize-none" style={cardStyle} placeholder="Message..." rows={3} value={lead.message} onChange={(e) => setLead((p) => ({ ...p, message: e.target.value }))} />
+                      <input
+                        className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent"
+                        style={cardStyle}
+                        placeholder="Full name"
+                        value={lead.fullName}
+                        onChange={(e) => setLead((p) => ({ ...p, fullName: e.target.value }))}
+                      />
+                      <input
+                        className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent"
+                        style={cardStyle}
+                        placeholder="Agency"
+                        value={lead.agency}
+                        onChange={(e) => setLead((p) => ({ ...p, agency: e.target.value }))}
+                      />
+                      <input
+                        className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent md:col-span-2"
+                        style={cardStyle}
+                        placeholder="Email"
+                        value={lead.email}
+                        onChange={(e) => setLead((p) => ({ ...p, email: e.target.value }))}
+                      />
+                      <input
+                        className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent md:col-span-2"
+                        style={cardStyle}
+                        placeholder="WhatsApp / Phone"
+                        value={lead.phone}
+                        onChange={(e) => setLead((p) => ({ ...p, phone: e.target.value }))}
+                      />
+                      <textarea
+                        className="w-full p-3 rounded-xl border text-xs font-semibold outline-none bg-transparent md:col-span-2 resize-none"
+                        style={cardStyle}
+                        placeholder="Message..."
+                        rows={3}
+                        value={lead.message}
+                        onChange={(e) => setLead((p) => ({ ...p, message: e.target.value }))}
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-2 mt-3">
-                      <button className="flex-1 min-w-[180px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2" style={highlightBg} type="button" onClick={() => openMailto(leadPayload)}>
+                      <button
+                        className="flex-1 min-w-[180px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2"
+                        style={highlightBg}
+                        type="button"
+                        onClick={() => openMailto(leadPayload)}
+                        title="Send request by email"
+                      >
                         <Mail size={14} />
                         <span className="truncate">{camp.leadCta}</span>
                       </button>
-                      <button className="py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={cardStyle} type="button" onClick={() => openWhatsApp(leadPayload)}>
+
+                      <button
+                        className="py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                        style={cardStyle}
+                        type="button"
+                        onClick={() => openWhatsApp(leadPayload)}
+                        title="Send request on WhatsApp"
+                      >
                         <MessageCircle size={14} />
                         WhatsApp
                       </button>
@@ -1193,13 +1786,36 @@ export default function RestorationSafariAdmin() {
 
                     <div className="flex items-center gap-2 mt-2">
                       <ShieldAlert size={14} style={{ color: theme.accent, opacity: 0.35 }} />
-                      <input className="text-[10px] font-semibold outline-none bg-transparent w-full" value={camp.leadDisclaimer} onChange={(e) => updateField("leadDisclaimer", e.target.value)} style={{ color: theme.accent, opacity: 0.65 }} />
+                      <input
+                        className="text-[10px] font-semibold outline-none bg-transparent w-full"
+                        value={camp.leadDisclaimer}
+                        onChange={(e) => updateField("leadDisclaimer", e.target.value)}
+                        style={{ color: theme.accent, opacity: 0.65 }}
+                      />
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-2 mt-2">
-                      <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent" style={cardStyle} value={camp.enquiryEmail} onChange={(e) => updateField("enquiryEmail", e.target.value)} placeholder="Company enquiry email" />
-                      <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent" style={cardStyle} value={camp.enquiryWhatsApp} onChange={(e) => updateField("enquiryWhatsApp", e.target.value)} placeholder="Company WhatsApp (intl)" />
-                      <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2" style={cardStyle} value={camp.enquirySubject} onChange={(e) => updateField("enquirySubject", e.target.value)} placeholder="Email subject" />
+                      <input
+                        className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                        style={cardStyle}
+                        value={camp.enquiryEmail}
+                        onChange={(e) => updateField("enquiryEmail", e.target.value)}
+                        placeholder="Company enquiry email"
+                      />
+                      <input
+                        className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                        style={cardStyle}
+                        value={camp.enquiryWhatsApp}
+                        onChange={(e) => updateField("enquiryWhatsApp", e.target.value)}
+                        placeholder="Company WhatsApp (intl)"
+                      />
+                      <input
+                        className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                        style={cardStyle}
+                        value={camp.enquirySubject}
+                        onChange={(e) => updateField("enquirySubject", e.target.value)}
+                        placeholder="Email subject"
+                      />
                     </div>
 
                     <div className="flex items-center justify-center gap-2 text-[10px] font-bold mt-2" style={{ color: theme.accent, opacity: 0.6 }}>
@@ -1208,7 +1824,7 @@ export default function RestorationSafariAdmin() {
                     </div>
                   </div>
 
-                  {/* Bottom row: Downloadables LEFT + VCard actions RIGHT */}
+                  {/* Bottom row: Downloads LEFT + VCard actions RIGHT */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
                     {/* LEFT: DOWNLOADABLES */}
                     {visibleBlocks.downloadables && (
@@ -1292,13 +1908,15 @@ export default function RestorationSafariAdmin() {
                             </div>
                           )}
 
-                          {/* Links editor (only for link type) */}
                           {(camp.downloadables ?? [])
                             .filter((d) => d.type === "link")
-                            .slice(0, 3)
+                            .slice(0, 2)
                             .map((d) => (
                               <div key={`${d.id}-url`} className="flex items-center gap-2">
-                                <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
+                                <div
+                                  className="text-[9px] font-black uppercase tracking-widest"
+                                  style={{ color: theme.accent, opacity: 0.5 }}
+                                >
                                   URL
                                 </div>
                                 <input
@@ -1313,14 +1931,36 @@ export default function RestorationSafariAdmin() {
                       </div>
                     )}
 
-                    {/* RIGHT: CONTACT ACTIONS */}
+                    {/* RIGHT: CONTACT/VCard */}
                     <div className="border rounded-xl p-3" style={borderStyle}>
-                      <div className="text-[10px] font-black uppercase tracking-widest opacity-70" style={{ color: theme.accent }}>
-                        Contact Card
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-70" style={{ color: theme.accent }}>
+                          Contact Card (QR / NFC)
+                        </div>
+                        <label
+                          className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                          style={{ color: theme.highlight }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <FileText size={12} />
+                          Upload .VCF
+                          <input
+                            type="file"
+                            accept=".vcf,text/vcard"
+                            className="hidden"
+                            onChange={(e) => loadVcfFile(e.target.files)}
+                          />
+                        </label>
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-2">
-                        <button onClick={shareContact} className="flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2" style={cardStyle} type="button">
+                        <button
+                          onClick={shareContact}
+                          className="flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                          style={cardStyle}
+                          type="button"
+                          title="Share my contacts"
+                        >
                           <Share2 size={14} />
                           Share
                         </button>
@@ -1330,19 +1970,26 @@ export default function RestorationSafariAdmin() {
                           download={`${(camp.contactName || "contact").replace(/\s+/g, "_")}.vcf`}
                           className="flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
                           style={cardStyle}
+                          title="Download contact"
                         >
                           <Download size={14} />
                           Download
                         </a>
 
-                        <button onClick={saveContact} className="flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2" style={cardStyle} type="button">
+                        <button
+                          onClick={saveContact}
+                          className="flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                          style={cardStyle}
+                          type="button"
+                          title="Save contacts"
+                        >
                           <Contact size={14} />
                           Save
                         </button>
                       </div>
 
                       <div className="mt-2 text-[10px] font-semibold" style={{ color: theme.accent, opacity: 0.6 }}>
-                        Ideal for QR / NFC plaque.
+                        Tip: Use this for your QR/NFC plaque.
                       </div>
                     </div>
                   </div>
@@ -1353,20 +2000,11 @@ export default function RestorationSafariAdmin() {
               {visibleBlocks.contactCard && (
                 <CompactPanel
                   title="Contact Card (Edit)"
-                  subtitle="Upload .VCF + edit fields"
+                  subtitle="Edit fields (used in the VCF)"
                   defaultOpen={false}
                   style={cardStyle}
                   headerStyle={headerStyle}
-                  right={
-                    <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                      <FileText size={12} style={highlightText} />
-                      <span style={highlightText}>Upload</span>
-                      <input type="file" accept=".vcf,text/vcard" className="hidden" onChange={(e) => loadVcfFile(e.target.files)} />
-                    </label>
-                  }
                 >
-                  {/* VCF parsing funcs kept exactly like before */}
-                  {/* Minimal editor */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {[
                       { k: "contactName", ph: "Contact name" },
@@ -1383,8 +2021,20 @@ export default function RestorationSafariAdmin() {
                         placeholder={f.ph}
                       />
                     ))}
-                    <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2" style={cardStyle} value={camp.contactEmail} onChange={(e) => updateField("contactEmail", e.target.value)} placeholder="Email" />
-                    <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2" style={cardStyle} value={camp.contactWebsite} onChange={(e) => updateField("contactWebsite", e.target.value)} placeholder="Website" />
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                      style={cardStyle}
+                      value={camp.contactEmail}
+                      onChange={(e) => updateField("contactEmail", e.target.value)}
+                      placeholder="Email"
+                    />
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                      style={cardStyle}
+                      value={camp.contactWebsite}
+                      onChange={(e) => updateField("contactWebsite", e.target.value)}
+                      placeholder="Website"
+                    />
                   </div>
                 </CompactPanel>
               )}
@@ -1396,55 +2046,4 @@ export default function RestorationSafariAdmin() {
       </main>
     </div>
   );
-
-  // NOTE: loadVcfFile depends on parseVcf; keep both below in-file (same as before)
-  async function loadVcfFile(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const file = files[0];
-    if (!file.name.toLowerCase().endsWith(".vcf")) return;
-
-    const text = await file.text();
-    const parsed = parseVcf(text);
-
-    updateNested((c) => ({
-      ...c,
-      contactName: parsed.contactName || c.contactName,
-      contactCompany: parsed.contactCompany || c.contactCompany,
-      contactTitle: parsed.contactTitle || c.contactTitle,
-      contactEmail: parsed.contactEmail || c.contactEmail,
-      contactPhone: parsed.contactPhone || c.contactPhone,
-      contactWebsite: parsed.contactWebsite || c.contactWebsite,
-    }));
-  }
-
-  function parseVcf(text: string) {
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-
-    const pick = (startsWith: string) => {
-      const hit = lines.find((l) => l.toUpperCase().startsWith(startsWith.toUpperCase()));
-      if (!hit) return "";
-      return hit.split(":").slice(1).join(":").trim();
-    };
-
-    const fn = pick("FN");
-    const org = pick("ORG");
-    const title = pick("TITLE");
-
-    const emailLine = lines.find((l) => l.toUpperCase().includes("EMAIL"));
-    const telLine = lines.find((l) => l.toUpperCase().includes("TEL"));
-    const urlLine = lines.find((l) => l.toUpperCase().startsWith("URL"));
-
-    const email = emailLine ? emailLine.split(":").slice(1).join(":").trim() : "";
-    const tel = telLine ? telLine.split(":").slice(1).join(":").trim() : "";
-    const url = urlLine ? urlLine.split(":").slice(1).join(":").trim() : "";
-
-    return {
-      contactName: fn,
-      contactCompany: org,
-      contactTitle: title,
-      contactEmail: email,
-      contactPhone: tel,
-      contactWebsite: url,
-    };
-  }
 }
