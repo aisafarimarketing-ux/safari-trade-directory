@@ -28,6 +28,9 @@ import {
   Mail,
   MessageCircle,
   Building2,
+  ChevronDown,
+  ChevronUp,
+  LayoutGrid,
 } from "lucide-react";
 
 type RoomKey = "family" | "double" | "single";
@@ -76,7 +79,6 @@ type Camp = {
   leadCta: string;
   leadDisclaimer: string;
 
-  // contact card (vCard)
   contactName: string;
   contactTitle: string;
   contactCompany: string;
@@ -84,9 +86,8 @@ type Camp = {
   contactPhone: string;
   contactWebsite: string;
 
-  // lead capture destination (company)
-  enquiryEmail: string; // where the lead request should go
-  enquiryWhatsApp: string; // digits only or +countrycode, e.g. +255...
+  enquiryEmail: string;
+  enquiryWhatsApp: string;
   enquirySubject: string;
 
   heroImage: string;
@@ -157,6 +158,45 @@ const makeNewCamp = (): Camp => ({
 
   heroImage: "",
 });
+
+function CompactPanel({
+  title,
+  subtitle,
+  right,
+  defaultOpen = true,
+  children,
+  style,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border rounded-2xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.06)]" style={style}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-4 py-3 flex items-center justify-between gap-3"
+        style={{ backgroundColor: "rgba(255,255,255,0.65)" }}
+        aria-expanded={open}
+      >
+        <div className="text-left">
+          <div className="text-[10px] font-black uppercase tracking-[0.28em] opacity-70">{title}</div>
+          {subtitle ? <div className="text-xs font-semibold opacity-70 mt-0.5">{subtitle}</div> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {right}
+          {open ? <ChevronUp size={16} className="opacity-60" /> : <ChevronDown size={16} className="opacity-60" />}
+        </div>
+      </button>
+      {open && <div className="px-4 py-3">{children}</div>}
+    </div>
+  );
+}
 
 export default function RestorationSafariAdmin() {
   const [isPreview, setIsPreview] = useState(false);
@@ -263,12 +303,6 @@ export default function RestorationSafariAdmin() {
   const highlightText: React.CSSProperties = { color: theme.highlight };
   const highlightBg: React.CSSProperties = { backgroundColor: theme.highlight };
 
-  const frame =
-    "border rounded-[28px] shadow-[0_18px_60px_rgba(0,0,0,0.08)] hover:shadow-[0_26px_90px_rgba(0,0,0,0.12)] transition-all";
-  const soft = "bg-white/60 backdrop-blur-md";
-  const label = "text-[10px] font-black uppercase tracking-[0.35em]";
-  const micro = "text-[9px] font-black uppercase tracking-[0.25em]";
-
   // ---------- images ----------
   const toDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -278,7 +312,6 @@ export default function RestorationSafariAdmin() {
       r.readAsDataURL(file);
     });
 
-  // Room photos
   const [photoModal, setPhotoModal] = useState<{ open: boolean; src: string; title?: string }>({
     open: false,
     src: "",
@@ -313,7 +346,6 @@ export default function RestorationSafariAdmin() {
     }));
   };
 
-  // Hero
   const heroFileRef = useRef<HTMLInputElement | null>(null);
   const setHeroFromFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -322,7 +354,7 @@ export default function RestorationSafariAdmin() {
     updateField("heroImage", await toDataUrl(f));
   };
 
-  // ---------- vCard + VCF upload ----------
+  // ---------- vCard ----------
   const vcardText = useMemo(() => {
     const esc = (s: string) =>
       String(s ?? "")
@@ -458,7 +490,7 @@ export default function RestorationSafariAdmin() {
     });
   };
 
-  // ---------- Multi-camp controls ----------
+  // ---------- Multi-camp ----------
   const addCamp = () => {
     setPortfolio((prev) => {
       const next = [...prev, makeNewCamp()];
@@ -470,20 +502,21 @@ export default function RestorationSafariAdmin() {
   const deleteCamp = () => {
     setPortfolio((prev) => {
       if (prev.length <= 1) return prev;
-      const next = prev.filter((_, i) => i !== selectedCampIndex);
-      return next;
+      return prev.filter((_, i) => i !== selectedCampIndex);
     });
     setSelectedCampIndex((prev) => Math.max(0, prev - 1));
   };
 
-  // ---------- Lead capture actions (Email + WhatsApp) ----------
-  const buildLeadMessage = (data: {
-    fullName: string;
-    agency: string;
-    email: string;
-    phone: string;
-    message: string;
-  }) => {
+  // ---------- Lead capture sending ----------
+  const [lead, setLead] = useState({
+    fullName: "",
+    agency: "",
+    email: "",
+    phone: "",
+    message: "",
+  });
+
+  const buildLeadMessage = (data: typeof lead) => {
     const lines = [
       `Property: ${camp.name}`,
       `Class: ${camp.class}`,
@@ -502,19 +535,13 @@ export default function RestorationSafariAdmin() {
     return lines.join("\n");
   };
 
-  const normalizeWhatsApp = (v: string) => {
-    // Accept "+255..." or "255..." or "0..."
-    const digits = v.replace(/[^\d]/g, "");
-    if (!digits) return "";
-    // If it started with 0, user likely typed local. We cannot infer country reliably.
-    // We'll just use digits as is; user should set full international number for best results.
-    return digits;
-  };
+  const normalizeWhatsApp = (v: string) => v.replace(/[^\d]/g, "");
+
+  const leadPayload = useMemo(() => buildLeadMessage(lead), [lead, camp.name, camp.class, camp.locationLabel]);
 
   const openMailto = (payload: string) => {
     const to = (camp.enquiryEmail || "").trim();
     if (!to) return;
-
     const subject = encodeURIComponent((camp.enquirySubject || "Trade Request").trim());
     const body = encodeURIComponent(payload);
     window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
@@ -523,36 +550,23 @@ export default function RestorationSafariAdmin() {
   const openWhatsApp = (payload: string) => {
     const digits = normalizeWhatsApp(camp.enquiryWhatsApp || "");
     if (!digits) return;
-
     const text = encodeURIComponent(payload);
-    // wa.me expects digits only (no +)
     window.open(`https://wa.me/${digits}?text=${text}`, "_blank");
   };
-
-  // lead form state (front-end only)
-  const [lead, setLead] = useState({
-    fullName: "",
-    agency: "",
-    email: "",
-    phone: "",
-    message: "",
-  });
-
-  const leadPayload = useMemo(() => buildLeadMessage(lead), [lead, camp.name, camp.class, camp.locationLabel]);
 
   return (
     <div className="flex min-h-screen font-sans" style={{ backgroundColor: theme.pageBg }}>
       {/* PHOTO MODAL */}
       {photoModal.open && (
         <div
-          className="fixed inset-0 z-[999] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[999] flex items-center justify-center p-3"
           style={{ backgroundColor: "rgba(0,0,0,0.78)" }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closePhoto();
           }}
         >
           <div className="w-full max-w-6xl rounded-3xl overflow-hidden border shadow-2xl" style={cardStyle}>
-            <div className="flex items-center justify-between px-6 py-4 border-b" style={borderStyle}>
+            <div className="flex items-center justify-between px-5 py-3 border-b" style={borderStyle}>
               <div className="text-xs font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.75 }}>
                 {photoModal.title || "Preview"}
               </div>
@@ -565,8 +579,8 @@ export default function RestorationSafariAdmin() {
                 <X size={16} style={accentText} />
               </button>
             </div>
-            <div className="p-4">
-              <div className="max-h-[78vh] overflow-auto rounded-2xl border" style={borderStyle}>
+            <div className="p-3">
+              <div className="max-h-[82vh] overflow-auto rounded-2xl border" style={borderStyle}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photoModal.src} alt="Preview" className="w-full h-auto block" />
               </div>
@@ -578,10 +592,10 @@ export default function RestorationSafariAdmin() {
       {/* SIDEBAR */}
       {!isPreview && (
         <aside
-          className="w-72 fixed h-screen top-0 left-0 z-[100] p-5 flex flex-col border-r"
+          className="w-72 fixed h-screen top-0 left-0 z-[100] p-4 flex flex-col border-r"
           style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
         >
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.55 }}>
               Restoration Hub
             </span>
@@ -596,8 +610,8 @@ export default function RestorationSafariAdmin() {
           </div>
 
           {/* Camps */}
-          <div className="mb-5">
-            <p className="text-[9px] font-bold uppercase mb-3 tracking-[0.2em]" style={{ color: theme.accent, opacity: 0.5 }}>
+          <div className="mb-4">
+            <p className="text-[9px] font-bold uppercase mb-2 tracking-[0.2em]" style={{ color: theme.accent, opacity: 0.5 }}>
               Camps
             </p>
 
@@ -609,7 +623,7 @@ export default function RestorationSafariAdmin() {
                   style={{ borderColor: theme.borderColor, color: theme.accent }}
                   type="button"
                 >
-                  <Plus size={14} /> Add camp
+                  <Plus size={14} /> Add
                 </button>
                 <button
                   onClick={deleteCamp}
@@ -617,7 +631,6 @@ export default function RestorationSafariAdmin() {
                   style={{ borderColor: theme.borderColor, color: theme.accent, opacity: portfolio.length > 1 ? 1 : 0.35 }}
                   type="button"
                   disabled={portfolio.length <= 1}
-                  title={portfolio.length <= 1 ? "You need at least one camp" : "Delete this camp"}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -650,9 +663,9 @@ export default function RestorationSafariAdmin() {
             </div>
           </div>
 
-          <div className="flex-1 space-y-5 overflow-y-auto pr-2">
+          <div className="flex-1 space-y-4 overflow-y-auto pr-1">
             <div>
-              <p className="text-[9px] font-bold uppercase mb-3 tracking-[0.2em]" style={{ color: theme.accent, opacity: 0.5 }}>
+              <p className="text-[9px] font-bold uppercase mb-2 tracking-[0.2em]" style={{ color: theme.accent, opacity: 0.5 }}>
                 View Toggles
               </p>
               <div className="space-y-1">
@@ -660,7 +673,7 @@ export default function RestorationSafariAdmin() {
                   <button
                     key={key}
                     onClick={() => toggleBlock(key as any)}
-                    className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
+                    className="w-full flex items-center justify-between py-2 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider"
                     type="button"
                   >
                     <span style={{ color: theme.accent, opacity: visibleBlocks[key as keyof typeof visibleBlocks] ? 1 : 0.25 }}>
@@ -676,7 +689,7 @@ export default function RestorationSafariAdmin() {
               </div>
             </div>
 
-            <div className="pt-5 border-t space-y-3" style={borderStyle}>
+            <div className="pt-4 border-t space-y-2" style={borderStyle}>
               <p className="text-[9px] font-bold uppercase" style={{ color: theme.accent, opacity: 0.5 }}>
                 Accents
               </p>
@@ -697,7 +710,7 @@ export default function RestorationSafariAdmin() {
           </div>
 
           <button
-            className="mt-5 w-full py-4 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg"
+            className="mt-4 w-full py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg"
             style={highlightBg}
             type="button"
           >
@@ -711,278 +724,73 @@ export default function RestorationSafariAdmin() {
         {isPreview && (
           <button
             onClick={() => setIsPreview(false)}
-            className="fixed top-6 right-6 z-[200] bg-slate-900 text-white px-5 py-2.5 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-2xl"
+            className="fixed top-4 right-4 z-[200] bg-slate-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-2xl"
             type="button"
           >
             <Monitor size={14} /> Open Admin
           </button>
         )}
 
-        {/* ABOVE HERO STACK */}
-        {visibleBlocks.heroHeaderStack && (
-          <div className="max-w-6xl mx-auto px-6 pt-10">
-            <div className={`${frame} ${soft} p-6 md:p-7 space-y-5`} style={cardStyle}>
-              {visibleBlocks.heroTopMeta && (
-                <div className={`${frame} p-6 md:p-7`} style={cardStyle}>
-                  <div className="flex items-center justify-between mb-5">
-                    <div className={label} style={{ color: theme.accent, opacity: 0.55 }}>
-                      Brand & Trust
-                    </div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.35em]" style={{ color: theme.accent, opacity: 0.35 }}>
-                      Directory Card
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-3">
-                      <div className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                        Social proof
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <StarIcon size={18} style={highlightText} />
-                        <input
-                          inputMode="decimal"
-                          className="text-3xl font-black italic outline-none w-24 bg-transparent"
-                          value={camp.rating}
-                          onChange={(e) => updateField("rating", numDraft(e.target.value))}
-                          style={accentText}
-                        />
-                        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
-                          / 5
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.35 }}>
-                          Reviews
-                        </span>
-                        <input
-                          inputMode="numeric"
-                          className="text-sm font-black outline-none bg-transparent w-20"
-                          value={camp.reviewCount}
-                          onChange={(e) => updateField("reviewCount", numDraft(e.target.value))}
-                          style={accentText}
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Instagram size={14} style={{ color: theme.accent, opacity: 0.55 }} />
-                        <input
-                          className="text-xs font-bold uppercase tracking-wider outline-none bg-transparent w-full"
-                          value={camp.instagramHandle}
-                          onChange={(e) => updateField("instagramHandle", e.target.value)}
-                          style={accentText}
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Globe size={14} style={{ color: theme.accent, opacity: 0.55 }} />
-                        <input
-                          className="text-xs font-bold outline-none bg-transparent w-full"
-                          value={camp.website}
-                          onChange={(e) => updateField("website", e.target.value)}
-                          style={accentText}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                        Location
-                      </div>
-
-                      <div className="flex items-start gap-3">
-                        <MapPin size={16} style={highlightText} />
-                        <textarea
-                          className="text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full resize-none leading-snug"
-                          value={camp.locationLabel}
-                          onChange={(e) => updateField("locationLabel", e.target.value)}
-                          rows={2}
-                          style={{ color: theme.accent, opacity: 0.95 }}
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Compass size={14} style={{ color: theme.accent, opacity: 0.55 }} />
-                        <input
-                          className="text-xs font-bold outline-none bg-transparent w-full"
-                          value={camp.mapLink}
-                          onChange={(e) => updateField("mapLink", e.target.value)}
-                          style={accentText}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                        Inventory
-                      </div>
-
-                      <div className="rounded-2xl border p-5" style={{ borderColor: theme.borderColor, backgroundColor: theme.pageBg }}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.55 }}>
-                              Total rooms
-                            </p>
-                            <input
-                              inputMode="numeric"
-                              className="text-4xl font-black italic outline-none bg-transparent w-24"
-                              value={camp.rooms}
-                              onChange={(e) => updateField("rooms", numDraft(e.target.value))}
-                              style={accentText}
-                            />
-                          </div>
-                          <div className="h-12 w-px" style={{ backgroundColor: theme.borderColor }} />
-                          <div className="text-right">
-                            <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.55 }}>
-                              Total units
-                            </p>
-                            <p className="text-4xl font-black italic" style={{ color: theme.accent, opacity: 0.95 }}>
-                              {totalUnits}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <p className="text-[10px] font-medium" style={{ color: theme.accent, opacity: 0.55 }}>
-                        Units = family + double + single.
-                      </p>
-                    </div>
-                  </div>
+        {/* Compact top bar */}
+        <div className="max-w-6xl mx-auto px-6 pt-6">
+          <div
+            className="border rounded-2xl px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-[0_10px_30px_rgba(0,0,0,0.06)]"
+            style={cardStyle}
+          >
+            <div className="flex items-center gap-3">
+              <LayoutGrid size={16} style={{ color: theme.accent, opacity: 0.65 }} />
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.25em]" style={{ color: theme.accent, opacity: 0.8 }}>
+                  {camp.tradeProfileLabel} {camp.tradeProfileSub}
                 </div>
-              )}
-
-              {visibleBlocks.heroTradeProfile && (
-                <div className={`${frame} p-6 md:p-7 space-y-5`} style={cardStyle}>
-                  <div className={label} style={{ color: theme.accent, opacity: 0.45 }}>
-                    <input
-                      className="outline-none bg-transparent w-full"
-                      value={`${camp.tradeProfileLabel} ${camp.tradeProfileSub}`}
-                      onChange={(e) => updateField("tradeProfileLabel", e.target.value)}
-                      style={{ color: theme.accent, opacity: 0.95 }}
-                    />
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <p className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                        Property class
-                      </p>
-                      <input
-                        className="mt-2 text-sm font-black uppercase tracking-tight outline-none bg-transparent w-full border-b pb-2"
-                        value={camp.class}
-                        onChange={(e) => updateField("class", e.target.value)}
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                      />
-                    </div>
-
-                    <div>
-                      <p className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                        Camp name
-                      </p>
-                      <input
-                        className="mt-2 text-2xl md:text-3xl font-black italic tracking-tighter outline-none bg-transparent w-full border-b pb-2"
-                        value={camp.name}
-                        onChange={(e) => updateField("name", e.target.value)}
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                      Vibe
-                    </p>
-                    <textarea
-                      className="mt-2 text-sm font-semibold outline-none bg-transparent w-full border rounded-2xl p-4 resize-none"
-                      value={camp.vibe}
-                      onChange={(e) => updateField("vibe", e.target.value)}
-                      rows={3}
-                      style={{ borderColor: theme.borderColor, color: theme.accent }}
-                    />
-                  </div>
-
-                  {/* Contact card + destinations */}
-                  <div className="pt-4 border-t space-y-4" style={borderStyle}>
-                    <div className="flex items-center justify-between">
-                      <p className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                        Contact card + lead destinations
-                      </p>
-
-                      <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                        <FileText size={12} style={highlightText} />
-                        <span style={highlightText}>Upload .VCF</span>
-                        <input type="file" accept=".vcf,text/vcard" className="hidden" onChange={(e) => loadVcfFile(e.target.files)} />
-                      </label>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-3">
-                      {[
-                        { k: "contactName", ph: "Contact name" },
-                        { k: "contactTitle", ph: "Title" },
-                        { k: "contactCompany", ph: "Company" },
-                        { k: "contactPhone", ph: "Phone" },
-                      ].map((f) => (
-                        <input
-                          key={f.k}
-                          className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                          style={{ borderColor: theme.borderColor, color: theme.accent }}
-                          value={(camp as any)[f.k] as string}
-                          onChange={(e) => updateField(f.k as any, e.target.value as any)}
-                          placeholder={f.ph}
-                        />
-                      ))}
-                      <input
-                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        value={camp.contactEmail}
-                        onChange={(e) => updateField("contactEmail", e.target.value)}
-                        placeholder="Email"
-                      />
-                      <input
-                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        value={camp.contactWebsite}
-                        onChange={(e) => updateField("contactWebsite", e.target.value)}
-                        placeholder="Website"
-                      />
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-3">
-                      <input
-                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        value={camp.enquiryEmail}
-                        onChange={(e) => updateField("enquiryEmail", e.target.value)}
-                        placeholder="Company enquiry email (for leads)"
-                      />
-                      <input
-                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent"
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        value={camp.enquiryWhatsApp}
-                        onChange={(e) => updateField("enquiryWhatsApp", e.target.value)}
-                        placeholder="Company WhatsApp number (international)"
-                      />
-                      <input
-                        className="p-4 rounded-2xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
-                        style={{ borderColor: theme.borderColor, color: theme.accent }}
-                        value={camp.enquirySubject}
-                        onChange={(e) => updateField("enquirySubject", e.target.value)}
-                        placeholder="Email subject line for leads"
-                      />
-                    </div>
-                  </div>
+                <div className="text-sm font-black italic" style={{ color: theme.accent, opacity: 0.95 }}>
+                  {camp.name} <span style={{ opacity: 0.55 }}>—</span> {camp.class}
                 </div>
-              )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <StarIcon size={16} style={highlightText} />
+                <input
+                  className="w-16 bg-transparent outline-none text-sm font-black"
+                  value={camp.rating}
+                  onChange={(e) => updateField("rating", numDraft(e.target.value))}
+                  style={accentText}
+                />
+                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.45 }}>
+                  ({camp.reviewCount || 0})
+                </span>
+              </div>
+
+              <div className="h-5 w-px" style={{ backgroundColor: theme.borderColor }} />
+
+              <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.75 }}>
+                Rooms:{" "}
+                <input
+                  className="w-14 bg-transparent outline-none font-black"
+                  value={camp.rooms}
+                  onChange={(e) => updateField("rooms", numDraft(e.target.value))}
+                  style={accentText}
+                />
+                <span style={{ opacity: 0.45 }}> • Units: </span>
+                <span style={{ color: theme.accent, opacity: 0.95 }}>{totalUnits}</span>
+              </div>
+
+              <div className="h-5 w-px" style={{ backgroundColor: theme.borderColor }} />
+
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.7 }}>
+                <MapPin size={14} style={highlightText} />
+                <span className="truncate max-w-[260px]">{camp.locationLabel}</span>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* HERO */}
+        {/* HERO (shorter) */}
         {visibleBlocks.hero && (
           <section
-            className="relative h-[66vh] w-full overflow-hidden mt-6 select-none"
+            className="relative h-[34vh] w-full overflow-hidden mt-4 select-none"
             style={{ backgroundColor: theme.accent }}
             onDoubleClick={() => heroFileRef.current?.click()}
             onContextMenu={(e) => {
@@ -992,457 +800,665 @@ export default function RestorationSafariAdmin() {
             title="Double-click or right-click to change hero image"
           >
             <input ref={heroFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => setHeroFromFiles(e.target.files)} />
-
             {camp.heroImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={camp.heroImage} alt="Hero" className="absolute inset-0 w-full h-full object-cover" />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div
-                  className="rounded-2xl border px-6 py-4 text-[10px] font-black uppercase tracking-widest"
+                  className="rounded-2xl border px-5 py-3 text-[10px] font-black uppercase tracking-widest"
                   style={{ borderColor: theme.borderColor, color: "#fff", backgroundColor: "rgba(0,0,0,0.22)" }}
                 >
                   Double-click / Right-click to upload hero image
                 </div>
               </div>
             )}
-
             <div className="absolute inset-0 bg-black/30" />
           </section>
         )}
 
-        {/* CONTENT */}
-        <div className="max-w-6xl mx-auto py-10 px-6 space-y-10">
-          {/* MATRIX */}
-          {visibleBlocks.matrix && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-3" style={borderStyle}>
-                <h2 className={label} style={{ color: theme.accent, opacity: 0.55 }}>
-                  Inventory Matrix
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {(["family", "double", "single"] as const).map((type) => (
-                  <div key={type} className={`${frame} ${soft} p-6`} style={cardStyle}>
-                    <input
-                      className="text-[10px] font-black uppercase outline-none bg-transparent"
-                      value={camp.roomTypeLabels[type]}
-                      onChange={(e) =>
-                        updateNested((c) => ({
-                          ...c,
-                          roomTypeLabels: { ...c.roomTypeLabels, [type]: e.target.value },
-                        }))
-                      }
-                      style={{ color: theme.accent, opacity: 0.72 }}
-                    />
-
-                    <div className="flex items-center gap-4 mt-5">
+        {/* ONE-SCREEN GRID (compact, tight) */}
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            {/* Left column: compact “admin” panels */}
+            <div className="lg:col-span-7 space-y-3">
+              {visibleBlocks.heroHeaderStack && (
+                <CompactPanel
+                  title="Trade Profile"
+                  subtitle="Edit key identity + destinations (kept compact)"
+                  defaultOpen={true}
+                  style={{ ...cardStyle }}
+                  right={<span className="text-[10px] font-black uppercase tracking-widest opacity-60">Compact</span>}
+                >
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Profile line</div>
                       <input
-                        inputMode="numeric"
-                        className="text-5xl font-black italic outline-none w-16 bg-transparent"
-                        value={camp[type]}
-                        onChange={(e) => updateField(type, numDraft(e.target.value) as any)}
-                        style={{ color: theme.accent, opacity: 0.95 }}
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={`${camp.tradeProfileLabel} ${camp.tradeProfileSub}`}
+                        onChange={(e) => updateField("tradeProfileLabel", e.target.value)}
+                        style={accentText}
                       />
-                      <div className="h-10 w-px" style={{ backgroundColor: theme.borderColor }} />
-                      <span className="text-[10px] font-bold uppercase leading-tight" style={{ color: theme.accent, opacity: 0.5 }}>
-                        Total
-                        <br />
-                        Units
-                      </span>
                     </div>
 
-                    <div className="mt-6 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className={micro} style={{ color: theme.accent, opacity: 0.55 }}>
-                          Room photos
-                        </p>
-                        <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                          <Upload size={12} style={highlightText} />
-                          <span style={highlightText}>Upload</span>
-                          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => addRoomPhotos(type, e.target.files)} />
-                        </label>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-2">
-                        {(camp.roomPhotos[type] ?? []).slice(0, 8).map((src, i) => (
-                          <button
-                            key={i}
-                            className="relative rounded-xl overflow-hidden border"
-                            style={borderStyle}
-                            onClick={() => openPhoto(src, `${camp.roomTypeLabels[type]} — Photo ${i + 1}`)}
-                            type="button"
-                            title="Click to preview"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={src} alt={`${type}-${i}`} className="w-full h-16 object-cover" />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeRoomPhoto(type, i);
-                              }}
-                              className="absolute top-1 right-1 p-1 rounded-lg"
-                              style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
-                              title="Remove"
-                              type="button"
-                            >
-                              <X size={12} className="text-white" />
-                            </button>
-                          </button>
-                        ))}
-                      </div>
-
-                      <p className="text-[10px] font-medium" style={{ color: theme.accent, opacity: 0.55 }}>
-                        Click any photo to open full-size preview.
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* INCLUSIONS + EXCLUSIONS */}
-          <div className="grid md:grid-cols-2 gap-4">
-            {visibleBlocks.inclusions && (
-              <div className={`${frame} ${soft} p-7 space-y-5`} style={cardStyle}>
-                <div className="flex items-center justify-between border-b pb-3" style={borderStyle}>
-                  <div className="flex items-center gap-2">
-                    <Utensils size={14} style={accentText} />
-                    <h3 className={label} style={{ color: theme.accent, opacity: 0.6 }}>
-                      Inclusions
-                    </h3>
-                  </div>
-                  <button onClick={() => addListItem("inclusions")} style={highlightText} type="button">
-                    <Plus size={14} />
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {camp.inclusions.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3 group">
-                      <Check size={12} className="text-green-500" />
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Camp name</div>
                       <input
-                        className="text-sm font-semibold outline-none bg-transparent w-full"
-                        value={item}
-                        onChange={(e) => updateListItem("inclusions", i, e.target.value)}
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black italic"
+                        value={camp.name}
+                        onChange={(e) => updateField("name", e.target.value)}
+                        style={accentText}
+                      />
+                    </div>
+
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Class</div>
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.class}
+                        onChange={(e) => updateField("class", e.target.value)}
+                        style={accentText}
+                      />
+                    </div>
+
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Location</div>
+                      <input
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.locationLabel}
+                        onChange={(e) => updateField("locationLabel", e.target.value)}
+                        style={accentText}
+                      />
+                    </div>
+
+                    <div className="border rounded-xl p-3 md:col-span-2" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Vibe</div>
+                      <textarea
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-semibold resize-none"
+                        rows={2}
+                        value={camp.vibe}
+                        onChange={(e) => updateField("vibe", e.target.value)}
                         style={{ color: theme.accent, opacity: 0.92 }}
                       />
-                      <button
-                        onClick={() => removeListItem("inclusions", i)}
-                        className="opacity-0 group-hover:opacity-100"
-                        style={{ color: "#f87171" }}
-                        type="button"
-                        title="Remove"
-                      >
-                        <Trash2 size={14} />
-                      </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {visibleBlocks.exclusions && (
-              <div className={`${frame} ${soft} p-7 space-y-5`} style={{ ...cardStyle, opacity: 0.95 }}>
-                <div className="flex items-center justify-between border-b pb-3" style={borderStyle}>
-                  <div className="flex items-center gap-2">
-                    <Ban size={14} style={{ color: "#f87171" }} />
-                    <h3 className={label} style={{ color: theme.accent, opacity: 0.6 }}>
-                      Exclusions
-                    </h3>
+                    {/* Social + links compact row */}
+                    {visibleBlocks.heroTopMeta && (
+                      <div className="md:col-span-2 grid md:grid-cols-4 gap-3">
+                        <div className="border rounded-xl p-3" style={borderStyle}>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Rating</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <StarIcon size={14} style={highlightText} />
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-black"
+                              value={camp.rating}
+                              onChange={(e) => updateField("rating", numDraft(e.target.value))}
+                              style={accentText}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="border rounded-xl p-3" style={borderStyle}>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Reviews</div>
+                          <input
+                            className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                            value={camp.reviewCount}
+                            onChange={(e) => updateField("reviewCount", numDraft(e.target.value))}
+                            style={accentText}
+                          />
+                        </div>
+
+                        <div className="border rounded-xl p-3" style={borderStyle}>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Instagram</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Instagram size={14} style={{ color: theme.accent, opacity: 0.65 }} />
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-black"
+                              value={camp.instagramHandle}
+                              onChange={(e) => updateField("instagramHandle", e.target.value)}
+                              style={accentText}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="border rounded-xl p-3" style={borderStyle}>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Website</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Globe size={14} style={{ color: theme.accent, opacity: 0.65 }} />
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-black"
+                              value={camp.website}
+                              onChange={(e) => updateField("website", e.target.value)}
+                              style={accentText}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="border rounded-xl p-3 md:col-span-2" style={borderStyle}>
+                          <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Map link</div>
+                          <input
+                            className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                            value={camp.mapLink}
+                            onChange={(e) => updateField("mapLink", e.target.value)}
+                            style={accentText}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => addListItem("exclusions")} style={highlightText} type="button">
-                    <Plus size={14} />
-                  </button>
-                </div>
+                </CompactPanel>
+              )}
 
-                <div className="space-y-3">
-                  {camp.exclusions.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3 group">
-                      <X size={10} style={{ color: theme.accent, opacity: 0.45 }} />
+              {/* Inventory + Photos (kept compact, but functions preserved) */}
+              {visibleBlocks.matrix && (
+                <CompactPanel title="Inventory + Room Photos" subtitle="Counts + multiple photos + full preview" defaultOpen={true} style={cardStyle}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {(["family", "double", "single"] as const).map((type) => (
+                      <div key={type} className="border rounded-xl p-3" style={borderStyle}>
+                        <input
+                          className="text-[10px] font-black uppercase outline-none bg-transparent w-full"
+                          value={camp.roomTypeLabels[type]}
+                          onChange={(e) =>
+                            updateNested((c) => ({
+                              ...c,
+                              roomTypeLabels: { ...c.roomTypeLabels, [type]: e.target.value },
+                            }))
+                          }
+                          style={{ color: theme.accent, opacity: 0.8 }}
+                        />
+
+                        <div className="flex items-center justify-between mt-2">
+                          <input
+                            inputMode="numeric"
+                            className="text-3xl font-black italic outline-none bg-transparent w-16"
+                            value={camp[type]}
+                            onChange={(e) => updateField(type, numDraft(e.target.value) as any)}
+                            style={{ color: theme.accent, opacity: 0.95 }}
+                          />
+                          <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest" style={highlightText}>
+                            <Upload size={12} />
+                            Upload
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => addRoomPhotos(type, e.target.files)} />
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-1.5 mt-3">
+                          {(camp.roomPhotos[type] ?? []).slice(0, 8).map((src, i) => (
+                            <button
+                              key={i}
+                              className="relative rounded-lg overflow-hidden border"
+                              style={borderStyle}
+                              onClick={() => openPhoto(src, `${camp.roomTypeLabels[type]} — Photo ${i + 1}`)}
+                              type="button"
+                              title="Click to preview"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={src} alt={`${type}-${i}`} className="w-full h-10 object-cover" />
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeRoomPhoto(type, i);
+                                }}
+                                className="absolute top-1 right-1 p-1 rounded-md"
+                                style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+                                title="Remove"
+                                type="button"
+                              >
+                                <X size={10} className="text-white" />
+                              </button>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.55 }}>
+                          Total units:{" "}
+                          <span style={{ color: theme.accent, opacity: 0.95 }}>
+                            {type === "family"
+                              ? (typeof camp.family === "number" ? camp.family : 0)
+                              : type === "double"
+                              ? (typeof camp.double === "number" ? camp.double : 0)
+                              : (typeof camp.single === "number" ? camp.single : 0)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-3 mt-3">
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Total rooms</div>
                       <input
-                        className="text-sm font-semibold outline-none bg-transparent w-full italic"
-                        value={item}
-                        onChange={(e) => updateListItem("exclusions", i, e.target.value)}
-                        style={{ color: theme.accent, opacity: 0.86 }}
+                        className="mt-1 w-full bg-transparent outline-none text-sm font-black"
+                        value={camp.rooms}
+                        onChange={(e) => updateField("rooms", numDraft(e.target.value))}
+                        style={accentText}
                       />
-                      <button
-                        onClick={() => removeListItem("exclusions", i)}
-                        className="opacity-0 group-hover:opacity-100"
-                        style={{ color: "#f87171" }}
-                        type="button"
-                        title="Remove"
-                      >
-                        <Trash2 size={14} />
-                      </button>
                     </div>
-                  ))}
-                </div>
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="text-[9px] font-black uppercase tracking-widest opacity-55">Units (computed)</div>
+                      <div className="mt-1 text-sm font-black" style={{ color: theme.accent, opacity: 0.95 }}>
+                        {totalUnits}
+                      </div>
+                    </div>
+                  </div>
+                </CompactPanel>
+              )}
+
+              {/* Tabs-like compact grouping (functions preserved, but visually condensed) */}
+              <div className="grid md:grid-cols-2 gap-3">
+                {visibleBlocks.inclusions && (
+                  <CompactPanel
+                    title="Inclusions"
+                    defaultOpen={false}
+                    style={cardStyle}
+                    right={
+                      <button onClick={() => addListItem("inclusions")} type="button" title="Add" className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor }}>
+                        <Plus size={14} style={highlightText} />
+                      </button>
+                    }
+                  >
+                    <div className="space-y-2">
+                      {camp.inclusions.map((item, i) => (
+                        <div key={i} className="flex items-center gap-2 group">
+                          <Check size={12} className="text-green-500" />
+                          <input
+                            className="w-full bg-transparent outline-none text-sm font-semibold"
+                            value={item}
+                            onChange={(e) => updateListItem("inclusions", i, e.target.value)}
+                            style={{ color: theme.accent, opacity: 0.9 }}
+                          />
+                          <button
+                            onClick={() => removeListItem("inclusions", i)}
+                            className="opacity-0 group-hover:opacity-100"
+                            style={{ color: "#f87171" }}
+                            type="button"
+                            title="Remove"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </CompactPanel>
+                )}
+
+                {visibleBlocks.exclusions && (
+                  <CompactPanel
+                    title="Exclusions"
+                    defaultOpen={false}
+                    style={cardStyle}
+                    right={
+                      <button onClick={() => addListItem("exclusions")} type="button" title="Add" className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor }}>
+                        <Plus size={14} style={highlightText} />
+                      </button>
+                    }
+                  >
+                    <div className="space-y-2">
+                      {camp.exclusions.map((item, i) => (
+                        <div key={i} className="flex items-center gap-2 group">
+                          <Ban size={12} style={{ color: theme.accent, opacity: 0.5 }} />
+                          <input
+                            className="w-full bg-transparent outline-none text-sm font-semibold italic"
+                            value={item}
+                            onChange={(e) => updateListItem("exclusions", i, e.target.value)}
+                            style={{ color: theme.accent, opacity: 0.85 }}
+                          />
+                          <button
+                            onClick={() => removeListItem("exclusions", i)}
+                            className="opacity-0 group-hover:opacity-100"
+                            style={{ color: "#f87171" }}
+                            type="button"
+                            title="Remove"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </CompactPanel>
+                )}
               </div>
-            )}
+
+              {visibleBlocks.experiences && (
+                <CompactPanel title="Services & Experiences" subtitle="Free vs paid (kept compact)" defaultOpen={false} style={cardStyle}>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-70">Included</div>
+                        <button onClick={() => addListItem("freeActivities")} type="button" className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor }}>
+                          <Plus size={14} style={highlightText} />
+                        </button>
+                      </div>
+                      <div className="space-y-2 mt-2">
+                        {camp.freeActivities.map((act, i) => (
+                          <div key={i} className="flex items-center gap-2 group">
+                            <Compass size={12} style={highlightText} />
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-semibold uppercase tracking-tight"
+                              value={act}
+                              onChange={(e) => updateListItem("freeActivities", i, e.target.value)}
+                              style={{ color: theme.accent, opacity: 0.9 }}
+                            />
+                            <button
+                              onClick={() => removeListItem("freeActivities", i)}
+                              className="opacity-0 group-hover:opacity-100"
+                              style={{ color: "#f87171" }}
+                              type="button"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border rounded-xl p-3" style={{ borderColor: theme.accent, backgroundColor: theme.accent, color: "#fff" }}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-white/80">Paid</div>
+                        <button onClick={() => addListItem("paidActivities")} type="button" className="p-2 rounded-xl border" style={{ borderColor: "rgba(255,255,255,0.25)" }}>
+                          <Plus size={14} className="text-white/80" />
+                        </button>
+                      </div>
+                      <div className="space-y-2 mt-2">
+                        {camp.paidActivities.map((act, i) => (
+                          <div key={i} className="flex items-center gap-2 group">
+                            <MapPin size={12} className="text-white/60" />
+                            <input
+                              className="w-full bg-transparent outline-none text-sm font-semibold uppercase tracking-tight text-white"
+                              value={act}
+                              onChange={(e) => updateListItem("paidActivities", i, e.target.value)}
+                            />
+                            <button onClick={() => removeListItem("paidActivities", i)} className="opacity-0 group-hover:opacity-100 text-white/70" type="button">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CompactPanel>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-3">
+                {visibleBlocks.offers && (
+                  <CompactPanel title="Offer" defaultOpen={false} style={{ ...cardStyle, borderColor: theme.highlight }}>
+                    <div className="rounded-xl p-3 text-white" style={highlightBg}>
+                      <div className="text-[9px] font-black uppercase tracking-[0.35em] text-white/70 mb-2">Trade incentive</div>
+                      <textarea
+                        className="bg-transparent w-full outline-none resize-none text-xl md:text-2xl font-black italic tracking-tight leading-snug"
+                        rows={3}
+                        value={camp.offersText}
+                        onChange={(e) => updateField("offersText", e.target.value)}
+                      />
+                    </div>
+                  </CompactPanel>
+                )}
+
+                {visibleBlocks.terms && (
+                  <CompactPanel title="Terms" defaultOpen={false} style={cardStyle}>
+                    <textarea
+                      className="w-full rounded-xl border p-3 text-sm font-semibold outline-none bg-transparent resize-none"
+                      style={{ borderColor: theme.borderColor, color: theme.accent }}
+                      rows={5}
+                      value={camp.terms}
+                      onChange={(e) => updateField("terms", e.target.value)}
+                    />
+                  </CompactPanel>
+                )}
+              </div>
+            </div>
+
+            {/* Right column: Lead Capture + Contact Card (always reachable, but compact) */}
+            <div className="lg:col-span-5 space-y-3">
+              {visibleBlocks.leadCapture && (
+                <CompactPanel title="Lead Capture" subtitle="Email + WhatsApp + Contact actions" defaultOpen={true} style={cardStyle}>
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* Headline + bullets (compact) */}
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <textarea
+                        className="w-full bg-transparent outline-none resize-none text-lg font-black italic tracking-tight leading-snug"
+                        rows={2}
+                        value={camp.leadHeadline}
+                        onChange={(e) => updateField("leadHeadline", e.target.value)}
+                        style={{ color: theme.accent, opacity: 0.95 }}
+                      />
+                      <textarea
+                        className="mt-2 w-full bg-transparent outline-none resize-none text-sm font-semibold leading-relaxed"
+                        rows={2}
+                        value={camp.leadSubcopy}
+                        onChange={(e) => updateField("leadSubcopy", e.target.value)}
+                        style={{ color: theme.accent, opacity: 0.75 }}
+                      />
+                      <div className="grid gap-2 mt-2">
+                        {(["leadBullet1", "leadBullet2", "leadBullet3"] as const).map((k) => (
+                          <div key={k} className="flex items-center gap-2">
+                            <Check size={12} className="text-green-500" />
+                            <input
+                              className="w-full bg-transparent outline-none text-[11px] font-black uppercase tracking-tight"
+                              value={camp[k]}
+                              onChange={(e) => updateField(k, e.target.value as any)}
+                              style={{ color: theme.accent, opacity: 0.9 }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Enquiry form (compact) */}
+                    <div className="border rounded-xl p-3" style={borderStyle}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-65">Enquiry form</div>
+                        <div className="flex items-center gap-2">
+                          <button className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor }} type="button">
+                            <Camera size={14} style={{ color: theme.accent, opacity: 0.6 }} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                        <input
+                          className="w-full p-3 rounded-xl border text-xs font-semibold outline-none"
+                          style={cardStyle}
+                          placeholder="Full name"
+                          value={lead.fullName}
+                          onChange={(e) => setLead((p) => ({ ...p, fullName: e.target.value }))}
+                        />
+                        <input
+                          className="w-full p-3 rounded-xl border text-xs font-semibold outline-none"
+                          style={cardStyle}
+                          placeholder="Agency"
+                          value={lead.agency}
+                          onChange={(e) => setLead((p) => ({ ...p, agency: e.target.value }))}
+                        />
+                        <input
+                          className="w-full p-3 rounded-xl border text-xs font-semibold outline-none md:col-span-2"
+                          style={cardStyle}
+                          placeholder="Email"
+                          value={lead.email}
+                          onChange={(e) => setLead((p) => ({ ...p, email: e.target.value }))}
+                        />
+                        <input
+                          className="w-full p-3 rounded-xl border text-xs font-semibold outline-none md:col-span-2"
+                          style={cardStyle}
+                          placeholder="WhatsApp / Phone"
+                          value={lead.phone}
+                          onChange={(e) => setLead((p) => ({ ...p, phone: e.target.value }))}
+                        />
+                        <textarea
+                          className="w-full p-3 rounded-xl border text-xs font-semibold outline-none md:col-span-2 resize-none"
+                          style={cardStyle}
+                          placeholder="Message..."
+                          rows={3}
+                          value={lead.message}
+                          onChange={(e) => setLead((p) => ({ ...p, message: e.target.value }))}
+                        />
+                      </div>
+
+                      {/* Send actions (compact row) */}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          className="flex-1 min-w-[200px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2"
+                          style={highlightBg}
+                          type="button"
+                          onClick={() => openMailto(leadPayload)}
+                          title="Send request by email"
+                        >
+                          <Mail size={14} />
+                          <input
+                            className="bg-transparent outline-none text-center w-full cursor-text"
+                            value={camp.leadCta}
+                            onChange={(e) => updateField("leadCta", e.target.value)}
+                          />
+                        </button>
+
+                        <button
+                          className="py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                          style={cardStyle}
+                          type="button"
+                          onClick={() => openWhatsApp(leadPayload)}
+                          title="Send request on WhatsApp"
+                        >
+                          <MessageCircle size={14} />
+                          WhatsApp
+                        </button>
+
+                        <button
+                          className="py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                          style={cardStyle}
+                          type="button"
+                          onClick={() => openMailto(leadPayload)}
+                          title="Send request by email"
+                        >
+                          <Mail size={14} />
+                          Email
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <ShieldAlert size={14} style={{ color: theme.accent, opacity: 0.35 }} />
+                        <input
+                          className="text-[10px] font-semibold outline-none bg-transparent w-full"
+                          value={camp.leadDisclaimer}
+                          onChange={(e) => updateField("leadDisclaimer", e.target.value)}
+                          style={{ color: theme.accent, opacity: 0.65 }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-center gap-2 text-[10px] font-bold mt-2" style={{ color: theme.accent, opacity: 0.6 }}>
+                        <Percent size={12} />
+                        Sends to: <span style={{ color: theme.accent, opacity: 1 }}>{camp.enquiryEmail || "set enquiry email"}</span>
+                      </div>
+                    </div>
+
+                    {/* Contact card (compact, functions preserved) */}
+                    <CompactPanel
+                      title="Contact Card (QR / NFC)"
+                      subtitle="Upload .VCF + Share/Download/Save"
+                      defaultOpen={false}
+                      style={cardStyle}
+                      right={
+                        <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                          <FileText size={12} style={highlightText} />
+                          <span style={highlightText}>Upload</span>
+                          <input type="file" accept=".vcf,text/vcard" className="hidden" onChange={(e) => loadVcfFile(e.target.files)} />
+                        </label>
+                      }
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {[
+                          { k: "contactName", ph: "Contact name" },
+                          { k: "contactTitle", ph: "Title" },
+                          { k: "contactCompany", ph: "Company" },
+                          { k: "contactPhone", ph: "Phone" },
+                        ].map((f) => (
+                          <input
+                            key={f.k}
+                            className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                            style={{ borderColor: theme.borderColor, color: theme.accent }}
+                            value={(camp as any)[f.k] as string}
+                            onChange={(e) => updateField(f.k as any, e.target.value as any)}
+                            placeholder={f.ph}
+                          />
+                        ))}
+                        <input
+                          className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                          style={{ borderColor: theme.borderColor, color: theme.accent }}
+                          value={camp.contactEmail}
+                          onChange={(e) => updateField("contactEmail", e.target.value)}
+                          placeholder="Email"
+                        />
+                        <input
+                          className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                          style={{ borderColor: theme.borderColor, color: theme.accent }}
+                          value={camp.contactWebsite}
+                          onChange={(e) => updateField("contactWebsite", e.target.value)}
+                          placeholder="Website"
+                        />
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-2 mt-2">
+                        <input
+                          className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                          style={{ borderColor: theme.borderColor, color: theme.accent }}
+                          value={camp.enquiryEmail}
+                          onChange={(e) => updateField("enquiryEmail", e.target.value)}
+                          placeholder="Company enquiry email"
+                        />
+                        <input
+                          className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                          style={{ borderColor: theme.borderColor, color: theme.accent }}
+                          value={camp.enquiryWhatsApp}
+                          onChange={(e) => updateField("enquiryWhatsApp", e.target.value)}
+                          placeholder="Company WhatsApp (intl)"
+                        />
+                        <input
+                          className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                          style={{ borderColor: theme.borderColor, color: theme.accent }}
+                          value={camp.enquirySubject}
+                          onChange={(e) => updateField("enquirySubject", e.target.value)}
+                          placeholder="Email subject line"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          onClick={shareContact}
+                          className="px-4 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                          style={cardStyle}
+                          type="button"
+                          title="Share my contacts"
+                        >
+                          <Share2 size={14} /> Share
+                        </button>
+
+                        <a
+                          href={vcardUrl || `data:text/vcard;charset=utf-8,${encodeURIComponent(vcardText)}`}
+                          download={`${(camp.contactName || "contact").replace(/\s+/g, "_")}.vcf`}
+                          className="px-4 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                          style={cardStyle}
+                          title="Download contact"
+                        >
+                          <Download size={14} /> Download
+                        </a>
+
+                        <button
+                          onClick={saveContact}
+                          className="px-4 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                          style={cardStyle}
+                          type="button"
+                          title="Save contacts"
+                        >
+                          <Contact size={14} /> Save
+                        </button>
+                      </div>
+                    </CompactPanel>
+                  </div>
+                </CompactPanel>
+              )}
+            </div>
           </div>
 
-          {/* EXPERIENCES */}
-          {visibleBlocks.experiences && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-3" style={borderStyle}>
-                <h2 className={label} style={{ color: theme.accent, opacity: 0.55 }}>
-                  Services & Experiences
-                </h2>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className={`${frame} ${soft} p-7 space-y-5`} style={cardStyle}>
-                  <div className="flex items-center justify-between">
-                    <p className={label} style={{ color: theme.accent, opacity: 0.6 }}>
-                      Included
-                    </p>
-                    <button onClick={() => addListItem("freeActivities")} style={highlightText} type="button">
-                      <Plus size={14} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {camp.freeActivities.map((act, i) => (
-                      <div key={i} className="flex items-center gap-3 group">
-                        <Compass size={14} style={highlightText} />
-                        <input
-                          className="text-sm font-semibold uppercase tracking-tight outline-none bg-transparent w-full"
-                          value={act}
-                          onChange={(e) => updateListItem("freeActivities", i, e.target.value)}
-                          style={{ color: theme.accent, opacity: 0.92 }}
-                        />
-                        <button
-                          onClick={() => removeListItem("freeActivities", i)}
-                          className="opacity-0 group-hover:opacity-100"
-                          style={{ color: "#f87171" }}
-                          type="button"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div
-                  className={`${frame} p-7 space-y-5`}
-                  style={{
-                    backgroundColor: theme.accent,
-                    borderColor: theme.accent,
-                    color: "#fff",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className={label} style={{ color: "#fff", opacity: 0.85 }}>
-                      Premium add-ons
-                    </p>
-                    <button onClick={() => addListItem("paidActivities")} style={{ color: "#fff", opacity: 0.9 }} type="button">
-                      <Plus size={14} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {camp.paidActivities.map((act, i) => (
-                      <div key={i} className="flex items-center gap-3 group">
-                        <MapPin size={14} className="text-white/60" />
-                        <input
-                          className="text-sm font-semibold uppercase tracking-tight outline-none bg-transparent w-full text-white"
-                          value={act}
-                          onChange={(e) => updateListItem("paidActivities", i, e.target.value)}
-                        />
-                        <button onClick={() => removeListItem("paidActivities", i)} className="opacity-0 group-hover:opacity-100 text-white/70" type="button">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LEAD CAPTURE */}
-          {visibleBlocks.leadCapture && (
-            <div className={`${frame} ${soft} p-8 md:p-10`} style={cardStyle}>
-              <div className="grid md:grid-cols-2 gap-8 items-start">
-                <div className="space-y-4">
-                  <p className={label} style={{ color: theme.accent, opacity: 0.45 }}>
-                    Lead capture
-                  </p>
-
-                  <textarea
-                    className="text-3xl md:text-4xl font-black italic tracking-tighter outline-none w-full resize-none leading-tight bg-transparent"
-                    value={camp.leadHeadline}
-                    onChange={(e) => updateField("leadHeadline", e.target.value)}
-                    rows={2}
-                    style={{ color: theme.accent, opacity: 0.95 }}
-                  />
-
-                  <textarea
-                    className="text-sm font-semibold outline-none w-full resize-none leading-relaxed bg-transparent"
-                    value={camp.leadSubcopy}
-                    onChange={(e) => updateField("leadSubcopy", e.target.value)}
-                    rows={3}
-                    style={{ color: theme.accent, opacity: 0.72 }}
-                  />
-
-                  <div className="space-y-3">
-                    {(["leadBullet1", "leadBullet2", "leadBullet3"] as const).map((k) => (
-                      <div key={k} className="flex items-center gap-3">
-                        <Check size={14} className="text-green-500" />
-                        <input
-                          className="text-xs font-black uppercase tracking-tight outline-none bg-transparent w-full"
-                          value={camp[k]}
-                          onChange={(e) => updateField(k, e.target.value as any)}
-                          style={{ color: theme.accent, opacity: 0.9 }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-3 pt-2">
-                    <ShieldAlert size={14} style={{ color: theme.accent, opacity: 0.35 }} />
-                    <input
-                      className="text-[10px] font-semibold outline-none bg-transparent w-full"
-                      value={camp.leadDisclaimer}
-                      onChange={(e) => updateField("leadDisclaimer", e.target.value)}
-                      style={{ color: theme.accent, opacity: 0.65 }}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-[26px] border p-7 space-y-4" style={{ borderColor: theme.borderColor, backgroundColor: theme.pageBg }}>
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.55 }}>
-                      Enquiry form
-                    </p>
-                    <button className="p-2 rounded-xl border" style={{ borderColor: theme.borderColor, backgroundColor: theme.blockBg }} type="button">
-                      <Camera size={14} style={{ color: theme.accent, opacity: 0.55 }} />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none"
-                      style={cardStyle}
-                      placeholder="Full name"
-                      value={lead.fullName}
-                      onChange={(e) => setLead((p) => ({ ...p, fullName: e.target.value }))}
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none"
-                      style={cardStyle}
-                      placeholder="Agency"
-                      value={lead.agency}
-                      onChange={(e) => setLead((p) => ({ ...p, agency: e.target.value }))}
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2"
-                      style={cardStyle}
-                      placeholder="Email"
-                      value={lead.email}
-                      onChange={(e) => setLead((p) => ({ ...p, email: e.target.value }))}
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2"
-                      style={cardStyle}
-                      placeholder="WhatsApp / Phone"
-                      value={lead.phone}
-                      onChange={(e) => setLead((p) => ({ ...p, phone: e.target.value }))}
-                    />
-                    <textarea
-                      className="w-full p-4 rounded-2xl border text-xs font-semibold outline-none md:col-span-2 resize-none"
-                      style={cardStyle}
-                      placeholder="Message..."
-                      rows={4}
-                      value={lead.message}
-                      onChange={(e) => setLead((p) => ({ ...p, message: e.target.value }))}
-                    />
-                  </div>
-
-                  {/* Actions: Request + Email + WhatsApp + vCard */}
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        className="flex-1 py-4 rounded-2xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 min-w-[220px]"
-                        style={highlightBg}
-                        type="button"
-                        onClick={() => openMailto(leadPayload)}
-                        title="Send request by email"
-                      >
-                        <Mail size={14} />
-                        <span className="truncate">{camp.leadCta}</span>
-                      </button>
-
-                      <button
-                        className="py-4 px-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={cardStyle}
-                        type="button"
-                        onClick={() => openWhatsApp(leadPayload)}
-                        title="Send request on WhatsApp"
-                      >
-                        <MessageCircle size={14} />
-                        WhatsApp
-                      </button>
-
-                      <button
-                        className="py-4 px-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={cardStyle}
-                        type="button"
-                        onClick={() => openMailto(leadPayload)}
-                        title="Send request by email"
-                      >
-                        <Mail size={14} />
-                        Email
-                      </button>
-                    </div>
-
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        onClick={shareContact}
-                        className="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={cardStyle}
-                        type="button"
-                        title="Share my contacts"
-                      >
-                        <Share2 size={14} /> Share contact
-                      </button>
-
-                      <a
-                        href={vcardUrl || `data:text/vcard;charset=utf-8,${encodeURIComponent(vcardText)}`}
-                        download={`${(camp.contactName || "contact").replace(/\s+/g, "_")}.vcf`}
-                        className="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={cardStyle}
-                        title="Download contact"
-                      >
-                        <Download size={14} /> Download
-                      </a>
-
-                      <button
-                        onClick={saveContact}
-                        className="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        style={cardStyle}
-                        type="button"
-                        title="Save contacts"
-                      >
-                        <Contact size={14} /> Save
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-center gap-2 text-[10px] font-bold" style={{ color: theme.accent, opacity: 0.6 }}>
-                      <Percent size={12} />
-                      Sends to: <span style={{ color: theme.accent, opacity: 1 }}>{camp.enquiryEmail || "set enquiry email"}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="h-2" />
+          {/* tiny bottom padding */}
+          <div className="h-3" />
         </div>
       </main>
     </div>
