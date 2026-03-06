@@ -15,7 +15,8 @@
     "framer-motion": "^10.16.5",
     "lucide-react": "^0.292.0",
     "clsx": "^2.0.0",
-    "tailwind-merge": "^2.0.0"
+    "tailwind-merge": "^2.0.0",
+    "resend": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.9.0",
