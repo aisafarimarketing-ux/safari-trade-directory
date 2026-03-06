@@ -99,6 +99,12 @@ type Camp = {
   contactPhone: string;
   contactWebsite: string;
 
+  reservationEmail: string;
+  marketingEmail: string;
+  salesEmail: string;
+  companyPhone: string;
+  companyWhatsApp: string;
+
   enquiryEmail: string;
   enquiryWhatsApp: string;
   enquirySubject: string;
@@ -177,6 +183,12 @@ const makeNewCamp = (): Camp => ({
   contactEmail: "trade@yourcompany.com",
   contactPhone: "+255000000000",
   contactWebsite: "https://yourwebsite.com",
+
+  reservationEmail: "reservations@yourcompany.com",
+  marketingEmail: "marketing@yourcompany.com",
+  salesEmail: "sales@yourcompany.com",
+  companyPhone: "+255000000000",
+  companyWhatsApp: "+255000000000",
 
   enquiryEmail: "trade@yourcompany.com",
   enquiryWhatsApp: "+255000000000",
@@ -454,6 +466,11 @@ export default function RestorationSafariAdmin() {
       contactEmail: "trade@nyumbani.example",
       contactPhone: "+255000000000",
       contactWebsite: "https://example.com",
+      reservationEmail: "reservations@nyumbani.example",
+      marketingEmail: "marketing@nyumbani.example",
+      salesEmail: "sales@nyumbani.example",
+      companyPhone: "+255000000000",
+      companyWhatsApp: "+255000000000",
       enquiryEmail: "trade@nyumbani.example",
       enquiryWhatsApp: "+255000000000",
       taLink: "https://www.tripadvisor.com/",
@@ -605,14 +622,18 @@ export default function RestorationSafariAdmin() {
         .replace(/\n/g, "\\n")
         .replace(/,/g, "\\,")
         .replace(/;/g, "\\;");
+
     return [
       "BEGIN:VCARD",
       "VERSION:3.0",
       `FN:${esc(camp.contactName)}`,
       `ORG:${esc(camp.contactCompany)}`,
       `TITLE:${esc(camp.contactTitle)}`,
-      camp.contactPhone ? `TEL;TYPE=CELL:${esc(camp.contactPhone)}` : "",
-      camp.contactEmail ? `EMAIL;TYPE=INTERNET:${esc(camp.contactEmail)}` : "",
+      camp.companyPhone ? `TEL;TYPE=WORK,VOICE:${esc(camp.companyPhone)}` : "",
+      camp.companyWhatsApp ? `TEL;TYPE=CELL,WORK:${esc(camp.companyWhatsApp)}` : "",
+      camp.reservationEmail ? `EMAIL;TYPE=INTERNET,WORK:${esc(camp.reservationEmail)}` : "",
+      camp.marketingEmail ? `EMAIL;TYPE=INTERNET,WORK:${esc(camp.marketingEmail)}` : "",
+      camp.salesEmail ? `EMAIL;TYPE=INTERNET,WORK:${esc(camp.salesEmail)}` : "",
       camp.contactWebsite ? `URL:${esc(camp.contactWebsite)}` : "",
       "END:VCARD",
     ]
@@ -622,8 +643,11 @@ export default function RestorationSafariAdmin() {
     camp.contactName,
     camp.contactCompany,
     camp.contactTitle,
-    camp.contactPhone,
-    camp.contactEmail,
+    camp.companyPhone,
+    camp.companyWhatsApp,
+    camp.reservationEmail,
+    camp.marketingEmail,
+    camp.salesEmail,
     camp.contactWebsite,
   ]);
 
@@ -674,20 +698,28 @@ export default function RestorationSafariAdmin() {
     const org = pick("ORG");
     const title = pick("TITLE");
 
-    const emailLine = lines.find((l) => l.toUpperCase().includes("EMAIL"));
-    const telLine = lines.find((l) => l.toUpperCase().includes("TEL"));
-    const urlLine = lines.find((l) => l.toUpperCase().startsWith("URL"));
+    const emails = lines
+      .filter((l) => l.toUpperCase().includes("EMAIL"))
+      .map((l) => l.split(":").slice(1).join(":").trim())
+      .filter(Boolean);
 
-    const email = emailLine ? emailLine.split(":").slice(1).join(":").trim() : "";
-    const tel = telLine ? telLine.split(":").slice(1).join(":").trim() : "";
+    const tels = lines
+      .filter((l) => l.toUpperCase().includes("TEL"))
+      .map((l) => l.split(":").slice(1).join(":").trim())
+      .filter(Boolean);
+
+    const urlLine = lines.find((l) => l.toUpperCase().startsWith("URL"));
     const url = urlLine ? urlLine.split(":").slice(1).join(":").trim() : "";
 
     return {
       contactName: fn,
       contactCompany: org,
       contactTitle: title,
-      contactEmail: email,
-      contactPhone: tel,
+      reservationEmail: emails[0] || "",
+      marketingEmail: emails[1] || "",
+      salesEmail: emails[2] || "",
+      companyPhone: tels[0] || "",
+      companyWhatsApp: tels[1] || "",
       contactWebsite: url,
     };
   };
@@ -705,8 +737,11 @@ export default function RestorationSafariAdmin() {
       contactName: parsed.contactName || c.contactName,
       contactCompany: parsed.contactCompany || c.contactCompany,
       contactTitle: parsed.contactTitle || c.contactTitle,
-      contactEmail: parsed.contactEmail || c.contactEmail,
-      contactPhone: parsed.contactPhone || c.contactPhone,
+      reservationEmail: parsed.reservationEmail || c.reservationEmail,
+      marketingEmail: parsed.marketingEmail || c.marketingEmail,
+      salesEmail: parsed.salesEmail || c.salesEmail,
+      companyPhone: parsed.companyPhone || c.companyPhone,
+      companyWhatsApp: parsed.companyWhatsApp || c.companyWhatsApp,
       contactWebsite: parsed.contactWebsite || c.contactWebsite,
     }));
   };
@@ -830,47 +865,51 @@ export default function RestorationSafariAdmin() {
     message: "",
   });
 
-  const buildContactMessage = (data: typeof contactExchange) => {
-    const lines = [
-      `Property: ${camp.name}`,
-      `Class: ${camp.class}`,
-      `Location: ${camp.locationLabel}`,
-      "",
-      `Full name: ${data.fullName}`,
-      `Agency: ${data.agency}`,
-      `Email: ${data.email}`,
-      `Phone/WhatsApp: ${data.phone}`,
-      "",
-      `Message:`,
-      data.message,
-      "",
-      `Sent via: Contact Exchange`,
-    ];
-    return lines.join("\n");
-  };
-
-  const contactPayload = useMemo(
-    () => buildContactMessage(contactExchange),
-    [contactExchange, camp.name, camp.class, camp.locationLabel]
-  );
-
-  const openMailto = (payload: string) => {
+  const sendEmailDirect = async () => {
     const to = (camp.enquiryEmail || "").trim();
-    if (!to) return;
 
-    const subject = encodeURIComponent((camp.enquirySubject || "Trade Request").trim());
-    const body = encodeURIComponent(payload);
-    const mailtoHref = `mailto:${to}?subject=${subject}&body=${body}`;
+    if (!to) {
+      alert("Please set a company enquiry email first.");
+      return;
+    }
 
     try {
-      const link = document.createElement("a");
-      link.href = mailtoHref;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      const res = await fetch("/api/contact-exchange", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to,
+          subject: camp.enquirySubject || "Trade Request",
+          fullName: contactExchange.fullName,
+          agency: contactExchange.agency,
+          email: contactExchange.email,
+          phone: contactExchange.phone,
+          message: contactExchange.message,
+          property: camp.name,
+          propertyClass: camp.class,
+          location: camp.locationLabel,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data?.error || "Email failed to send.");
+        return;
+      }
+
+      alert("Email sent successfully.");
+      setContactExchange({
+        fullName: "",
+        agency: "",
+        email: "",
+        phone: "",
+        message: "",
+      });
     } catch {
-      window.location.href = mailtoHref;
+      alert("Email failed to send.");
     }
   };
 
@@ -880,6 +919,25 @@ export default function RestorationSafariAdmin() {
     const text = encodeURIComponent(payload);
     window.open(`https://wa.me/${digits}?text=${text}`, "_blank", "noopener,noreferrer");
   };
+
+  const contactPayload = useMemo(() => {
+    const lines = [
+      `Property: ${camp.name}`,
+      `Class: ${camp.class}`,
+      `Location: ${camp.locationLabel}`,
+      "",
+      `Full name: ${contactExchange.fullName}`,
+      `Agency: ${contactExchange.agency}`,
+      `Email: ${contactExchange.email}`,
+      `Phone/WhatsApp: ${contactExchange.phone}`,
+      "",
+      `Message:`,
+      contactExchange.message,
+      "",
+      `Sent via: Contact Exchange`,
+    ];
+    return lines.join("\n");
+  }, [contactExchange, camp.name, camp.class, camp.locationLabel]);
 
   return (
     <div className="flex min-h-screen font-sans" style={{ backgroundColor: theme.pageBg }}>
@@ -1714,7 +1772,7 @@ export default function RestorationSafariAdmin() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 mt-3">
-                      <button className="flex-1 min-w-[180px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2" style={highlightBg} type="button" onClick={() => openMailto(contactPayload)}>
+                      <button className="flex-1 min-w-[180px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2" style={highlightBg} type="button" onClick={sendEmailDirect}>
                         <Mail size={14} />
                         <span className="truncate">{camp.contactCta}</span>
                       </button>
@@ -1849,7 +1907,7 @@ export default function RestorationSafariAdmin() {
                       { k: "contactName", ph: "Contact name" },
                       { k: "contactTitle", ph: "Title" },
                       { k: "contactCompany", ph: "Company" },
-                      { k: "contactPhone", ph: "Phone" },
+                      { k: "contactPhone", ph: "Direct contact phone" },
                     ].map((f) => (
                       <input
                         key={f.k}
@@ -1860,8 +1918,54 @@ export default function RestorationSafariAdmin() {
                         placeholder={f.ph}
                       />
                     ))}
-                    <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2" style={{ ...cardStyle, borderColor: theme.accent }} value={camp.contactEmail} onChange={(e) => updateField("contactEmail", e.target.value)} placeholder="Email" />
-                    <input className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2" style={{ ...cardStyle, borderColor: theme.accent }} value={camp.contactWebsite} onChange={(e) => updateField("contactWebsite", e.target.value)} placeholder="Website" />
+
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                      style={{ ...cardStyle, borderColor: theme.accent }}
+                      value={camp.reservationEmail}
+                      onChange={(e) => updateField("reservationEmail", e.target.value)}
+                      placeholder="Reservation email"
+                    />
+
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                      style={{ ...cardStyle, borderColor: theme.accent }}
+                      value={camp.marketingEmail}
+                      onChange={(e) => updateField("marketingEmail", e.target.value)}
+                      placeholder="Marketing email"
+                    />
+
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                      style={{ ...cardStyle, borderColor: theme.accent }}
+                      value={camp.salesEmail}
+                      onChange={(e) => updateField("salesEmail", e.target.value)}
+                      placeholder="Sales email"
+                    />
+
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                      style={{ ...cardStyle, borderColor: theme.accent }}
+                      value={camp.companyPhone}
+                      onChange={(e) => updateField("companyPhone", e.target.value)}
+                      placeholder="Company phone"
+                    />
+
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent"
+                      style={{ ...cardStyle, borderColor: theme.accent }}
+                      value={camp.companyWhatsApp}
+                      onChange={(e) => updateField("companyWhatsApp", e.target.value)}
+                      placeholder="Company WhatsApp"
+                    />
+
+                    <input
+                      className="p-3 rounded-xl border outline-none text-xs font-semibold bg-transparent md:col-span-2"
+                      style={{ ...cardStyle, borderColor: theme.accent }}
+                      value={camp.contactWebsite}
+                      onChange={(e) => updateField("contactWebsite", e.target.value)}
+                      placeholder="Website"
+                    />
                   </div>
                 </CompactPanel>
               )}
