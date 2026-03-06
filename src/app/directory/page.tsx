@@ -1,4 +1,4 @@
-import { profiles } from "@/data/profiles";
+import { profiles } from "../../data/profiles";
 
 export default function DirectoryPage() {
   return (
