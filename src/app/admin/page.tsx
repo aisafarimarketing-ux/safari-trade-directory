@@ -115,6 +115,7 @@ type Camp = {
 };
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
 const DEFAULT_TA_LOGO =
   "https://static.tacdn.com/img2/brand_refresh/Tripadvisor_lockup_horizontal_secondary_registered.svg";
 
@@ -227,21 +228,29 @@ function CompactPanel({
         className="w-full px-4 py-3 flex items-center justify-between gap-3"
         style={headerStyle}
       >
-        <div className="text-left">
+        <div className="text-left min-w-0">
           <div className="text-[10px] font-black uppercase tracking-[0.28em] opacity-80">
             {title}
           </div>
           {subtitle ? (
-            <div className="text-xs font-semibold opacity-75 mt-0.5">{subtitle}</div>
+            <div className="text-xs font-semibold opacity-75 mt-0.5 truncate">
+              {subtitle}
+            </div>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           {right}
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="p-2 rounded-xl border"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+            className="p-2 rounded-xl border shrink-0"
             style={{
               borderColor: (style?.borderColor as string) || "rgba(0,0,0,0.12)",
               backgroundColor: "rgba(255,255,255,0.65)",
@@ -258,7 +267,11 @@ function CompactPanel({
         </div>
       </div>
 
-      {open && <div className="px-4 py-3">{children}</div>}
+      <div className={open ? "block" : "hidden"}>
+        <div className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
@@ -322,8 +335,8 @@ function RatingPips({
                 background: isFull
                   ? highlight
                   : isHalf
-                  ? `linear-gradient(90deg, ${highlight} 50%, rgba(0,0,0,0.08) 50%)`
-                  : "rgba(0,0,0,0.08)",
+                    ? `linear-gradient(90deg, ${highlight} 50%, rgba(0,0,0,0.08) 50%)`
+                    : "rgba(0,0,0,0.08)",
               }}
               title="Click for full, Shift+Click for half"
             />
@@ -490,7 +503,6 @@ export default function RestorationSafariAdmin() {
     color: theme.accent,
   };
 
-  const borderStyle: React.CSSProperties = { borderColor: theme.borderColor };
   const accentText: React.CSSProperties = { color: theme.accent };
   const highlightText: React.CSSProperties = { color: theme.highlight };
   const highlightBg: React.CSSProperties = { backgroundColor: theme.highlight };
@@ -848,18 +860,18 @@ export default function RestorationSafariAdmin() {
 
     const subject = encodeURIComponent((camp.enquirySubject || "Trade Request").trim());
     const body = encodeURIComponent(payload);
-
     const mailtoHref = `mailto:${to}?subject=${subject}&body=${body}`;
 
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
-    iframe.src = mailtoHref;
-    document.body.appendChild(iframe);
-    setTimeout(() => iframe.remove(), 1000);
-
     try {
+      const link = document.createElement("a");
+      link.href = mailtoHref;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
       window.location.href = mailtoHref;
-    } catch {}
+    }
   };
 
   const openWhatsApp = (payload: string) => {
@@ -883,7 +895,7 @@ export default function RestorationSafariAdmin() {
             className="w-full max-w-5xl rounded-3xl overflow-hidden border shadow-2xl"
             style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={borderStyle}>
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: theme.borderColor }}>
               <div className="text-[11px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.8 }}>
                 {photoModal.title || "Preview"}
               </div>
@@ -899,7 +911,7 @@ export default function RestorationSafariAdmin() {
             </div>
 
             <div className="p-3">
-              <div className="w-full h-[78vh] md:h-[80vh] flex items-center justify-center rounded-2xl border overflow-hidden" style={borderStyle}>
+              <div className="w-full h-[78vh] md:h-[80vh] flex items-center justify-center rounded-2xl border overflow-hidden" style={{ borderColor: theme.borderColor }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photoModal.src} alt="Preview" className="max-w-full max-h-full object-contain" />
               </div>
@@ -1459,7 +1471,8 @@ export default function RestorationSafariAdmin() {
                           addListItem("inclusions");
                         }}
                         type="button"
-                        className="p-2 rounded-xl border"
+                        title="Add"
+                        className="p-2 rounded-xl border shrink-0"
                         style={{ borderColor: theme.accent, backgroundColor: "rgba(255,255,255,0.65)" }}
                       >
                         <Plus size={14} style={highlightText} />
@@ -1468,17 +1481,24 @@ export default function RestorationSafariAdmin() {
                   >
                     <div className="space-y-2">
                       {camp.inclusions.map((item, i) => (
-                        <div key={i} className="flex items-center gap-2 group">
-                          <Check size={12} className="text-green-500" />
-                          <input className="w-full bg-transparent outline-none text-sm font-semibold" value={item} onChange={(e) => updateListItem("inclusions", i, e.target.value)} style={{ color: theme.accent, opacity: 0.9 }} />
+                        <div key={i} className="flex items-center gap-2 group min-w-0">
+                          <Check size={12} className="text-green-500 shrink-0" />
+                          <input
+                            className="flex-1 min-w-0 bg-transparent outline-none text-sm font-semibold"
+                            value={item}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => updateListItem("inclusions", i, e.target.value)}
+                            style={{ color: theme.accent, opacity: 0.9 }}
+                          />
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               removeListItem("inclusions", i);
                             }}
-                            className="opacity-0 group-hover:opacity-100"
+                            className="opacity-0 group-hover:opacity-100 shrink-0"
                             style={{ color: "#f87171" }}
                             type="button"
+                            title="Remove"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1501,7 +1521,8 @@ export default function RestorationSafariAdmin() {
                           addListItem("exclusions");
                         }}
                         type="button"
-                        className="p-2 rounded-xl border"
+                        title="Add"
+                        className="p-2 rounded-xl border shrink-0"
                         style={{ borderColor: theme.accent, backgroundColor: "rgba(255,255,255,0.65)" }}
                       >
                         <Plus size={14} style={highlightText} />
@@ -1510,17 +1531,24 @@ export default function RestorationSafariAdmin() {
                   >
                     <div className="space-y-2">
                       {camp.exclusions.map((item, i) => (
-                        <div key={i} className="flex items-center gap-2 group">
-                          <Ban size={12} style={{ color: theme.accent, opacity: 0.5 }} />
-                          <input className="w-full bg-transparent outline-none text-sm font-semibold italic" value={item} onChange={(e) => updateListItem("exclusions", i, e.target.value)} style={{ color: theme.accent, opacity: 0.85 }} />
+                        <div key={i} className="flex items-center gap-2 group min-w-0">
+                          <Ban size={12} style={{ color: theme.accent, opacity: 0.5 }} className="shrink-0" />
+                          <input
+                            className="flex-1 min-w-0 bg-transparent outline-none text-sm font-semibold italic"
+                            value={item}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => updateListItem("exclusions", i, e.target.value)}
+                            style={{ color: theme.accent, opacity: 0.85 }}
+                          />
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               removeListItem("exclusions", i);
                             }}
-                            className="opacity-0 group-hover:opacity-100"
+                            className="opacity-0 group-hover:opacity-100 shrink-0"
                             style={{ color: "#f87171" }}
                             type="button"
+                            title="Remove"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1686,12 +1714,12 @@ export default function RestorationSafariAdmin() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 mt-3">
-                      <button className="flex-1 min-w-[180px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2" style={highlightBg} type="button" onClick={() => openMailto(contactPayload)} title="Send by email">
+                      <button className="flex-1 min-w-[180px] py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2" style={highlightBg} type="button" onClick={() => openMailto(contactPayload)}>
                         <Mail size={14} />
                         <span className="truncate">{camp.contactCta}</span>
                       </button>
 
-                      <button className="py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={{ ...cardStyle, borderColor: theme.accent }} type="button" onClick={() => openWhatsApp(contactPayload)} title="Send on WhatsApp">
+                      <button className="py-3 px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={{ ...cardStyle, borderColor: theme.accent }} type="button" onClick={() => openWhatsApp(contactPayload)}>
                         <MessageCircle size={14} />
                         WhatsApp
                       </button>
@@ -1709,20 +1737,20 @@ export default function RestorationSafariAdmin() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 items-start">
                     {visibleBlocks.downloadables && (
-                      <div className="border rounded-xl p-3" style={{ backgroundColor: blockColors.downloadables, borderColor: theme.accent, borderWidth: 2 }}>
-                        <div className="flex items-center justify-between">
-                          <div className="text-[10px] font-black uppercase tracking-widest opacity-70" style={{ color: theme.accent }}>
+                      <div className="border rounded-xl p-3 overflow-hidden min-w-0" style={{ backgroundColor: blockColors.downloadables, borderColor: theme.accent, borderWidth: 2 }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[10px] font-black uppercase tracking-widest opacity-70 min-w-0" style={{ color: theme.accent }}>
                             Downloads
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <button type="button" className="p-2 rounded-xl border" style={{ ...cardStyle, borderColor: theme.accent }} onClick={addDownloadableLink} title="Add link">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button type="button" className="p-2 rounded-xl border" style={{ ...cardStyle, borderColor: theme.accent }} onClick={addDownloadableLink}>
                               <LinkIcon size={14} style={highlightText} />
                             </button>
 
-                            <button type="button" className="p-2 rounded-xl border" style={{ ...cardStyle, borderColor: theme.accent }} onClick={() => downloadableFileRef.current?.click()} title="Upload file">
+                            <button type="button" className="p-2 rounded-xl border" style={{ ...cardStyle, borderColor: theme.accent }} onClick={() => downloadableFileRef.current?.click()}>
                               <Paperclip size={14} style={highlightText} />
                             </button>
 
@@ -1730,16 +1758,21 @@ export default function RestorationSafariAdmin() {
                           </div>
                         </div>
 
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-2 space-y-2 overflow-hidden">
                           {(camp.downloadables ?? []).slice(0, 6).map((d) => (
-                            <div key={d.id} className="flex items-center gap-2 group">
-                              <button type="button" className="p-2 rounded-xl border" style={{ ...cardStyle, borderColor: theme.accent }} onClick={() => openDownloadable(d)}>
+                            <div key={d.id} className="flex items-center gap-2 group min-w-0 overflow-hidden">
+                              <button type="button" className="p-2 rounded-xl border shrink-0" style={{ ...cardStyle, borderColor: theme.accent }} onClick={() => openDownloadable(d)}>
                                 {d.type === "link" ? <LinkIcon size={14} style={highlightText} /> : <Download size={14} style={highlightText} />}
                               </button>
 
-                              <input className="flex-1 bg-transparent outline-none text-xs font-semibold" style={{ color: theme.accent, opacity: 0.9 }} value={d.title} onChange={(e) => updateDownloadable(d.id, { title: e.target.value })} />
+                              <input
+                                className="flex-1 min-w-0 bg-transparent outline-none text-xs font-semibold truncate"
+                                style={{ color: theme.accent, opacity: 0.9 }}
+                                value={d.title}
+                                onChange={(e) => updateDownloadable(d.id, { title: e.target.value })}
+                              />
 
-                              <button type="button" className="opacity-0 group-hover:opacity-100 p-2 rounded-xl border" style={{ ...cardStyle, borderColor: theme.accent }} onClick={() => removeDownloadable(d.id)}>
+                              <button type="button" className="opacity-0 group-hover:opacity-100 p-2 rounded-xl border shrink-0" style={{ ...cardStyle, borderColor: theme.accent }} onClick={() => removeDownloadable(d.id)}>
                                 <Trash2 size={14} style={{ color: "#f87171" }} />
                               </button>
                             </div>
@@ -1749,23 +1782,28 @@ export default function RestorationSafariAdmin() {
                             .filter((d) => d.type === "link")
                             .slice(0, 2)
                             .map((d) => (
-                              <div key={`${d.id}-url`} className="flex items-center gap-2">
-                                <div className="text-[9px] font-black uppercase tracking-widest" style={{ color: theme.accent, opacity: 0.5 }}>
+                              <div key={`${d.id}-url`} className="flex items-center gap-2 min-w-0 overflow-hidden">
+                                <div className="text-[9px] font-black uppercase tracking-widest shrink-0" style={{ color: theme.accent, opacity: 0.5 }}>
                                   URL
                                 </div>
-                                <input className="flex-1 bg-transparent outline-none text-[10px] font-semibold" style={{ color: theme.accent, opacity: 0.85 }} value={d.url} onChange={(e) => updateDownloadable(d.id, { url: e.target.value })} />
+                                <input
+                                  className="flex-1 min-w-0 bg-transparent outline-none text-[10px] font-semibold"
+                                  style={{ color: theme.accent, opacity: 0.85 }}
+                                  value={d.url}
+                                  onChange={(e) => updateDownloadable(d.id, { url: e.target.value })}
+                                />
                               </div>
                             ))}
                         </div>
                       </div>
                     )}
 
-                    <div className="border rounded-xl p-3" style={{ backgroundColor: blockColors.contactCard, borderColor: theme.accent, borderWidth: 2 }}>
-                      <div className="flex items-center justify-between">
-                        <div className="text-[10px] font-black uppercase tracking-widest opacity-70" style={{ color: theme.accent }}>
+                    <div className="border rounded-xl p-3 overflow-hidden min-w-0" style={{ backgroundColor: blockColors.contactCard, borderColor: theme.accent, borderWidth: 2 }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[10px] font-black uppercase tracking-widest opacity-70 min-w-0" style={{ color: theme.accent }}>
                           Contact Card (QR / NFC)
                         </div>
-                        <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest" style={{ color: theme.highlight }}>
+                        <label className="cursor-pointer inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shrink-0" style={{ color: theme.highlight }}>
                           <FileText size={12} />
                           Upload .VCF
                           <input type="file" accept=".vcf,text/vcard" className="hidden" onChange={(e) => loadVcfFile(e.target.files)} />
