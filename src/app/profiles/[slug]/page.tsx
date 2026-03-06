@@ -1,27 +1,10 @@
+import { profiles } from "@/data/profiles";
+
 type ProfilePageProps = {
   params: {
     slug: string;
   };
 };
-
-const profiles = [
-  {
-    name: "Nyumbani Serengeti",
-    location: "Serengeti National Park",
-    slug: "nyumbani-serengeti",
-    type: "Camp",
-    description:
-      "A hosted safari trade profile for Nyumbani Serengeti. This is where trade partners will view brand, location, and key listing details.",
-  },
-  {
-    name: "Hila Camp",
-    location: "Tarangire",
-    slug: "hila-camp",
-    type: "Camp",
-    description:
-      "A hosted safari trade profile for Hila Camp. This page will later include richer trade content and contact tools.",
-  },
-];
 
 export default function ProfilePage({ params }: ProfilePageProps) {
   const profile = profiles.find((item) => item.slug === params.slug);
