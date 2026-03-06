@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       message,
       property,
       propertyClass,
-      location,
+      location
     } = body ?? {};
 
     if (!to) {
@@ -24,51 +24,68 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const emailText = `
-Property: ${property}
-Class: ${propertyClass}
-Location: ${location}
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json(
+        { error: "Missing RESEND_API_KEY." },
+        { status: 500 }
+      );
+    }
 
-Full Name: ${fullName}
-Agency: ${agency}
-Email: ${email}
-Phone: ${phone}
+    if (!process.env.RESEND_FROM_EMAIL) {
+      return NextResponse.json(
+        { error: "Missing RESEND_FROM_EMAIL." },
+        { status: 500 }
+      );
+    }
+
+    const emailText = `
+Property: ${property || ""}
+Class: ${propertyClass || ""}
+Location: ${location || ""}
+
+Full Name: ${fullName || ""}
+Agency: ${agency || ""}
+Email: ${email || ""}
+Phone: ${phone || ""}
 
 Message:
-${message}
+${message || ""}
 `;
 
-    const response = await fetch("https://api.resend.com/emails", {
+    const resendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         from: process.env.RESEND_FROM_EMAIL,
         to: [to],
         subject: subject || "Trade Request",
         text: emailText,
-        reply_to: email,
-      }),
+        reply_to: email || undefined
+      })
     });
 
-    if (!response.ok) {
-      const error = await response.text();
+    if (!resendResponse.ok) {
+      const errorText = await resendResponse.text();
       return NextResponse.json(
-        { error: error || "Email send failed" },
+        { error: errorText || "Email failed to send." },
         { status: 500 }
       );
     }
 
     const lead = {
       property,
+      propertyClass,
+      location,
       fullName,
       agency,
       email,
       phone,
       message,
       createdAt: new Date().toISOString(),
+      status: "new"
     };
 
     console.log("NEW LEAD:", lead);
