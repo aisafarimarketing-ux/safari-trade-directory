@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,22 +38,29 @@ Message:
 ${message}
 `;
 
-    const { error } = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL!,
-      to,
-      subject: subject || "Trade Request",
-      text: emailText,
-      replyTo: email || undefined,
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_EMAIL,
+        to: [to],
+        subject: subject || "Trade Request",
+        text: emailText,
+        reply_to: email,
+      }),
     });
 
-    if (error) {
+    if (!response.ok) {
+      const error = await response.text();
       return NextResponse.json(
-        { error: error.message },
+        { error: error || "Email send failed" },
         { status: 500 }
       );
     }
 
-    // Save lead (temporary until DB added)
     const lead = {
       property,
       fullName,
