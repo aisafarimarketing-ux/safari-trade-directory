@@ -4,6 +4,7 @@ export type TradeProfile = {
   slug: string;
   type: string;
   description: string;
+  companySlug: string;
 };
 
 export const profiles: TradeProfile[] = [
@@ -13,14 +14,16 @@ export const profiles: TradeProfile[] = [
     slug: "nyumbani-serengeti",
     type: "Camp",
     description:
-      "A hosted safari trade profile for Nyumbani Serengeti. This is where trade partners will view brand, location, and key listing details.",
+      "A hosted safari trade profile for Nyumbani Serengeti. Trade partners can view location, brand details, and contact information here.",
+    companySlug: "nyumbani-collection",
   },
   {
-    name: "Hila Camp",
-    location: "Tarangire",
-    slug: "hila-camp",
+    name: "Nyumbani Tarangire",
+    location: "Tarangire National Park",
+    slug: "nyumbani-tarangire",
     type: "Camp",
     description:
-      "A hosted safari trade profile for Hila Camp. This page will later include richer trade content and contact tools.",
+      "A hosted safari trade profile for Nyumbani Tarangire. This listing represents one camp within the Nyumbani Collection.",
+    companySlug: "nyumbani-collection",
   },
 ];
