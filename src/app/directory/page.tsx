@@ -1,19 +1,6 @@
-export default function DirectoryPage() {
-  const profiles = [
-    {
-      name: "Nyumbani Serengeti",
-      location: "Serengeti National Park",
-      slug: "nyumbani-serengeti",
-      type: "Camp",
-    },
-    {
-      name: "Hila Camp",
-      location: "Tarangire",
-      slug: "hila-camp",
-      type: "Camp",
-    },
-  ];
+import { profiles } from "@/data/profiles";
 
+export default function DirectoryPage() {
   return (
     <main style={{ padding: "40px" }}>
       <h1>Safari Trade Directory</h1>
