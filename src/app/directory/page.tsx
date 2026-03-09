@@ -29,6 +29,15 @@ export default function DirectoryPage() {
               (item) => item.slug === listing.companySlug,
             );
 
+            const propertyDetails = listing.propertyDetails;
+            const socialLinks = listing.socialLinks;
+            const hasLinks =
+              !!propertyDetails?.website ||
+              !!socialLinks?.facebookUrl ||
+              !!socialLinks?.instagramUrl ||
+              !!socialLinks?.tiktokUrl ||
+              !!socialLinks?.youtubeUrl;
+
             return (
               <div
                 key={listing.id}
@@ -79,14 +88,41 @@ export default function DirectoryPage() {
                 </div>
 
                 <div className="p-6">
+                  {(listing.tradeProfileLabel || listing.tradeProfileSub) && (
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                      {[listing.tradeProfileLabel, listing.tradeProfileSub]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+
                   <h2 className="text-2xl font-semibold">{listing.name}</h2>
-                  <p className="mt-2 text-sm text-white/55">
-                    {listing.location}
-                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/55">
+                    <span>{listing.location}</span>
+
+                    {typeof propertyDetails?.rating === "number" ? (
+                      <>
+                        <span className="text-white/25">•</span>
+                        <span>
+                          {propertyDetails.rating.toFixed(1)}
+                          {typeof propertyDetails.reviewCount === "number"
+                            ? ` (${propertyDetails.reviewCount})`
+                            : ""}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
 
                   <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
                     {listing.description}
                   </p>
+
+                  {propertyDetails?.vibe ? (
+                    <p className="mt-4 line-clamp-2 text-sm leading-7 text-white/50">
+                      {propertyDetails.vibe}
+                    </p>
+                  ) : null}
 
                   <div className="mt-5 flex flex-wrap gap-2">
                     {listing.matchAttributes.idealFor.slice(0, 3).map((tag) => (
@@ -98,6 +134,36 @@ export default function DirectoryPage() {
                       </span>
                     ))}
                   </div>
+
+                  {hasLinks ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {propertyDetails?.website ? (
+                        <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-[11px] text-emerald-100">
+                          Website
+                        </span>
+                      ) : null}
+                      {socialLinks?.instagramUrl ? (
+                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
+                          Instagram
+                        </span>
+                      ) : null}
+                      {socialLinks?.facebookUrl ? (
+                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
+                          Facebook
+                        </span>
+                      ) : null}
+                      {socialLinks?.tiktokUrl ? (
+                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
+                          TikTok
+                        </span>
+                      ) : null}
+                      {socialLinks?.youtubeUrl ? (
+                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
+                          YouTube
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="mt-6 flex flex-wrap gap-3">
                     <a
