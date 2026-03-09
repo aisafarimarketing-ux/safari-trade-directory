@@ -1,5 +1,6 @@
 import { listings } from "../../../data/listings";
 import { companies } from "../../../data/companies";
+import { isPublicListing } from "../../../lib/listing-visibility";
 
 type ProfilePageProps = {
   params: {
@@ -9,7 +10,7 @@ type ProfilePageProps = {
 
 export default function ProfilePage({ params }: ProfilePageProps) {
   const listing = listings.find(
-    (item) => item.slug === params.slug && item.published,
+    (item) => item.slug === params.slug && isPublicListing(item),
   );
 
   if (!listing) {
@@ -23,7 +24,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             Profile not found
           </h1>
           <p className="mt-4 max-w-2xl text-white/65">
-            This trade profile does not exist yet or the link is no longer active.
+            This trade profile does not exist yet or the link is no longer
+            active.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -46,12 +48,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     );
   }
 
-  const listing = listings.find(
-  (item) =>
-    item.slug === params.slug &&
-    item.published &&
-    item.accountStatus === "active",
-);
+  const company = companies.find((item) => item.slug === listing.companySlug);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -127,8 +124,38 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             </div>
 
             <div className="lg:pt-8">
-              <div className="rounded-[36px] border border-white/10 bg-gradient-to-br from-white/[0.10] to-white/[0.03] p-5 shadow-2xl">
-                <div className="aspect-[4/5] rounded-[24px] border border-white/10 bg-neutral-900/70" />
+              <div className="overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-br from-white/[0.10] to-white/[0.03] p-5 shadow-2xl">
+                <div className="relative aspect-[4/5] rounded-[24px] border border-white/10 bg-neutral-900/70">
+                  {listing.coverImage ? (
+                    <>
+                      <img
+                        src={listing.coverImage}
+                        alt={`${listing.name} cover`}
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/10 to-transparent" />
+                    </>
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 bg-gradient-to-br from-amber-300/15 via-white/5 to-emerald-300/10" />
+                      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" />
+                    </>
+                  )}
+
+                  <div className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
+                    {listing.logoImage ? (
+                      <img
+                        src={listing.logoImage}
+                        alt={`${listing.name} logo`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="px-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                        {listing.name.slice(0, 2)}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
                 <div className="mt-5 flex items-center justify-between">
                   <div>
@@ -177,6 +204,11 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             <DataBlock
               title="Travel Months"
               items={listing.matchAttributes.travelMonths}
+            />
+
+            <DataBlock
+              title="Destinations"
+              items={listing.matchAttributes.destinations}
             />
 
             <div className="rounded-[32px] border border-white/10 bg-white/[0.03] p-8">
@@ -236,6 +268,18 @@ function DataBlock({
   title: string;
   items: string[];
 }) {
+  if (!items.length) {
+    return (
+      <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8">
+        <p className="text-sm uppercase tracking-[0.18em] text-white/45">
+          {title}
+        </p>
+
+        <p className="mt-5 text-sm text-white/60">No information yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8">
       <p className="text-sm uppercase tracking-[0.18em] text-white/45">
