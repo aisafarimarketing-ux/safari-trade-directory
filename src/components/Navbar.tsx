@@ -1,51 +1,27 @@
 export default function Navbar() {
   return (
     <nav className="w-full border-b border-white/10 bg-neutral-950 text-white">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-
-        {/* Logo */}
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
         <a href="/" className="text-lg font-semibold tracking-tight">
           SafariTrade
         </a>
 
-        {/* Navigation */}
         <div className="flex items-center gap-6 text-sm font-medium">
-
-          <a
-            href="/match"
-            className="text-white/70 hover:text-white transition"
-          >
+          <a href="/match" className="text-white/70 transition hover:text-white">
             Match
           </a>
-
-          <a
-            href="/compare"
-            className="text-white/70 hover:text-white transition"
-          >
+          <a href="/compare" className="text-white/70 transition hover:text-white">
             Compare
           </a>
-
-          <a
-            href="/directory"
-            className="text-white/70 hover:text-white transition"
-          >
+          <a href="/directory" className="text-white/70 transition hover:text-white">
             Directory
           </a>
-
-          <a
-            href="/companies"
-            className="text-white/70 hover:text-white transition"
-          >
+          <a href="/companies/nyumbani-collection" className="text-white/70 transition hover:text-white">
             Companies
           </a>
-
-          <a
-            href="/workspace"
-            className="text-white/70 hover:text-white transition"
-          >
+          <a href="/workspace" className="text-white/70 transition hover:text-white">
             Workspace
           </a>
-
         </div>
       </div>
     </nav>
