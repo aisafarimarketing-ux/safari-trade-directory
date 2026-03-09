@@ -1,7 +1,12 @@
+import { listings } from "../data/listings";
+
 export default function HomePage() {
+  const featuredListings = listings
+    .filter((listing) => listing.published && listing.featured)
+    .slice(0, 3);
+
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
-      {/* Hero */}
       <section className="relative overflow-hidden border-b border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.14),transparent_30%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.10),transparent_24%),linear-gradient(to_bottom,rgba(255,255,255,0.03),transparent)]" />
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:56px_56px] opacity-20" />
@@ -86,7 +91,74 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Platform tools */}
+      <section className="mx-auto max-w-7xl px-6 py-20 md:px-10">
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-white/40">
+              Featured Listings
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
+              Trade-ready safari listings
+            </h2>
+          </div>
+          <a
+            href="/directory"
+            className="hidden rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white md:inline-flex"
+          >
+            View all listings
+          </a>
+        </div>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
+          {featuredListings.map((listing) => (
+            <div
+              key={listing.id}
+              className="rounded-[30px] border border-white/10 bg-white/[0.03] p-6 transition hover:-translate-y-1 hover:bg-white/[0.05]"
+            >
+              <div className="flex items-center justify-between">
+                <span className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1 text-xs uppercase tracking-[0.18em] text-amber-100">
+                  {listing.kind.replace("-", " ")}
+                </span>
+              </div>
+
+              <div className="mt-6 aspect-[4/3] rounded-[24px] border border-white/10 bg-gradient-to-br from-white/10 to-white/0" />
+
+              <h3 className="mt-6 text-2xl font-semibold">{listing.name}</h3>
+              <p className="mt-2 text-sm text-white/55">{listing.location}</p>
+              <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
+                {listing.description}
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {listing.matchAttributes.idealFor.slice(0, 3).map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a
+                  href={`/profiles/${listing.slug}`}
+                  className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
+                >
+                  View Profile
+                </a>
+                <a
+                  href="/compare"
+                  className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Compare
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="border-y border-white/10 bg-white/[0.02]">
         <div className="mx-auto max-w-7xl px-6 py-20 md:px-10">
           <div className="mx-auto max-w-3xl text-center">
@@ -133,72 +205,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Collections */}
-      <section className="mx-auto max-w-7xl px-6 py-20 md:px-10">
-        <p className="text-sm uppercase tracking-[0.2em] text-white/40">
-          Collections
-        </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Umbrella brands and camp portfolios
-        </h2>
-
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
-          <div className="rounded-[30px] border border-white/10 bg-gradient-to-br from-amber-300/[0.10] to-white/[0.03] p-8">
-            <p className="text-sm uppercase tracking-[0.18em] text-white/45">
-              Camp Brand
-            </p>
-            <h3 className="mt-3 text-2xl font-semibold">Nyumbani Collection</h3>
-            <p className="mt-4 text-sm leading-7 text-white/65">
-              One umbrella company can present multiple safari camps under one
-              trade-facing identity.
-            </p>
-
-            <div className="mt-6 flex flex-wrap gap-2">
-              {["Nyumbani Serengeti", "Nyumbani Tarangire", "Nyumbani Ngorongoro"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/75"
-                  >
-                    {item}
-                  </span>
-                ),
-              )}
-            </div>
-
-            <a
-              href="/companies/nyumbani-collection"
-              className="mt-8 inline-flex rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
-            >
-              View Company
-            </a>
-          </div>
-
-          <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8">
-            <p className="text-sm uppercase tracking-[0.18em] text-white/45">
-              What this unlocks
-            </p>
-            <div className="mt-5 space-y-4">
-              {[
-                "One brand can host multiple camps",
-                "Agents can compare camps under one umbrella",
-                "Trade profiles become easier to manage and discover",
-                "Future matching and itinerary tools become more powerful",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm text-white/70"
-                >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="mx-auto max-w-7xl px-6 pb-24 md:px-10">
+      <section className="mx-auto max-w-7xl px-6 pb-24 pt-20 md:px-10">
         <div className="rounded-[36px] border border-white/10 bg-gradient-to-br from-emerald-300/[0.12] via-white/[0.04] to-white/[0.02] p-8 text-center md:p-12">
           <p className="text-sm uppercase tracking-[0.2em] text-white/45">
             Start Planning
