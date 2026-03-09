@@ -16,6 +16,10 @@ export type TradeProfile = {
   type: string;
   description: string;
   companySlug: string;
+  published: boolean;
+  featured: boolean;
+  logoImage?: string;
+  coverImage?: string;
   matchAttributes: MatchAttributes;
 };
 
@@ -28,6 +32,10 @@ export const profiles: TradeProfile[] = [
     description:
       "A hosted safari trade profile for Nyumbani Serengeti. Trade partners can view location, brand details, and contact information here.",
     companySlug: "nyumbani-collection",
+    published: true,
+    featured: true,
+    logoImage: "",
+    coverImage: "",
     matchAttributes: {
       idealFor: [
         "honeymoon",
@@ -54,6 +62,10 @@ export const profiles: TradeProfile[] = [
     description:
       "A hosted safari trade profile for Nyumbani Tarangire. This listing represents one camp within the Nyumbani Collection.",
     companySlug: "nyumbani-collection",
+    published: true,
+    featured: true,
+    logoImage: "",
+    coverImage: "",
     matchAttributes: {
       idealFor: [
         "family-safari",
