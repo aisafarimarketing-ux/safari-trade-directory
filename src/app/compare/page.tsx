@@ -3,17 +3,24 @@
 import { useSearchParams } from "next/navigation";
 import { listings } from "../../data/listings";
 import { companies } from "../../data/companies";
+import { isPublicListing } from "../../lib/listing-visibility";
 
 export default function ComparePage() {
   const searchParams = useSearchParams();
   const items = searchParams.get("items");
 
+  const defaultSlugs = ["nyumbani-serengeti", "nyumbani-tarangire"];
+
   const selectedSlugs = items
-    ? items.split(",").map((slug) => slug.trim()).filter(Boolean)
-    : ["nyumbani-serengeti", "nyumbani-tarangire"];
+    ? items
+        .split(",")
+        .map((slug) => slug.trim())
+        .filter(Boolean)
+    : defaultSlugs;
 
   const selectedListings = listings.filter(
-    (listing) => listing.published && selectedSlugs.includes(listing.slug),
+    (listing) =>
+      isPublicListing(listing) && selectedSlugs.includes(listing.slug),
   );
 
   const getCompanyName = (companySlug?: string) => {
@@ -63,7 +70,8 @@ export default function ComparePage() {
               Choose at least two listings to compare
             </h2>
             <p className="mt-4 max-w-2xl text-white/65">
-              Go back to Match Safari, select listings, and then open Compare Mode.
+              Go back to Match Safari, select listings, and then open Compare
+              Mode.
             </p>
 
             <div className="mt-8">
@@ -94,10 +102,46 @@ export default function ComparePage() {
                     <p className="text-xs uppercase tracking-[0.18em] text-white/40">
                       {listing.kind.replace("-", " ")}
                     </p>
-                    <h2 className="mt-3 text-2xl font-semibold">{listing.name}</h2>
-                    <p className="mt-2 text-sm text-white/55">{listing.location}</p>
+                    <h2 className="mt-3 text-2xl font-semibold">
+                      {listing.name}
+                    </h2>
+                    <p className="mt-2 text-sm text-white/55">
+                      {listing.location}
+                    </p>
 
-                    <div className="mt-6 aspect-[4/3] rounded-[22px] border border-white/10 bg-black/20" />
+                    <div className="mt-6 overflow-hidden rounded-[22px] border border-white/10 bg-black/20">
+                      <div className="relative aspect-[4/3] bg-neutral-900">
+                        {listing.coverImage ? (
+                          <>
+                            <img
+                              src={listing.coverImage}
+                              alt={`${listing.name} cover`}
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/15 to-transparent" />
+                          </>
+                        ) : (
+                          <>
+                            <div className="absolute inset-0 bg-gradient-to-br from-amber-300/15 via-white/5 to-emerald-300/10" />
+                            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" />
+                          </>
+                        )}
+
+                        <div className="absolute bottom-4 left-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
+                          {listing.logoImage ? (
+                            <img
+                              src={listing.logoImage}
+                              alt={`${listing.name} logo`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="px-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                              {listing.name.slice(0, 2)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="mt-6 flex flex-wrap gap-3">
                       <a
@@ -224,6 +268,14 @@ function CompareValue({ children }: { children: React.ReactNode }) {
 }
 
 function CompareTags({ items }: { items: string[] }) {
+  if (!items.length) {
+    return (
+      <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+        —
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
       <div className="flex flex-wrap gap-2">
