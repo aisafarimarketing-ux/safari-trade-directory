@@ -24,9 +24,9 @@ export default function DirectoryPage() {
       <section className="mx-auto max-w-7xl px-6 py-12 md:px-10">
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {publishedListings.map((listing) => {
-            const company = companies.find(
-              (item) => item.slug === listing.companySlug,
-            );
+           const publishedListings = listings.filter(
+  (listing) => listing.published && listing.accountStatus === "active",
+);
 
             return (
               <div
