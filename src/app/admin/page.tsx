@@ -118,6 +118,18 @@ type Camp = {
   taStyle: "dots" | "stars";
 };
 
+type SocialFieldKey =
+  | "facebookUrl"
+  | "instagramUrl"
+  | "tiktokUrl"
+  | "youtubeUrl";
+
+type ContactFieldKey =
+  | "contactName"
+  | "contactTitle"
+  | "contactCompany"
+  | "contactPhone";
+
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 const DEFAULT_TA_LOGO =
@@ -430,6 +442,24 @@ export default function RestorationSafariAdmin() {
     src: string;
     title: string;
   } | null>(null);
+
+  const socialFields: Array<{
+    key: SocialFieldKey;
+    icon: React.ReactNode;
+    label: string;
+  }> = [
+    { key: "facebookUrl", icon: <Facebook size={14} />, label: "Facebook" },
+    { key: "instagramUrl", icon: <Instagram size={14} />, label: "Instagram" },
+    { key: "tiktokUrl", icon: <Music2 size={14} />, label: "TikTok" },
+    { key: "youtubeUrl", icon: <Youtube size={14} />, label: "YouTube" },
+  ];
+
+  const contactFields: Array<{ k: ContactFieldKey; ph: string }> = [
+    { k: "contactName", ph: "Contact name" },
+    { k: "contactTitle", ph: "Title" },
+    { k: "contactCompany", ph: "Company" },
+    { k: "contactPhone", ph: "Phone" },
+  ];
 
   const toggleBlock = (key: keyof typeof visibleBlocks) => {
     setVisibleBlocks((p) => ({ ...p, [key]: !p[key] }));
@@ -1492,20 +1522,7 @@ export default function RestorationSafariAdmin() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  {[
-                    {
-                      key: "facebookUrl",
-                      icon: <Facebook size={14} />,
-                      label: "Facebook",
-                    },
-                    {
-                      key: "instagramUrl",
-                      icon: <Instagram size={14} />,
-                      label: "Instagram",
-                    },
-                    { key: "tiktokUrl", icon: <Music2 size={14} />, label: "TikTok" },
-                    { key: "youtubeUrl", icon: <Youtube size={14} />, label: "YouTube" },
-                  ].map((item) => (
+                  {socialFields.map((item) => (
                     <div
                       key={item.key}
                       className="flex items-center gap-2 rounded-xl border px-3 py-2"
@@ -1518,9 +1535,9 @@ export default function RestorationSafariAdmin() {
                       <span style={{ color: theme.highlight }}>{item.icon}</span>
                       <input
                         className="w-36 bg-transparent text-[10px] font-black outline-none md:w-44"
-                        value={(camp as Record<string, string>)[item.key]}
+                        value={camp[item.key]}
                         onChange={(e) =>
-                          updateField(item.key as keyof Camp, e.target.value as never)
+                          updateField(item.key, e.target.value)
                         }
                         placeholder={item.label}
                         style={{ color: theme.accent }}
@@ -2636,19 +2653,14 @@ export default function RestorationSafariAdmin() {
                   headerStyle={headerStyle}
                 >
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {[
-                      { k: "contactName", ph: "Contact name" },
-                      { k: "contactTitle", ph: "Title" },
-                      { k: "contactCompany", ph: "Company" },
-                      { k: "contactPhone", ph: "Phone" },
-                    ].map((f) => (
+                    {contactFields.map((f) => (
                       <input
                         key={f.k}
                         className="rounded-xl border bg-transparent p-3 text-xs font-semibold outline-none"
                         style={cardStyle}
-                        value={(camp as Record<string, string>)[f.k] as string}
+                        value={camp[f.k]}
                         onChange={(e) =>
-                          updateField(f.k as keyof Camp, e.target.value as never)
+                          updateField(f.k, e.target.value)
                         }
                         placeholder={f.ph}
                       />
