@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Save,
   Camera,
@@ -35,6 +36,8 @@ import {
   Instagram,
   Music2,
   Youtube,
+  ArrowLeft,
+  ExternalLink,
 } from "lucide-react";
 
 type RoomKey = "family" | "double" | "single";
@@ -245,43 +248,45 @@ function CompactPanel({
       className="overflow-hidden rounded-2xl border shadow-[0_10px_30px_rgba(0,0,0,0.06)]"
       style={style}
     >
-      <div
-        className="flex w-full items-center justify-between gap-3 px-4 py-3"
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
         style={headerStyle}
+        aria-expanded={open}
       >
-        <div className="text-left">
+        <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-[0.28em] opacity-80">
             {title}
           </div>
           {subtitle ? (
-            <div className="mt-0.5 text-xs font-semibold opacity-75">
+            <div className="mt-0.5 truncate text-xs font-semibold opacity-75">
               {subtitle}
             </div>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           {right}
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
+          <span
             className="rounded-xl border p-2"
             style={{
               borderColor:
                 (style?.borderColor as string) || "rgba(0,0,0,0.12)",
               backgroundColor: "rgba(255,255,255,0.75)",
             }}
-            aria-expanded={open}
-            title={open ? "Collapse" : "Expand"}
           >
             {open ? (
               <ChevronUp size={16} className="opacity-70" />
             ) : (
               <ChevronDown size={16} className="opacity-70" />
             )}
-          </button>
+          </span>
         </div>
-      </div>
+      </button>
 
       {open && <div className="px-4 py-3">{children}</div>}
     </div>
@@ -398,6 +403,7 @@ function RatingPips({
 export default function RestorationSafariAdmin() {
   const [isPreview, setIsPreview] = useState(false);
   const [selectedCampIndex, setSelectedCampIndex] = useState(0);
+  const [sendState, setSendState] = useState<"idle" | "sending">("idle");
 
   const [theme, setTheme] = useState({
     pageBg: "#F4F2EE",
@@ -408,18 +414,18 @@ export default function RestorationSafariAdmin() {
   });
 
   const [blockColors, setBlockColors] = useState({
-    header: "#9E5A24",
-    tripadvisor: "#34A853",
-    tradeDetails: "#9E5A24",
-    matrix: "#9E5A24",
-    inclusions: "#16A34A",
-    exclusions: "#DC2626",
-    experiences: "#7C3AED",
-    offers: "#9E5A24",
-    terms: "#64748B",
-    leadCapture: "#2563EB",
-    contactCard: "#0F766E",
-    downloadables: "#CA8A04",
+    header: "#F6E7D8",
+    tripadvisor: "#E7F6EA",
+    tradeDetails: "#F6E7D8",
+    matrix: "#F4EFE7",
+    inclusions: "#E8F7EC",
+    exclusions: "#FCE9E9",
+    experiences: "#EFE8FB",
+    offers: "#F8EEDF",
+    terms: "#EEF2F7",
+    leadCapture: "#EAF1FF",
+    contactCard: "#E7F6F4",
+    downloadables: "#FBF3DD",
   });
 
   const [visibleBlocks, setVisibleBlocks] = useState({
@@ -504,6 +510,13 @@ export default function RestorationSafariAdmin() {
 
   const camp = portfolio[selectedCampIndex] ?? portfolio[0];
 
+  const profileSlug =
+    camp.name
+      ?.toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-") || "new-camp";
+
   const updateField = <K extends keyof Camp>(field: K, value: Camp[K]) => {
     setPortfolio((prev) => {
       const next = [...prev];
@@ -552,10 +565,10 @@ export default function RestorationSafariAdmin() {
   const blockCardStyle = (
     key: keyof typeof blockColors,
   ): React.CSSProperties => ({
-    backgroundColor: theme.blockBg,
-    borderColor: blockColors[key] || theme.borderColor,
+    backgroundColor: blockColors[key],
+    borderColor: theme.borderColor,
     color: theme.accent,
-    boxShadow: `0 10px 30px color-mix(in srgb, ${blockColors[key]} 18%, transparent)`,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
   });
 
   const toDataUrl = (file: File) =>
@@ -951,6 +964,62 @@ export default function RestorationSafariAdmin() {
     window.open(`https://wa.me/${digits}?text=${text}`, "_blank");
   };
 
+  const sendLeadEmail = async () => {
+    const to = (camp.enquiryEmail || "").trim();
+    if (!to) {
+      alert("Please set a company enquiry email first.");
+      return;
+    }
+
+    setSendState("sending");
+
+    try {
+      const res = await fetch("/api/contact-exchange", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to,
+          subject: camp.enquirySubject || "Trade Request",
+          fullName: lead.fullName,
+          agency: lead.agency,
+          email: lead.email,
+          phone: lead.phone,
+          message: lead.message,
+          property: camp.name,
+          propertyClass: camp.class,
+          location: camp.locationLabel,
+        }),
+      });
+
+      if (res.ok) {
+        alert("Email sent successfully.");
+        setLead({
+          fullName: "",
+          agency: "",
+          email: "",
+          phone: "",
+          message: "",
+        });
+        setSendState("idle");
+        return;
+      }
+
+      openMailto(leadPayload);
+      alert(
+        "Direct email endpoint is not ready yet. Your mail app has been opened instead.",
+      );
+    } catch {
+      openMailto(leadPayload);
+      alert(
+        "Direct email send is not configured yet. Your mail app has been opened instead.",
+      );
+    } finally {
+      setSendState("idle");
+    }
+  };
+
   return (
     <div
       className="flex min-h-screen font-sans"
@@ -1006,12 +1075,6 @@ export default function RestorationSafariAdmin() {
                   alt="Preview"
                   className="max-h-full max-w-full object-contain"
                 />
-              </div>
-              <div
-                className="mt-2 text-[10px] font-semibold"
-                style={{ color: theme.accent, opacity: 0.65 }}
-              >
-                Tip: press <span style={{ opacity: 0.9 }}>Esc</span> to close.
               </div>
             </div>
           </div>
@@ -1105,9 +1168,62 @@ export default function RestorationSafariAdmin() {
                 backgroundColor: theme.blockBg,
               }}
               type="button"
+              title="Open live preview"
             >
               <Eye size={14} style={{ color: theme.accent }} />
             </button>
+          </div>
+
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setIsPreview(true)}
+              className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+              type="button"
+            >
+              <Eye size={12} />
+              Live Preview
+            </button>
+
+            <Link
+              href="/"
+              className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+            >
+              <Monitor size={12} />
+              Home
+            </Link>
+
+            <button
+              onClick={() => window.history.back()}
+              className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+              type="button"
+            >
+              <ArrowLeft size={12} />
+              Return
+            </button>
+
+            <button
+              onClick={() => setIsPreview(false)}
+              className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+              type="button"
+            >
+              <Save size={12} />
+              Editor
+            </button>
+
+            <a
+              href={`/profiles/${profileSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="col-span-2 flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+            >
+              <ExternalLink size={12} />
+              Public Profile
+            </a>
           </div>
 
           <div className="mb-4">
@@ -1267,7 +1383,7 @@ export default function RestorationSafariAdmin() {
               style={{ borderColor: theme.borderColor }}
             >
               <p className="text-[9px] font-bold uppercase" style={{ opacity: 0.5 }}>
-                Block Colors
+                Block Backgrounds
               </p>
               {Object.entries(blockColors).map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between gap-2">
@@ -1304,15 +1420,68 @@ export default function RestorationSafariAdmin() {
       )}
 
       <main className={`flex-1 transition-all ${!isPreview ? "ml-72" : "ml-0"}`}>
-        {isPreview && (
-          <button
-            onClick={() => setIsPreview(false)}
-            className="fixed right-4 top-4 z-[200] flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-[10px] font-black uppercase text-white shadow-2xl"
-            type="button"
-          >
-            <Monitor size={14} /> Open Admin
-          </button>
-        )}
+        <div className="sticky top-0 z-40 border-b px-4 py-3 sm:px-6" style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}>
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setIsPreview((v) => !v)}
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={cardStyle}
+                type="button"
+              >
+                {isPreview ? <EyeOff size={12} /> : <Eye size={12} />}
+                {isPreview ? "Editor View" : "Live Preview"}
+              </button>
+
+              <Link
+                href="/"
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={cardStyle}
+              >
+                <Monitor size={12} />
+                Home
+              </Link>
+
+              <button
+                onClick={() => window.history.back()}
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={cardStyle}
+                type="button"
+              >
+                <ArrowLeft size={12} />
+                Return
+              </button>
+
+              <button
+                onClick={() => setIsPreview(false)}
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={cardStyle}
+                type="button"
+              >
+                <Save size={12} />
+                Editor
+              </button>
+
+              <a
+                href={`/profiles/${profileSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+                style={cardStyle}
+              >
+                <ExternalLink size={12} />
+                Public Profile
+              </a>
+            </div>
+
+            <div
+              className="text-[10px] font-black uppercase tracking-widest"
+              style={{ color: theme.accent, opacity: 0.55 }}
+            >
+              {camp.name}
+            </div>
+          </div>
+        </div>
 
         {visibleBlocks.header && (
           <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6 sm:pt-6">
@@ -1550,9 +1719,9 @@ export default function RestorationSafariAdmin() {
                   <div
                     className="mt-3 w-full max-w-3xl cursor-pointer rounded-2xl border px-4 py-3"
                     style={{
-                      borderColor: blockColors.tripadvisor,
-                      backgroundColor: "rgba(255,255,255,0.65)",
-                      boxShadow: `0 10px 30px color-mix(in srgb, ${blockColors.tripadvisor} 18%, transparent)`,
+                      borderColor: theme.borderColor,
+                      backgroundColor: blockColors.tripadvisor,
+                      boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
                     }}
                     onClick={openTripadvisor}
                     title="Open Tripadvisor"
@@ -1926,10 +2095,10 @@ export default function RestorationSafariAdmin() {
                           className="mt-3 text-sm leading-7"
                           style={{ color: theme.accent, opacity: 0.72 }}
                         >
-                          Hovering any room thumbnail now opens a scaled preview in
-                          this property section, while click still opens the full
-                          modal for closer review. This keeps the editor fast on
-                          desktop and still works cleanly on phones and tablets.
+                          Hovering any room thumbnail opens a scaled preview in this
+                          property section, while click still opens the full image
+                          modal. Your right-click and double-click upload behavior
+                          remains unchanged.
                         </p>
                       </div>
                     </div>
@@ -2278,11 +2447,14 @@ export default function RestorationSafariAdmin() {
                         className="flex min-w-[180px] flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg"
                         style={highlightBg}
                         type="button"
-                        onClick={() => openMailto(leadPayload)}
+                        onClick={sendLeadEmail}
+                        disabled={sendState === "sending"}
                         title="Send request by email"
                       >
                         <Mail size={14} />
-                        <span className="truncate">{camp.leadCta}</span>
+                        <span className="truncate">
+                          {sendState === "sending" ? "Sending..." : camp.leadCta}
+                        </span>
                       </button>
 
                       <button
@@ -2354,16 +2526,16 @@ export default function RestorationSafariAdmin() {
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {visibleBlocks.downloadables && (
                       <div
-                        className="rounded-xl border p-3"
+                        className="rounded-2xl border p-3 sm:p-4"
                         style={{
-                          ...borderStyle,
-                          borderColor: blockColors.downloadables,
+                          borderColor: theme.borderColor,
+                          backgroundColor: blockColors.downloadables,
                         }}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <div
                             className="text-[10px] font-black uppercase tracking-widest opacity-70"
                             style={{ color: theme.accent }}
@@ -2387,7 +2559,7 @@ export default function RestorationSafariAdmin() {
                               className="rounded-xl border p-2"
                               style={cardStyle}
                               onClick={() => downloadableFileRef.current?.click()}
-                              title="Upload file (PDF/images)"
+                              title="Upload file"
                             >
                               <Paperclip size={14} style={highlightText} />
                             </button>
@@ -2403,77 +2575,87 @@ export default function RestorationSafariAdmin() {
                           </div>
                         </div>
 
-                        <div className="mt-2 space-y-2">
-                          {(camp.downloadables ?? []).slice(0, 6).map((d) => (
-                            <div key={d.id} className="group flex items-center gap-2">
-                              <button
-                                type="button"
-                                className="rounded-xl border p-2"
-                                style={cardStyle}
-                                title="Open"
-                                onClick={() => openDownloadable(d)}
-                              >
-                                {d.type === "link" ? (
-                                  <LinkIcon size={14} style={highlightText} />
-                                ) : (
-                                  <Download size={14} style={highlightText} />
-                                )}
-                              </button>
+                        <div className="mt-3 space-y-2">
+                          {(camp.downloadables ?? []).length === 0 ? (
+                            <div
+                              className="rounded-xl border p-3 text-xs font-semibold"
+                              style={{ ...cardStyle, opacity: 0.7 }}
+                            >
+                              No downloadables yet.
+                            </div>
+                          ) : null}
 
-                              <input
-                                className="flex-1 bg-transparent text-xs font-semibold outline-none"
-                                style={{ color: theme.accent, opacity: 0.9 }}
-                                value={d.title}
-                                onChange={(e) =>
-                                  updateDownloadable(d.id, { title: e.target.value })
-                                }
-                              />
+                          {(camp.downloadables ?? []).slice(0, 8).map((d) => (
+                            <div
+                              key={d.id}
+                              className="rounded-xl border p-3"
+                              style={cardStyle}
+                            >
+                              <div className="flex items-start gap-2">
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded-xl border p-2"
+                                  style={cardStyle}
+                                  title="Open"
+                                  onClick={() => openDownloadable(d)}
+                                >
+                                  {d.type === "link" ? (
+                                    <LinkIcon size={14} style={highlightText} />
+                                  ) : (
+                                    <Download size={14} style={highlightText} />
+                                  )}
+                                </button>
 
-                              <button
-                                type="button"
-                                className="rounded-xl border p-2 opacity-0 group-hover:opacity-100"
-                                style={cardStyle}
-                                onClick={() => removeDownloadable(d.id)}
-                                title="Remove"
-                              >
-                                <Trash2 size={14} style={{ color: "#f87171" }} />
-                              </button>
+                                <div className="min-w-0 flex-1">
+                                  <input
+                                    className="w-full bg-transparent text-xs font-semibold outline-none"
+                                    style={{ color: theme.accent, opacity: 0.9 }}
+                                    value={d.title}
+                                    onChange={(e) =>
+                                      updateDownloadable(d.id, { title: e.target.value })
+                                    }
+                                  />
+
+                                  {d.type === "link" ? (
+                                    <input
+                                      className="mt-2 w-full bg-transparent text-[10px] font-semibold outline-none"
+                                      style={{ color: theme.accent, opacity: 0.75 }}
+                                      value={d.url}
+                                      onChange={(e) =>
+                                        updateDownloadable(d.id, { url: e.target.value })
+                                      }
+                                    />
+                                  ) : (
+                                    <div
+                                      className="mt-2 text-[10px] font-semibold"
+                                      style={{ color: theme.accent, opacity: 0.65 }}
+                                    >
+                                      {d.fileName || "Uploaded file"}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded-xl border p-2"
+                                  style={cardStyle}
+                                  onClick={() => removeDownloadable(d.id)}
+                                  title="Remove"
+                                >
+                                  <Trash2 size={14} style={{ color: "#f87171" }} />
+                                </button>
+                              </div>
                             </div>
                           ))}
-
-                          {(camp.downloadables ?? [])
-                            .filter((d) => d.type === "link")
-                            .slice(0, 2)
-                            .map((d) => (
-                              <div
-                                key={`${d.id}-url`}
-                                className="flex items-center gap-2"
-                              >
-                                <div
-                                  className="text-[9px] font-black uppercase tracking-widest"
-                                  style={{ color: theme.accent, opacity: 0.5 }}
-                                >
-                                  URL
-                                </div>
-                                <input
-                                  className="flex-1 bg-transparent text-[10px] font-semibold outline-none"
-                                  style={{ color: theme.accent, opacity: 0.85 }}
-                                  value={d.url}
-                                  onChange={(e) =>
-                                    updateDownloadable(d.id, { url: e.target.value })
-                                  }
-                                />
-                              </div>
-                            ))}
                         </div>
                       </div>
                     )}
 
                     <div
-                      className="rounded-xl border p-3"
+                      className="rounded-2xl border p-3 sm:p-4"
                       style={{
-                        ...borderStyle,
-                        borderColor: blockColors.contactCard,
+                        borderColor: theme.borderColor,
+                        backgroundColor: blockColors.contactCard,
                       }}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2607,7 +2789,7 @@ export default function RestorationSafariAdmin() {
                             className="flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-[10px] font-black uppercase tracking-widest"
                             style={cardStyle}
                             type="button"
-                            title="Share my contacts"
+                            title="Share contacts"
                           >
                             <Share2 size={14} />
                             Share
