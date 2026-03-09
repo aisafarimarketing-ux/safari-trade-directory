@@ -2,13 +2,13 @@ import { listings } from "../data/listings";
 
 export default function HomePage() {
   const featuredListings = listings
-  .filter(
-    (listing) =>
-      listing.published &&
-      listing.featured &&
-      listing.accountStatus === "active",
-  )
-  .slice(0, 3);
+    .filter(
+      (listing) =>
+        listing.published &&
+        listing.featured &&
+        listing.accountStatus === "active",
+    )
+    .slice(0, 3);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -118,46 +118,78 @@ export default function HomePage() {
           {featuredListings.map((listing) => (
             <div
               key={listing.id}
-              className="rounded-[30px] border border-white/10 bg-white/[0.03] p-6 transition hover:-translate-y-1 hover:bg-white/[0.05]"
+              className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] transition hover:-translate-y-1 hover:bg-white/[0.05]"
             >
-              <div className="flex items-center justify-between">
-                <span className="rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1 text-xs uppercase tracking-[0.18em] text-amber-100">
-                  {listing.kind.replace("-", " ")}
-                </span>
-              </div>
+              <div className="relative aspect-[4/3] border-b border-white/10 bg-neutral-900">
+                {listing.coverImage ? (
+                  <>
+                    <img
+                      src={listing.coverImage}
+                      alt={`${listing.name} cover`}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/20 to-transparent" />
+                  </>
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-300/15 via-white/5 to-emerald-300/10" />
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" />
+                  </>
+                )}
 
-              <div className="mt-6 aspect-[4/3] rounded-[24px] border border-white/10 bg-gradient-to-br from-white/10 to-white/0" />
-
-              <h3 className="mt-6 text-2xl font-semibold">{listing.name}</h3>
-              <p className="mt-2 text-sm text-white/55">{listing.location}</p>
-              <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
-                {listing.description}
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {listing.matchAttributes.idealFor.slice(0, 3).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
-                  >
-                    {tag}
+                <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-4">
+                  <span className="rounded-full border border-amber-300/20 bg-black/35 px-3 py-1 text-xs uppercase tracking-[0.18em] text-amber-100 backdrop-blur">
+                    {listing.kind.replace("-", " ")}
                   </span>
-                ))}
+
+                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
+                    {listing.logoImage ? (
+                      <img
+                        src={listing.logoImage}
+                        alt={`${listing.name} logo`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="px-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                        {listing.name.slice(0, 2)}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                <a
-                  href={`/profiles/${listing.slug}`}
-                  className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
-                >
-                  View Profile
-                </a>
-                <a
-                  href="/compare"
-                  className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Compare
-                </a>
+              <div className="p-6">
+                <h3 className="text-2xl font-semibold">{listing.name}</h3>
+                <p className="mt-2 text-sm text-white/55">{listing.location}</p>
+                <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
+                  {listing.description}
+                </p>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {listing.matchAttributes.idealFor.slice(0, 3).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <a
+                    href={`/profiles/${listing.slug}`}
+                    className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
+                  >
+                    View Profile
+                  </a>
+                  <a
+                    href="/compare"
+                    className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Compare
+                  </a>
+                </div>
               </div>
             </div>
           ))}
@@ -203,7 +235,9 @@ export default function HomePage() {
                 className="rounded-[28px] border border-white/10 bg-neutral-900 p-6"
               >
                 <h3 className="text-lg font-semibold">{item.title}</h3>
-                <p className="mt-3 text-sm leading-7 text-white/60">{item.text}</p>
+                <p className="mt-3 text-sm leading-7 text-white/60">
+                  {item.text}
+                </p>
               </div>
             ))}
           </div>
@@ -219,8 +253,8 @@ export default function HomePage() {
             The workspace for safari professionals
           </h2>
           <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-white/65">
-            Match camps, compare properties, and move toward full safari planning
-            from one platform.
+            Match camps, compare properties, and move toward full safari
+            planning from one platform.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
