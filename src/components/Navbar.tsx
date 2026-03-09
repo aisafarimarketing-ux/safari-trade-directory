@@ -16,11 +16,20 @@ export default function Navbar() {
           <a href="/directory" className="text-white/70 transition hover:text-white">
             Directory
           </a>
-          <a href="/companies/nyumbani-collection" className="text-white/70 transition hover:text-white">
+          <a
+            href="/companies/nyumbani-collection"
+            className="text-white/70 transition hover:text-white"
+          >
             Companies
           </a>
           <a href="/workspace" className="text-white/70 transition hover:text-white">
             Workspace
+          </a>
+          <a
+            href="/login"
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-white transition hover:bg-white/10"
+          >
+            Login
           </a>
         </div>
       </div>
