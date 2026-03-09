@@ -1,9 +1,19 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import { profiles } from "../../data/profiles";
 import { companies } from "../../data/companies";
 
 export default function ComparePage() {
+  const searchParams = useSearchParams();
+  const items = searchParams.get("items");
+
+  const selectedSlugs = items
+    ? items.split(",").map((slug) => slug.trim()).filter(Boolean)
+    : ["nyumbani-serengeti", "nyumbani-tarangire"];
+
   const selectedProfiles = profiles.filter((p) =>
-    ["nyumbani-serengeti", "nyumbani-tarangire"].includes(p.slug),
+    selectedSlugs.includes(p.slug),
   );
 
   const getCompanyName = (companySlug: string) => {
@@ -43,123 +53,148 @@ export default function ComparePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12 md:px-10">
-        <div className="overflow-x-auto">
-          <div className="min-w-[980px] rounded-[32px] border border-white/10 bg-white/[0.03] p-4 md:p-6">
-            <div
-              className="grid gap-4"
-              style={{ gridTemplateColumns: "240px repeat(2, minmax(0, 1fr))" }}
-            >
-              <div />
+        {selectedProfiles.length === 0 ? (
+          <div className="rounded-[32px] border border-white/10 bg-white/[0.03] p-10">
+            <p className="text-sm uppercase tracking-[0.2em] text-white/40">
+              No comparison selected
+            </p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight">
+              Choose at least two camps to compare
+            </h2>
+            <p className="mt-4 max-w-2xl text-white/65">
+              Go back to Match Safari, select camps, and then open Compare Mode.
+            </p>
 
-              {selectedProfiles.map((profile) => (
-                <div
-                  key={profile.slug}
-                  className="rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.03] p-6"
-                >
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/40">
-                    {profile.type}
-                  </p>
-                  <h2 className="mt-3 text-2xl font-semibold">{profile.name}</h2>
-                  <p className="mt-2 text-sm text-white/55">{profile.location}</p>
-
-                  <div className="mt-6 aspect-[4/3] rounded-[22px] border border-white/10 bg-black/20" />
-
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <a
-                      href={`/profiles/${profile.slug}`}
-                      className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
-                    >
-                      View Profile
-                    </a>
-                    <a
-                      href={`/companies/${profile.companySlug}`}
-                      className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Company
-                    </a>
-                  </div>
-                </div>
-              ))}
-
-              <CompareLabel title="Company" />
-              {selectedProfiles.map((profile) => (
-                <CompareValue key={`${profile.slug}-company`}>
-                  {getCompanyName(profile.companySlug)}
-                </CompareValue>
-              ))}
-
-              <CompareLabel title="Description" />
-              {selectedProfiles.map((profile) => (
-                <CompareValue key={`${profile.slug}-description`}>
-                  {profile.description}
-                </CompareValue>
-              ))}
-
-              <CompareLabel title="Ideal for" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-ideal`}
-                  items={profile.matchAttributes.idealFor}
-                />
-              ))}
-
-              <CompareLabel title="Budget bands" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-budget`}
-                  items={profile.matchAttributes.budgetBands}
-                />
-              ))}
-
-              <CompareLabel title="Destinations" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-destinations`}
-                  items={profile.matchAttributes.destinations}
-                />
-              ))}
-
-              <CompareLabel title="Travel months" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-months`}
-                  items={profile.matchAttributes.travelMonths}
-                />
-              ))}
-
-              <CompareLabel title="Experiences" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-experiences`}
-                  items={profile.matchAttributes.experiences}
-                />
-              ))}
-
-              <CompareLabel title="Style tags" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-style`}
-                  items={profile.matchAttributes.styleTags}
-                />
-              ))}
-
-              <CompareLabel title="Suitability" />
-              {selectedProfiles.map((profile) => (
-                <CompareTags
-                  key={`${profile.slug}-suitability`}
-                  items={profile.matchAttributes.suitability}
-                />
-              ))}
-
-              <CompareLabel title="Fit notes" />
-              {selectedProfiles.map((profile) => (
-                <CompareValue key={`${profile.slug}-notes`}>
-                  {profile.matchAttributes.customFitNotes || "—"}
-                </CompareValue>
-              ))}
+            <div className="mt-8">
+              <a
+                href="/match"
+                className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-neutral-950"
+              >
+                Go to Match
+              </a>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="min-w-[980px] rounded-[32px] border border-white/10 bg-white/[0.03] p-4 md:p-6">
+              <div
+                className="grid gap-4"
+                style={{
+                  gridTemplateColumns: `240px repeat(${selectedProfiles.length}, minmax(0, 1fr))`,
+                }}
+              >
+                <div />
+
+                {selectedProfiles.map((profile) => (
+                  <div
+                    key={profile.slug}
+                    className="rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.03] p-6"
+                  >
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">
+                      {profile.type}
+                    </p>
+                    <h2 className="mt-3 text-2xl font-semibold">{profile.name}</h2>
+                    <p className="mt-2 text-sm text-white/55">{profile.location}</p>
+
+                    <div className="mt-6 aspect-[4/3] rounded-[22px] border border-white/10 bg-black/20" />
+
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <a
+                        href={`/profiles/${profile.slug}`}
+                        className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
+                      >
+                        View Profile
+                      </a>
+                      <a
+                        href={`/companies/${profile.companySlug}`}
+                        className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        Company
+                      </a>
+                    </div>
+                  </div>
+                ))}
+
+                <CompareLabel title="Company" />
+                {selectedProfiles.map((profile) => (
+                  <CompareValue key={`${profile.slug}-company`}>
+                    {getCompanyName(profile.companySlug)}
+                  </CompareValue>
+                ))}
+
+                <CompareLabel title="Description" />
+                {selectedProfiles.map((profile) => (
+                  <CompareValue key={`${profile.slug}-description`}>
+                    {profile.description}
+                  </CompareValue>
+                ))}
+
+                <CompareLabel title="Ideal for" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-ideal`}
+                    items={profile.matchAttributes.idealFor}
+                  />
+                ))}
+
+                <CompareLabel title="Budget bands" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-budget`}
+                    items={profile.matchAttributes.budgetBands}
+                  />
+                ))}
+
+                <CompareLabel title="Destinations" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-destinations`}
+                    items={profile.matchAttributes.destinations}
+                  />
+                ))}
+
+                <CompareLabel title="Travel months" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-months`}
+                    items={profile.matchAttributes.travelMonths}
+                  />
+                ))}
+
+                <CompareLabel title="Experiences" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-experiences`}
+                    items={profile.matchAttributes.experiences}
+                  />
+                ))}
+
+                <CompareLabel title="Style tags" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-style`}
+                    items={profile.matchAttributes.styleTags}
+                  />
+                ))}
+
+                <CompareLabel title="Suitability" />
+                {selectedProfiles.map((profile) => (
+                  <CompareTags
+                    key={`${profile.slug}-suitability`}
+                    items={profile.matchAttributes.suitability}
+                  />
+                ))}
+
+                <CompareLabel title="Fit notes" />
+                {selectedProfiles.map((profile) => (
+                  <CompareValue key={`${profile.slug}-notes`}>
+                    {profile.matchAttributes.customFitNotes || "—"}
+                  </CompareValue>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
