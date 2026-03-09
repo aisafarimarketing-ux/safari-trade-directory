@@ -1,4 +1,5 @@
 export type ListingKind = "camp" | "tour-operator" | "dmc" | "travel-agent";
+export type AccountStatus = "active" | "paused" | "flagged" | "deleted";
 
 export type MatchAttributes = {
   idealFor: string[];
@@ -13,6 +14,7 @@ export type MatchAttributes = {
 
 export type Listing = {
   id: string;
+  ownerAccountId: string;
   slug: string;
   kind: ListingKind;
   companySlug?: string;
@@ -21,6 +23,7 @@ export type Listing = {
   description: string;
   published: boolean;
   featured: boolean;
+  accountStatus: AccountStatus;
   logoImage?: string;
   coverImage?: string;
   matchAttributes: MatchAttributes;
@@ -29,6 +32,7 @@ export type Listing = {
 export const listings: Listing[] = [
   {
     id: "camp-nyumbani-serengeti",
+    ownerAccountId: "acct-nyumbani",
     slug: "nyumbani-serengeti",
     kind: "camp",
     companySlug: "nyumbani-collection",
@@ -38,6 +42,7 @@ export const listings: Listing[] = [
       "A hosted safari trade profile for Nyumbani Serengeti. Trade partners can view location, brand details, and contact information here.",
     published: true,
     featured: true,
+    accountStatus: "active",
     logoImage: "",
     coverImage: "",
     matchAttributes: {
@@ -60,6 +65,7 @@ export const listings: Listing[] = [
   },
   {
     id: "camp-nyumbani-tarangire",
+    ownerAccountId: "acct-nyumbani",
     slug: "nyumbani-tarangire",
     kind: "camp",
     companySlug: "nyumbani-collection",
@@ -69,6 +75,7 @@ export const listings: Listing[] = [
       "A hosted safari trade profile for Nyumbani Tarangire. This listing represents one camp within the Nyumbani Collection.",
     published: true,
     featured: true,
+    accountStatus: "active",
     logoImage: "",
     coverImage: "",
     matchAttributes: {
