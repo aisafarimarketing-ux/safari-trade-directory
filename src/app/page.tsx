@@ -2,8 +2,13 @@ import { listings } from "../data/listings";
 
 export default function HomePage() {
   const featuredListings = listings
-    .filter((listing) => listing.published && listing.featured)
-    .slice(0, 3);
+  .filter(
+    (listing) =>
+      listing.published &&
+      listing.featured &&
+      listing.accountStatus === "active",
+  )
+  .slice(0, 3);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
