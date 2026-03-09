@@ -1,13 +1,9 @@
 import { listings } from "../data/listings";
+import { isPublicListing } from "../lib/listing-visibility";
 
 export default function HomePage() {
   const featuredListings = listings
-    .filter(
-      (listing) =>
-        listing.published &&
-        listing.featured &&
-        listing.accountStatus === "active",
-    )
+    .filter((listing) => isPublicListing(listing) && listing.featured)
     .slice(0, 3);
 
   return (
