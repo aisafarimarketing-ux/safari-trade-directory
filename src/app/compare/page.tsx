@@ -1,238 +1,298 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
-import { profiles } from "../../data/profiles";
-import { companies } from "../../data/companies";
-
-export default function ComparePage() {
-  const searchParams = useSearchParams();
-  const items = searchParams.get("items");
-
-  const selectedSlugs = items
-    ? items.split(",").map((slug) => slug.trim()).filter(Boolean)
-    : ["nyumbani-serengeti", "nyumbani-tarangire"];
-
-  const selectedProfiles = profiles.filter((p) =>
-    selectedSlugs.includes(p.slug),
-  );
-
-  const getCompanyName = (companySlug: string) => {
-    return companies.find((c) => c.slug === companySlug)?.name || "Independent";
-  };
-
+export default function HomePage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
-      <section className="border-b border-white/10">
-        <div className="mx-auto max-w-7xl px-6 py-16 md:px-10">
-          <p className="text-sm uppercase tracking-[0.2em] text-white/40">
-            Safari Compare Mode
+      {/* Hero */}
+      <section className="relative overflow-hidden border-b border-white/10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.14),transparent_30%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.10),transparent_24%),linear-gradient(to_bottom,rgba(255,255,255,0.03),transparent)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:56px_56px] opacity-20" />
+
+        <div className="relative mx-auto max-w-7xl px-6 py-24 md:px-10 md:py-32">
+          <div className="mx-auto max-w-4xl text-center">
+            <div className="inline-flex items-center rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-100">
+              Safari Trade Platform
+            </div>
+
+            <h1 className="mt-6 text-5xl font-semibold tracking-tight md:text-7xl md:leading-[1.02]">
+              Plan better safaris.
+            </h1>
+
+            <p className="mt-6 text-lg leading-8 text-white/70 md:text-xl">
+              Discover camps, compare properties, and build safari itineraries
+              in minutes — built for safari professionals.
+            </p>
+
+            {/* Planner Bar */}
+            <div className="mt-10 rounded-[28px] border border-white/10 bg-white/[0.04] p-4 shadow-2xl backdrop-blur">
+              <div className="grid gap-3 md:grid-cols-5">
+                <select className="rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white outline-none">
+                  <option>Destination</option>
+                  <option>Serengeti</option>
+                  <option>Tarangire</option>
+                  <option>Ngorongoro</option>
+                </select>
+
+                <select className="rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white outline-none">
+                  <option>Travel Month</option>
+                  <option>June</option>
+                  <option>July</option>
+                  <option>August</option>
+                  <option>September</option>
+                </select>
+
+                <select className="rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white outline-none">
+                  <option>Client Type</option>
+                  <option>Honeymoon</option>
+                  <option>Family</option>
+                  <option>Photographic</option>
+                  <option>Luxury Couples</option>
+                </select>
+
+                <select className="rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white outline-none">
+                  <option>Budget</option>
+                  <option>Upper Mid</option>
+                  <option>Premium</option>
+                  <option>Luxury</option>
+                </select>
+
+                <a
+                  href="/match"
+                  className="inline-flex items-center justify-center rounded-2xl bg-amber-400 px-5 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-amber-300"
+                >
+                  Match Safari
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+              <a
+                href="/directory"
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Explore Directory
+              </a>
+              <a
+                href="/compare"
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Compare Camps
+              </a>
+              <a
+                href="/admin"
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Open Admin
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Camps */}
+      <section className="mx-auto max-w-7xl px-6 py-20 md:px-10">
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-white/40">
+              Featured Camps
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
+              Trade-ready safari properties
+            </h2>
+          </div>
+          <a
+            href="/directory"
+            className="hidden rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white md:inline-flex"
+          >
+            View all profiles
+          </a>
+        </div>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
+          {[
+            {
+              name: "Nyumbani Serengeti",
+              location: "Serengeti National Park",
+              slug: "nyumbani-serengeti",
+            },
+            {
+              name: "Nyumbani Tarangire",
+              location: "Tarangire National Park",
+              slug: "nyumbani-tarangire",
+            },
+            {
+              name: "Nyumbani Ngorongoro",
+              location: "Ngorongoro Highlands",
+              slug: "nyumbani-ngorongoro",
+            },
+          ].map((camp) => (
+            <div
+              key={camp.name}
+              className="rounded-[30px] border border-white/10 bg-white/[0.03] p-6 transition hover:-translate-y-1 hover:bg-white/[0.05]"
+            >
+              <div className="aspect-[4/3] rounded-[24px] border border-white/10 bg-gradient-to-br from-white/10 to-white/0" />
+
+              <h3 className="mt-6 text-2xl font-semibold">{camp.name}</h3>
+              <p className="mt-2 text-sm text-white/55">{camp.location}</p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a
+                  href={`/profiles/${camp.slug}`}
+                  className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
+                >
+                  View Profile
+                </a>
+                <a
+                  href="/compare"
+                  className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Compare
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Trade Tools */}
+      <section className="border-y border-white/10 bg-white/[0.02]">
+        <div className="mx-auto max-w-7xl px-6 py-20 md:px-10">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm uppercase tracking-[0.2em] text-white/40">
+              Built for Safari Professionals
+            </p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">
+              More than a directory
+            </h2>
+            <p className="mt-5 text-base leading-8 text-white/65">
+              A planning platform for discovering camps, comparing properties,
+              and building better safari decisions faster.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-6 md:grid-cols-4">
+            {[
+              {
+                title: "Match Camps",
+                text: "Find the best camps for a client brief instantly.",
+              },
+              {
+                title: "Compare Camps",
+                text: "See safari properties side by side to make faster decisions.",
+              },
+              {
+                title: "Build Safaris",
+                text: "Turn discoveries into structured safari plans and itineraries.",
+              },
+              {
+                title: "Share Proposals",
+                text: "Create polished safari options to send to clients and partners.",
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="rounded-[28px] border border-white/10 bg-neutral-900 p-6"
+              >
+                <h3 className="text-lg font-semibold">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-white/60">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Collections */}
+      <section className="mx-auto max-w-7xl px-6 py-20 md:px-10">
+        <p className="text-sm uppercase tracking-[0.2em] text-white/40">
+          Collections
+        </p>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
+          Umbrella brands and camp portfolios
+        </h2>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <div className="rounded-[30px] border border-white/10 bg-gradient-to-br from-amber-300/[0.10] to-white/[0.03] p-8">
+            <p className="text-sm uppercase tracking-[0.18em] text-white/45">
+              Camp Brand
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold">Nyumbani Collection</h3>
+            <p className="mt-4 text-sm leading-7 text-white/65">
+              One umbrella company can present multiple safari camps under one
+              trade-facing identity.
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              {["Nyumbani Serengeti", "Nyumbani Tarangire", "Nyumbani Ngorongoro"].map(
+                (item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/75"
+                  >
+                    {item}
+                  </span>
+                ),
+              )}
+            </div>
+
+            <a
+              href="/companies/nyumbani-collection"
+              className="mt-8 inline-flex rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
+            >
+              View Company
+            </a>
+          </div>
+
+          <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8">
+            <p className="text-sm uppercase tracking-[0.18em] text-white/45">
+              What this unlocks
+            </p>
+            <div className="mt-5 space-y-4">
+              {[
+                "One brand can host multiple camps",
+                "Agents can compare camps under one umbrella",
+                "Trade profiles become easier to manage and discover",
+                "Future matching and itinerary tools become more powerful",
+              ].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm text-white/70"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="mx-auto max-w-7xl px-6 pb-24 md:px-10">
+        <div className="rounded-[36px] border border-white/10 bg-gradient-to-br from-emerald-300/[0.12] via-white/[0.04] to-white/[0.02] p-8 text-center md:p-12">
+          <p className="text-sm uppercase tracking-[0.2em] text-white/45">
+            Start Planning
           </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-6xl">
-            Compare safari trade profiles side by side
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-white/65 md:text-lg">
-            A trade-first comparison view for agents and partners evaluating
-            which camp fits a client brief best.
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">
+            The workspace for safari professionals
+          </h2>
+          <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-white/65">
+            Match camps, compare properties, and move toward full safari planning
+            from one platform.
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             <a
               href="/match"
-              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-neutral-950"
+              className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-neutral-950"
             >
-              Back to Match
+              Match Camps
             </a>
             <a
               href="/directory"
-              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white"
+              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white"
             >
               Explore Directory
             </a>
           </div>
         </div>
       </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-12 md:px-10">
-        {selectedProfiles.length === 0 ? (
-          <div className="rounded-[32px] border border-white/10 bg-white/[0.03] p-10">
-            <p className="text-sm uppercase tracking-[0.2em] text-white/40">
-              No comparison selected
-            </p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-              Choose at least two camps to compare
-            </h2>
-            <p className="mt-4 max-w-2xl text-white/65">
-              Go back to Match Safari, select camps, and then open Compare Mode.
-            </p>
-
-            <div className="mt-8">
-              <a
-                href="/match"
-                className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-neutral-950"
-              >
-                Go to Match
-              </a>
-            </div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <div className="min-w-[980px] rounded-[32px] border border-white/10 bg-white/[0.03] p-4 md:p-6">
-              <div
-                className="grid gap-4"
-                style={{
-                  gridTemplateColumns: `240px repeat(${selectedProfiles.length}, minmax(0, 1fr))`,
-                }}
-              >
-                <div />
-
-                {selectedProfiles.map((profile) => (
-                  <div
-                    key={profile.slug}
-                    className="rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.03] p-6"
-                  >
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/40">
-                      {profile.type}
-                    </p>
-                    <h2 className="mt-3 text-2xl font-semibold">{profile.name}</h2>
-                    <p className="mt-2 text-sm text-white/55">{profile.location}</p>
-
-                    <div className="mt-6 aspect-[4/3] rounded-[22px] border border-white/10 bg-black/20" />
-
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      <a
-                        href={`/profiles/${profile.slug}`}
-                        className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-neutral-950"
-                      >
-                        View Profile
-                      </a>
-                      <a
-                        href={`/companies/${profile.companySlug}`}
-                        className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
-                      >
-                        Company
-                      </a>
-                    </div>
-                  </div>
-                ))}
-
-                <CompareLabel title="Company" />
-                {selectedProfiles.map((profile) => (
-                  <CompareValue key={`${profile.slug}-company`}>
-                    {getCompanyName(profile.companySlug)}
-                  </CompareValue>
-                ))}
-
-                <CompareLabel title="Description" />
-                {selectedProfiles.map((profile) => (
-                  <CompareValue key={`${profile.slug}-description`}>
-                    {profile.description}
-                  </CompareValue>
-                ))}
-
-                <CompareLabel title="Ideal for" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-ideal`}
-                    items={profile.matchAttributes.idealFor}
-                  />
-                ))}
-
-                <CompareLabel title="Budget bands" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-budget`}
-                    items={profile.matchAttributes.budgetBands}
-                  />
-                ))}
-
-                <CompareLabel title="Destinations" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-destinations`}
-                    items={profile.matchAttributes.destinations}
-                  />
-                ))}
-
-                <CompareLabel title="Travel months" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-months`}
-                    items={profile.matchAttributes.travelMonths}
-                  />
-                ))}
-
-                <CompareLabel title="Experiences" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-experiences`}
-                    items={profile.matchAttributes.experiences}
-                  />
-                ))}
-
-                <CompareLabel title="Style tags" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-style`}
-                    items={profile.matchAttributes.styleTags}
-                  />
-                ))}
-
-                <CompareLabel title="Suitability" />
-                {selectedProfiles.map((profile) => (
-                  <CompareTags
-                    key={`${profile.slug}-suitability`}
-                    items={profile.matchAttributes.suitability}
-                  />
-                ))}
-
-                <CompareLabel title="Fit notes" />
-                {selectedProfiles.map((profile) => (
-                  <CompareValue key={`${profile.slug}-notes`}>
-                    {profile.matchAttributes.customFitNotes || "—"}
-                  </CompareValue>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
     </main>
-  );
-}
-
-function CompareLabel({ title }: { title: string }) {
-  return (
-    <div className="flex items-start">
-      <div className="w-full rounded-[24px] border border-white/10 bg-black/20 p-4">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/45">
-          {title}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function CompareValue({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm leading-7 text-white/75">
-      {children}
-    </div>
-  );
-}
-
-function CompareTags({ items }: { items: string[] }) {
-  return (
-    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-      <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
-          <span
-            key={item}
-            className="rounded-full border border-amber-300/15 bg-amber-300/[0.08] px-3 py-1.5 text-xs font-medium text-amber-100"
-          >
-            {item}
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
