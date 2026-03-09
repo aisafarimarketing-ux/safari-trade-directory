@@ -46,7 +46,12 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     );
   }
 
-  const company = companies.find((item) => item.slug === listing.companySlug);
+  const listing = listings.find(
+  (item) =>
+    item.slug === params.slug &&
+    item.published &&
+    item.accountStatus === "active",
+);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
