@@ -13,8 +13,8 @@ export default function DirectoryPage() {
             Trade Directory
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-white/65 md:text-lg">
-            Discover camps and trade profiles across the safari industry. This
-            directory is the public layer for hosted trade listings.
+            Discover camps, tour operators, DMCs, and trade profiles across the
+            safari industry.
           </p>
         </div>
       </section>
