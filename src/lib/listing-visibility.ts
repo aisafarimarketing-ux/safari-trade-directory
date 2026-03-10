@@ -1,7 +1,5 @@
-import { listings } from "../data/listings";
-
-export type Listing = (typeof listings)[number];
+import { Listing } from "../data/listings";
 
 export function isPublicListing(listing: Listing): boolean {
-  return listing.published && listing.accountStatus === "active";
+  return listing.published === true && listing.accountStatus === "active";
 }
