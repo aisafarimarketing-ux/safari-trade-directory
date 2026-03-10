@@ -133,10 +133,100 @@ type ContactFieldKey =
   | "contactCompany"
   | "contactPhone";
 
+type ThemeState = {
+  pageBg: string;
+  blockBg: string;
+  accent: string;
+  highlight: string;
+  borderColor: string;
+};
+
+type BlockColorState = {
+  header: string;
+  tripadvisor: string;
+  tradeDetails: string;
+  matrix: string;
+  inclusions: string;
+  exclusions: string;
+  experiences: string;
+  offers: string;
+  terms: string;
+  leadCapture: string;
+  contactCard: string;
+  downloadables: string;
+};
+
+type VisibleBlocksState = {
+  header: boolean;
+  tripadvisor: boolean;
+  tradeDetails: boolean;
+  matrix: boolean;
+  inclusions: boolean;
+  exclusions: boolean;
+  experiences: boolean;
+  offers: boolean;
+  terms: boolean;
+  leadCapture: boolean;
+  contactCard: boolean;
+  downloadables: boolean;
+  hero: boolean;
+};
+
+type SavePayload = {
+  version: 1;
+  savedAt: string;
+  portfolio: Camp[];
+  selectedCampIndex: number;
+  theme: ThemeState;
+  blockColors: BlockColorState;
+  visibleBlocks: VisibleBlocksState;
+};
+
+const STORAGE_KEY = "restoration-safari-admin-v1";
+
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 const DEFAULT_TA_LOGO =
   "https://static.tacdn.com/img2/brand_refresh/Tripadvisor_lockup_horizontal_secondary_registered.svg";
+
+const DEFAULT_THEME: ThemeState = {
+  pageBg: "#F4F2EE",
+  blockBg: "#FFFFFF",
+  accent: "#2D3436",
+  highlight: "#9E5A24",
+  borderColor: "#E2E8F0",
+};
+
+const DEFAULT_BLOCK_COLORS: BlockColorState = {
+  header: "#F6E7D8",
+  tripadvisor: "#E7F6EA",
+  tradeDetails: "#F6E7D8",
+  matrix: "#F4EFE7",
+  inclusions: "#E8F7EC",
+  exclusions: "#FCE9E9",
+  experiences: "#EFE8FB",
+  offers: "#F8EEDF",
+  terms: "#EEF2F7",
+  leadCapture: "#EAF1FF",
+  contactCard: "#E7F6F4",
+  downloadables: "#FBF3DD",
+};
+
+const DEFAULT_VISIBLE_BLOCKS: VisibleBlocksState = {
+  header: true,
+  tripadvisor: true,
+  tradeDetails: true,
+  matrix: true,
+  inclusions: true,
+  exclusions: true,
+  experiences: true,
+  offers: true,
+  terms: true,
+  leadCapture: true,
+  contactCard: true,
+  downloadables: true,
+  hero: false,
+};
 
 const makeNewCamp = (): Camp => ({
   name: "New Camp",
@@ -223,6 +313,43 @@ const makeNewCamp = (): Camp => ({
   taRating: "",
   taStyle: "dots",
 });
+
+const DEFAULT_PORTFOLIO: Camp[] = [
+  {
+    ...makeNewCamp(),
+    name: "Nyumbani Serengeti",
+    class: "Tented (Luxury)",
+    rooms: 10,
+    family: 2,
+    double: 6,
+    single: 2,
+    vibe: "High-end canvas meets the raw heartbeat of the Serengeti.",
+    inclusions: ["Three gourmet meals", "Bottled water", "Laundry"],
+    exclusions: ["Park Fees", "Premium Spirits", "Flights"],
+    freeActivities: ["Morning Game Drive", "Nature Walk"],
+    paidActivities: ["Hot Air Balloon", "Night Drive"],
+    offersText: "Stay 5 Pay 4 during Green Season.",
+    terms: "30% non-refundable deposit.",
+    locationLabel: "Serengeti National Park, Tanzania",
+    rating: 4.9,
+    reviewCount: 128,
+    website: "https://example.com",
+    facebookUrl: "https://facebook.com/",
+    instagramUrl: "https://instagram.com/nyumbani.collections",
+    tiktokUrl: "https://tiktok.com/",
+    youtubeUrl: "https://youtube.com/",
+    contactName: "Nyumbani Reservations",
+    contactTitle: "Trade Desk",
+    contactCompany: "Nyumbani Collections",
+    contactEmail: "trade@nyumbani.example",
+    contactPhone: "+255 000 000 000",
+    contactWebsite: "https://example.com",
+    enquiryEmail: "trade@nyumbani.example",
+    enquiryWhatsApp: "+255000000000",
+    taLink: "https://www.tripadvisor.com/",
+    taRating: 4.5,
+  },
+];
 
 function CompactPanel({
   title,
@@ -400,49 +527,34 @@ function RatingPips({
   );
 }
 
+function safeJsonParse<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function serializeState(payload: SavePayload): string {
+  return JSON.stringify(payload);
+}
+
 export default function RestorationSafariAdmin() {
   const [isPreview, setIsPreview] = useState(false);
   const [selectedCampIndex, setSelectedCampIndex] = useState(0);
   const [sendState, setSendState] = useState<"idle" | "sending">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle",
+  );
+  const [saveMessage, setSaveMessage] = useState("Local save ready");
+  const [hasHydrated, setHasHydrated] = useState(false);
 
-  const [theme, setTheme] = useState({
-    pageBg: "#F4F2EE",
-    blockBg: "#FFFFFF",
-    accent: "#2D3436",
-    highlight: "#9E5A24",
-    borderColor: "#E2E8F0",
-  });
-
-  const [blockColors, setBlockColors] = useState({
-    header: "#F6E7D8",
-    tripadvisor: "#E7F6EA",
-    tradeDetails: "#F6E7D8",
-    matrix: "#F4EFE7",
-    inclusions: "#E8F7EC",
-    exclusions: "#FCE9E9",
-    experiences: "#EFE8FB",
-    offers: "#F8EEDF",
-    terms: "#EEF2F7",
-    leadCapture: "#EAF1FF",
-    contactCard: "#E7F6F4",
-    downloadables: "#FBF3DD",
-  });
-
-  const [visibleBlocks, setVisibleBlocks] = useState({
-    header: true,
-    tripadvisor: true,
-    tradeDetails: true,
-    matrix: true,
-    inclusions: true,
-    exclusions: true,
-    experiences: true,
-    offers: true,
-    terms: true,
-    leadCapture: true,
-    contactCard: true,
-    downloadables: true,
-    hero: false,
-  });
+  const [theme, setTheme] = useState<ThemeState>(DEFAULT_THEME);
+  const [blockColors, setBlockColors] =
+    useState<BlockColorState>(DEFAULT_BLOCK_COLORS);
+  const [visibleBlocks, setVisibleBlocks] =
+    useState<VisibleBlocksState>(DEFAULT_VISIBLE_BLOCKS);
 
   const [hoveredRoomPhoto, setHoveredRoomPhoto] = useState<{
     src: string;
@@ -471,47 +583,32 @@ export default function RestorationSafariAdmin() {
     setVisibleBlocks((p) => ({ ...p, [key]: !p[key] }));
   };
 
-  const [portfolio, setPortfolio] = useState<Camp[]>([
-    {
-      ...makeNewCamp(),
-      name: "Nyumbani Serengeti",
-      class: "Tented (Luxury)",
-      rooms: 10,
-      family: 2,
-      double: 6,
-      single: 2,
-      vibe: "High-end canvas meets the raw heartbeat of the Serengeti.",
-      inclusions: ["Three gourmet meals", "Bottled water", "Laundry"],
-      exclusions: ["Park Fees", "Premium Spirits", "Flights"],
-      freeActivities: ["Morning Game Drive", "Nature Walk"],
-      paidActivities: ["Hot Air Balloon", "Night Drive"],
-      offersText: "Stay 5 Pay 4 during Green Season.",
-      terms: "30% non-refundable deposit.",
-      locationLabel: "Serengeti National Park, Tanzania",
-      rating: 4.9,
-      reviewCount: 128,
-      website: "https://example.com",
-      facebookUrl: "https://facebook.com/",
-      instagramUrl: "https://instagram.com/nyumbani.collections",
-      tiktokUrl: "https://tiktok.com/",
-      youtubeUrl: "https://youtube.com/",
-      contactName: "Nyumbani Reservations",
-      contactTitle: "Trade Desk",
-      contactCompany: "Nyumbani Collections",
-      contactEmail: "trade@nyumbani.example",
-      contactPhone: "+255 000 000 000",
-      contactWebsite: "https://example.com",
-      enquiryEmail: "trade@nyumbani.example",
-      enquiryWhatsApp: "+255000000000",
-      taLink: "https://www.tripadvisor.com/",
-      taRating: 4.5,
-    },
-  ]);
+  const [portfolio, setPortfolio] = useState<Camp[]>(DEFAULT_PORTFOLIO);
+
+  useEffect(() => {
+    const saved = safeJsonParse<SavePayload>(window.localStorage.getItem(STORAGE_KEY));
+
+    if (saved) {
+      setPortfolio(saved.portfolio?.length ? saved.portfolio : DEFAULT_PORTFOLIO);
+      setSelectedCampIndex(
+        Math.min(
+          Math.max(saved.selectedCampIndex ?? 0, 0),
+          Math.max((saved.portfolio?.length ?? 1) - 1, 0),
+        ),
+      );
+      setTheme({ ...DEFAULT_THEME, ...saved.theme });
+      setBlockColors({ ...DEFAULT_BLOCK_COLORS, ...saved.blockColors });
+      setVisibleBlocks({ ...DEFAULT_VISIBLE_BLOCKS, ...saved.visibleBlocks });
+      setSaveMessage(`Loaded local draft from ${new Date(saved.savedAt).toLocaleString()}`);
+    }
+
+    setHasHydrated(true);
+  }, []);
 
   const camp = portfolio[selectedCampIndex] ?? portfolio[0];
 
   const profileSlug =
-    camp.name
+    camp?.name
       ?.toLowerCase()
       .trim()
       .replace(/[^a-z0-9\s-]/g, "")
@@ -542,9 +639,9 @@ export default function RestorationSafariAdmin() {
   };
 
   const totalUnits =
-    (typeof camp.family === "number" ? camp.family : 0) +
-    (typeof camp.double === "number" ? camp.double : 0) +
-    (typeof camp.single === "number" ? camp.single : 0);
+    (typeof camp?.family === "number" ? camp.family : 0) +
+    (typeof camp?.double === "number" ? camp.double : 0) +
+    (typeof camp?.single === "number" ? camp.single : 0);
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: theme.blockBg,
@@ -578,6 +675,101 @@ export default function RestorationSafariAdmin() {
       r.onerror = reject;
       r.readAsDataURL(file);
     });
+
+  const buildPayload = (): SavePayload => ({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    portfolio,
+    selectedCampIndex,
+    theme,
+    blockColors,
+    visibleBlocks,
+  });
+
+  const persistToLocalStorage = () => {
+    const payload = buildPayload();
+    window.localStorage.setItem(STORAGE_KEY, serializeState(payload));
+    return payload;
+  };
+
+  const handleSave = () => {
+    try {
+      setSaveState("saving");
+      const payload = persistToLocalStorage();
+      setSaveState("saved");
+      setSaveMessage(`Saved locally at ${new Date(payload.savedAt).toLocaleTimeString()}`);
+      window.setTimeout(() => setSaveState("idle"), 1800);
+    } catch {
+      setSaveState("error");
+      setSaveMessage("Save failed");
+    }
+  };
+
+  const exportBackup = () => {
+    try {
+      const payload = persistToLocalStorage();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `restoration-hub-backup-${new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSaveMessage("Backup exported");
+    } catch {
+      setSaveMessage("Backup export failed");
+    }
+  };
+
+  const importBackupFile = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      const text = await file.text();
+      const parsed = safeJsonParse<SavePayload>(text);
+      if (!parsed) {
+        alert("That backup file could not be read.");
+        return;
+      }
+
+      setPortfolio(parsed.portfolio?.length ? parsed.portfolio : DEFAULT_PORTFOLIO);
+      setSelectedCampIndex(
+        Math.min(
+          Math.max(parsed.selectedCampIndex ?? 0, 0),
+          Math.max((parsed.portfolio?.length ?? 1) - 1, 0),
+        ),
+      );
+      setTheme({ ...DEFAULT_THEME, ...parsed.theme });
+      setBlockColors({ ...DEFAULT_BLOCK_COLORS, ...parsed.blockColors });
+      setVisibleBlocks({ ...DEFAULT_VISIBLE_BLOCKS, ...parsed.visibleBlocks });
+
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      setSaveMessage("Backup imported");
+    } catch {
+      alert("Import failed.");
+    }
+  };
+
+  const clearSavedDraft = () => {
+    const confirmed = window.confirm(
+      "Clear the saved local draft and reset the editor to default?",
+    );
+    if (!confirmed) return;
+
+    window.localStorage.removeItem(STORAGE_KEY);
+    setPortfolio(DEFAULT_PORTFOLIO);
+    setSelectedCampIndex(0);
+    setTheme(DEFAULT_THEME);
+    setBlockColors(DEFAULT_BLOCK_COLORS);
+    setVisibleBlocks(DEFAULT_VISIBLE_BLOCKS);
+    setSaveMessage("Saved local draft cleared");
+  };
 
   const [photoModal, setPhotoModal] = useState<{
     open: boolean;
@@ -629,6 +821,7 @@ export default function RestorationSafariAdmin() {
 
   const logoFileRef = useRef<HTMLInputElement | null>(null);
   const coverFileRef = useRef<HTMLInputElement | null>(null);
+  const backupImportRef = useRef<HTMLInputElement | null>(null);
 
   const setLogoFromFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -1020,6 +1213,19 @@ export default function RestorationSafariAdmin() {
     }
   };
 
+  if (!hasHydrated) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ backgroundColor: DEFAULT_THEME.pageBg, color: DEFAULT_THEME.accent }}
+      >
+        <div className="rounded-2xl border bg-white px-6 py-4 text-sm font-semibold shadow-sm">
+          Loading editor…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex min-h-screen font-sans"
@@ -1174,7 +1380,7 @@ export default function RestorationSafariAdmin() {
             </button>
           </div>
 
-          <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="mb-3 grid grid-cols-2 gap-2">
             <button
               onClick={() => setIsPreview(true)}
               className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
@@ -1224,6 +1430,68 @@ export default function RestorationSafariAdmin() {
               <ExternalLink size={12} />
               Public Profile
             </a>
+
+            <button
+              onClick={handleSave}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white"
+              style={{
+                backgroundColor: theme.highlight,
+                border: `1px solid ${theme.highlight}`,
+              }}
+              type="button"
+            >
+              <Save size={12} />
+              {saveState === "saving" ? "Saving..." : "Save Draft"}
+            </button>
+
+            <button
+              onClick={exportBackup}
+              className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+              type="button"
+            >
+              <Download size={12} />
+              Export
+            </button>
+
+            <button
+              onClick={() => backupImportRef.current?.click()}
+              className="flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+              type="button"
+            >
+              <Upload size={12} />
+              Import
+            </button>
+
+            <input
+              ref={backupImportRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(e) => importBackupFile(e.target.files)}
+            />
+
+            <button
+              onClick={clearSavedDraft}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+              style={cardStyle}
+              type="button"
+            >
+              <Trash2 size={12} />
+              Reset Saved Draft
+            </button>
+          </div>
+
+          <div
+            className="mb-4 rounded-2xl border px-3 py-2 text-[10px] font-bold"
+            style={{
+              borderColor: theme.borderColor,
+              backgroundColor: theme.pageBg,
+              color: theme.accent,
+            }}
+          >
+            {saveMessage}
           </div>
 
           <div className="mb-4">
@@ -1413,14 +1681,19 @@ export default function RestorationSafariAdmin() {
             className="mt-4 w-full rounded-xl py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg"
             style={highlightBg}
             type="button"
+            onClick={handleSave}
           >
-            <Save size={14} className="mr-2 inline" /> Save Changes
+            <Save size={14} className="mr-2 inline" />
+            {saveState === "saving" ? "Saving..." : "Save Changes"}
           </button>
         </aside>
       )}
 
       <main className={`flex-1 transition-all ${!isPreview ? "ml-72" : "ml-0"}`}>
-        <div className="sticky top-0 z-40 border-b px-4 py-3 sm:px-6" style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}>
+        <div
+          className="sticky top-0 z-40 border-b px-4 py-3 sm:px-6"
+          style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
+        >
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -1472,6 +1745,19 @@ export default function RestorationSafariAdmin() {
                 <ExternalLink size={12} />
                 Public Profile
               </a>
+
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
+                style={{
+                  backgroundColor: theme.highlight,
+                  border: `1px solid ${theme.highlight}`,
+                }}
+                type="button"
+              >
+                <Save size={12} />
+                {saveState === "saving" ? "Saving..." : "Save"}
+              </button>
             </div>
 
             <div
