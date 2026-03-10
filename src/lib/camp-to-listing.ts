@@ -95,15 +95,26 @@ function cleanText(value: string): string {
 }
 
 function unique(values: string[]): string[] {
-  return Array.from(
-    new Set(values.map((item) => item.trim()).filter(Boolean)),
-  );
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean)));
+}
+
+function toNumber(value: NumDraft): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeDownloadables(items: Downloadable[]): Listing["downloadables"] {
+  return items.map((item) => ({
+    id: item.id,
+    title: cleanText(item.title),
+    type: item.type,
+    url: cleanText(item.url),
+    mime: item.mime,
+    fileName: item.fileName,
+  }));
 }
 
 function inferDestinations(camp: Camp): string[] {
-  const haystack = [camp.locationLabel, camp.name, camp.vibe]
-    .join(" ")
-    .toLowerCase();
+  const haystack = [camp.locationLabel, camp.name, camp.vibe].join(" ").toLowerCase();
 
   const knownDestinations = [
     "serengeti",
@@ -121,9 +132,7 @@ function inferDestinations(camp: Camp): string[] {
     "south luangwa",
   ];
 
-  return knownDestinations.filter((destination) =>
-    haystack.includes(destination),
-  );
+  return knownDestinations.filter((destination) => haystack.includes(destination));
 }
 
 function inferKind(_camp: Camp): Listing["kind"] {
@@ -161,8 +170,7 @@ function inferStyleTags(camp: Camp): string[] {
 
 function inferIdealFor(camp: Camp): string[] {
   const tags: string[] = [];
-  const source =
-    `${camp.vibe} ${camp.leadHeadline} ${camp.leadSubcopy}`.toLowerCase();
+  const source = `${camp.vibe} ${camp.leadHeadline} ${camp.leadSubcopy}`.toLowerCase();
 
   if (source.includes("honeymoon")) tags.push("honeymoon");
   if (source.includes("family")) tags.push("family-safari");
@@ -197,7 +205,7 @@ function fallbackDescription(camp: Camp): string {
 
   if (description) return description;
 
-  return `A hosted safari trade profile for ${camp.name}. Trade partners can view location, brand details, and contact information here.`;
+  return `A hosted safari trade profile for ${camp.name}. Trade partners can view location, brand details, contact information, and downloadable trade materials here.`;
 }
 
 export function campToListing(
@@ -219,9 +227,7 @@ export function campToListing(
     ...camp.freeActivities
       .map((item) => item.toLowerCase())
       .filter((item) =>
-        ["photography", "birding", "walking-safari", "game-drive"].includes(
-          item,
-        ),
+        ["photography", "birding", "walking-safari", "game-drive"].includes(item),
       ),
   ]);
 
@@ -243,8 +249,82 @@ export function campToListing(
     published: options?.published ?? false,
     featured: options?.featured ?? false,
     accountStatus: options?.accountStatus ?? "active",
+
     logoImage: camp.logoImage || "",
     coverImage: camp.coverImage || "",
+
+    tradeProfileLabel: cleanText(camp.tradeProfileLabel) || undefined,
+    tradeProfileSub: cleanText(camp.tradeProfileSub) || undefined,
+
+    propertyDetails: {
+      rooms: toNumber(camp.rooms),
+      family: toNumber(camp.family),
+      double: toNumber(camp.double),
+      single: toNumber(camp.single),
+
+      roomTypeLabels: {
+        family: cleanText(camp.roomTypeLabels.family),
+        double: cleanText(camp.roomTypeLabels.double),
+        single: cleanText(camp.roomTypeLabels.single),
+      },
+
+      roomPhotos: {
+        family: camp.roomPhotos.family.filter(Boolean),
+        double: camp.roomPhotos.double.filter(Boolean),
+        single: camp.roomPhotos.single.filter(Boolean),
+      },
+
+      freeActivities: unique(camp.freeActivities),
+      paidActivities: unique(camp.paidActivities),
+      inclusions: unique(camp.inclusions),
+      exclusions: unique(camp.exclusions),
+
+      offersText: cleanText(camp.offersText) || undefined,
+      terms: cleanText(camp.terms) || undefined,
+      mapLink: cleanText(camp.mapLink) || undefined,
+      website: cleanText(camp.website) || undefined,
+
+      rating: toNumber(camp.rating),
+      reviewCount: toNumber(camp.reviewCount),
+      vibe: cleanText(camp.vibe) || undefined,
+    },
+
+    socialLinks: {
+      facebookUrl: cleanText(camp.facebookUrl) || undefined,
+      instagramUrl: cleanText(camp.instagramUrl) || undefined,
+      tiktokUrl: cleanText(camp.tiktokUrl) || undefined,
+      youtubeUrl: cleanText(camp.youtubeUrl) || undefined,
+    },
+
+    contactCard: {
+      contactName: cleanText(camp.contactName),
+      contactTitle: cleanText(camp.contactTitle),
+      contactCompany: cleanText(camp.contactCompany),
+      contactEmail: cleanText(camp.contactEmail),
+      contactPhone: cleanText(camp.contactPhone),
+      contactWebsite: cleanText(camp.contactWebsite),
+    },
+
+    leadCapture: {
+      headline: cleanText(camp.leadHeadline),
+      subcopy: cleanText(camp.leadSubcopy),
+      bullet1: cleanText(camp.leadBullet1),
+      bullet2: cleanText(camp.leadBullet2),
+      bullet3: cleanText(camp.leadBullet3),
+      cta: cleanText(camp.leadCta),
+      disclaimer: cleanText(camp.leadDisclaimer),
+      enquiryEmail: cleanText(camp.enquiryEmail),
+      enquiryWhatsApp: cleanText(camp.enquiryWhatsApp),
+      enquirySubject: cleanText(camp.enquirySubject),
+    },
+
+    downloadables: normalizeDownloadables(camp.downloadables),
+
+    taLogoUrl: cleanText(camp.taLogoUrl) || undefined,
+    taLink: cleanText(camp.taLink) || undefined,
+    taRating: toNumber(camp.taRating),
+    taStyle: camp.taStyle,
+
     matchAttributes: {
       idealFor,
       customFitNotes: cleanText(camp.terms) || undefined,
