@@ -1,8 +1,10 @@
 export type ListingKind = "camp" | "tour-operator" | "dmc" | "travel-agent";
 export type AccountStatus = "active" | "paused" | "flagged" | "deleted";
 
-export type DownloadableType = "file" | "link";
+export type RoomKey = "family" | "double" | "single";
+export type NumDraft = number | "";
 
+export type DownloadableType = "file" | "link";
 export type Downloadable = {
   id: string;
   title: string;
@@ -11,8 +13,6 @@ export type Downloadable = {
   mime?: string;
   fileName?: string;
 };
-
-export type RoomKey = "family" | "double" | "single";
 
 export type MatchAttributes = {
   idealFor: string[];
@@ -25,82 +25,86 @@ export type MatchAttributes = {
   suitability: string[];
 };
 
-export type ListingContactCard = {
-  contactName: string;
-  contactTitle: string;
-  contactCompany: string;
-  contactEmail: string;
-  contactPhone: string;
-  contactWebsite: string;
-};
-
-export type ListingLeadCapture = {
-  headline: string;
-  subcopy: string;
-  bullet1: string;
-  bullet2: string;
-  bullet3: string;
-  cta: string;
-  disclaimer: string;
-  enquiryEmail: string;
-  enquiryWhatsApp: string;
-  enquirySubject: string;
-};
-
-export type ListingPropertyDetails = {
-  rooms?: number;
-  family?: number;
-  double?: number;
-  single?: number;
-  roomTypeLabels?: Partial<Record<RoomKey, string>>;
-  roomPhotos?: Partial<Record<RoomKey, string[]>>;
-  freeActivities?: string[];
-  paidActivities?: string[];
-  inclusions?: string[];
-  exclusions?: string[];
-  offersText?: string;
-  terms?: string;
-  mapLink?: string;
-  website?: string;
-  rating?: number;
-  reviewCount?: number;
-  vibe?: string;
-};
-
-export type ListingSocialLinks = {
-  facebookUrl?: string;
-  instagramUrl?: string;
-  tiktokUrl?: string;
-  youtubeUrl?: string;
-};
-
 export type Listing = {
   id: string;
   ownerAccountId: string;
   slug: string;
   kind: ListingKind;
   companySlug?: string;
+
   name: string;
   location: string;
   description: string;
+
   published: boolean;
   featured: boolean;
   accountStatus: AccountStatus;
+
   logoImage?: string;
   coverImage?: string;
+
   matchAttributes: MatchAttributes;
+
+  class?: string;
+
+  rooms?: NumDraft;
+  family?: NumDraft;
+  double?: NumDraft;
+  single?: NumDraft;
+
+  vibe?: string;
+
+  inclusions?: string[];
+  exclusions?: string[];
+
+  freeActivities?: string[];
+  paidActivities?: string[];
+
+  offersText?: string;
+  terms?: string;
 
   tradeProfileLabel?: string;
   tradeProfileSub?: string;
 
-  propertyDetails?: ListingPropertyDetails;
-  socialLinks?: ListingSocialLinks;
-  contactCard?: ListingContactCard;
-  leadCapture?: ListingLeadCapture;
+  locationLabel?: string;
+  mapLink?: string;
+
+  rating?: NumDraft;
+  reviewCount?: NumDraft;
+
+  website?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  tiktokUrl?: string;
+  youtubeUrl?: string;
+
+  roomTypeLabels?: Record<RoomKey, string>;
+  roomPhotos?: Record<RoomKey, string[]>;
+
+  leadHeadline?: string;
+  leadSubcopy?: string;
+  leadBullet1?: string;
+  leadBullet2?: string;
+  leadBullet3?: string;
+  leadCta?: string;
+  leadDisclaimer?: string;
+
+  contactName?: string;
+  contactTitle?: string;
+  contactCompany?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactWebsite?: string;
+
+  enquiryEmail?: string;
+  enquiryWhatsApp?: string;
+  enquirySubject?: string;
+
   downloadables?: Downloadable[];
+
   taLogoUrl?: string;
   taLink?: string;
-  taRating?: number;
+  taRating?: NumDraft;
   taStyle?: "dots" | "stars";
 };
 
@@ -114,83 +118,94 @@ export const listings: Listing[] = [
     name: "Nyumbani Serengeti",
     location: "Serengeti National Park",
     description:
-      "A hosted safari trade profile for Nyumbani Serengeti. Trade partners can view location, brand details, contact information, and downloadable trade materials here.",
+      "A hosted safari trade profile for Nyumbani Serengeti. Trade partners can view location, brand details, downloadable materials, room setup, and direct contact information here.",
     published: true,
     featured: true,
     accountStatus: "active",
+
     logoImage: "",
     coverImage: "",
-    tradeProfileLabel: "Nyumbani Collections",
-    tradeProfileSub: "Trade Profile",
-    propertyDetails: {
-      rooms: 10,
-      family: 2,
-      double: 6,
-      single: 2,
-      roomTypeLabels: {
-        family: "Family setup",
-        double: "Double setup",
-        single: "Single setup",
-      },
-      roomPhotos: {
-        family: [],
-        double: [],
-        single: [],
-      },
-      freeActivities: ["game-drive", "photography"],
-      paidActivities: ["balloon-safari"],
-      inclusions: ["Three gourmet meals", "Bottled water", "Laundry"],
-      exclusions: ["Park fees", "Premium spirits", "Flights"],
-      offersText: "Stay 5 Pay 4 during Green Season.",
-      terms: "30% non-refundable deposit.",
-      mapLink: "https://maps.google.com",
-      website: "https://example.com",
-      rating: 4.9,
-      reviewCount: 128,
-      vibe:
-        "High-end canvas meets the raw heartbeat of the Serengeti, designed for luxury trade partners and high-value safari clients.",
+
+    class: "Tented (Luxury)",
+    rooms: 10,
+    family: 2,
+    double: 6,
+    single: 2,
+
+    vibe: "High-end canvas meets the raw heartbeat of the Serengeti.",
+
+    inclusions: ["Three gourmet meals", "Bottled water", "Laundry"],
+    exclusions: ["Park Fees", "Premium Spirits", "Flights"],
+
+    freeActivities: ["Morning Game Drive", "Nature Walk"],
+    paidActivities: ["Hot Air Balloon", "Night Drive"],
+
+    offersText: "Stay 5 Pay 4 during Green Season.",
+    terms: "30% non-refundable deposit.",
+
+    tradeProfileLabel: "Nyumbani-Collections",
+    tradeProfileSub: "Trade profile.",
+
+    locationLabel: "Serengeti National Park, Tanzania",
+    mapLink: "https://maps.google.com",
+
+    rating: 4.9,
+    reviewCount: 128,
+
+    website: "https://example.com",
+    facebookUrl: "https://facebook.com/",
+    instagramUrl: "https://instagram.com/nyumbani.collections",
+    tiktokUrl: "https://tiktok.com/",
+    youtubeUrl: "https://youtube.com/",
+
+    roomTypeLabels: {
+      family: "Family setup",
+      double: "Double setup",
+      single: "Single setup",
     },
-    socialLinks: {
-      facebookUrl: "https://facebook.com/",
-      instagramUrl: "https://instagram.com/nyumbani.collections",
-      tiktokUrl: "https://tiktok.com/",
-      youtubeUrl: "https://youtube.com/",
+
+    roomPhotos: {
+      family: [],
+      double: [],
+      single: [],
     },
-    contactCard: {
-      contactName: "Nyumbani Reservations",
-      contactTitle: "Trade Desk",
-      contactCompany: "Nyumbani Collections",
-      contactEmail: "trade@nyumbani.example",
-      contactPhone: "+255 000 000 000",
-      contactWebsite: "https://example.com",
-    },
-    leadCapture: {
-      headline: "Get rates, availability & trade support in one reply.",
-      subcopy:
-        "Leave your details and we’ll send a trade-ready fact sheet and quick quote.",
-      bullet1: "Agent-ready proposal + net rates",
-      bullet2: "Seasonality guidance + offers",
-      bullet3: "Fast response from reservations",
-      cta: "Request Trade Pack",
-      disclaimer:
-        "By submitting, you agree to be contacted by our reservations team.",
-      enquiryEmail: "trade@nyumbani.example",
-      enquiryWhatsApp: "+255000000000",
-      enquirySubject: "Trade Request / Rates & Availability",
-    },
+
+    leadHeadline: "Get rates, availability & trade support in one reply.",
+    leadSubcopy:
+      "Leave your details and we’ll send a trade-ready fact sheet and quick quote.",
+    leadBullet1: "Agent-ready proposal + net rates",
+    leadBullet2: "Seasonality guidance + offers",
+    leadBullet3: "Fast response from reservations",
+    leadCta: "Request Trade Pack",
+    leadDisclaimer:
+      "By submitting, you agree to be contacted by our reservations team.",
+
+    contactName: "Nyumbani Reservations",
+    contactTitle: "Trade Desk",
+    contactCompany: "Nyumbani Collections",
+    contactEmail: "trade@nyumbani.example",
+    contactPhone: "+255 000 000 000",
+    contactWebsite: "https://example.com",
+
+    enquiryEmail: "trade@nyumbani.example",
+    enquiryWhatsApp: "+255000000000",
+    enquirySubject: "Trade Request / Rates & Availability",
+
     downloadables: [
       {
-        id: "dl-nyumbani-serengeti-factsheet",
-        title: "Trade Fact Sheet",
+        id: "dl-serengeti-factsheet",
+        title: "Trade Fact Sheet (Google Drive)",
         type: "link",
         url: "https://drive.google.com/",
       },
     ],
+
     taLogoUrl:
       "https://static.tacdn.com/img2/brand_refresh/Tripadvisor_lockup_horizontal_secondary_registered.svg",
     taLink: "https://www.tripadvisor.com/",
     taRating: 4.5,
     taStyle: "dots",
+
     matchAttributes: {
       idealFor: [
         "honeymoon",
@@ -218,83 +233,95 @@ export const listings: Listing[] = [
     name: "Nyumbani Tarangire",
     location: "Tarangire National Park",
     description:
-      "A hosted safari trade profile for Nyumbani Tarangire. This listing represents one camp within the Nyumbani Collection and includes trade-useful property information.",
+      "A hosted safari trade profile for Nyumbani Tarangire. This listing represents one camp within the Nyumbani Collection, with trade-first materials and direct enquiry options.",
     published: true,
     featured: true,
     accountStatus: "active",
+
     logoImage: "",
     coverImage: "",
-    tradeProfileLabel: "Nyumbani Collections",
-    tradeProfileSub: "Trade Profile",
-    propertyDetails: {
-      rooms: 12,
-      family: 3,
-      double: 7,
-      single: 2,
-      roomTypeLabels: {
-        family: "Family setup",
-        double: "Double setup",
-        single: "Single setup",
-      },
-      roomPhotos: {
-        family: [],
-        double: [],
-        single: [],
-      },
-      freeActivities: ["game-drive", "birding", "walking-safari"],
-      paidActivities: [],
-      inclusions: ["Three meals", "Bottled water"],
-      exclusions: ["Park fees", "Flights"],
-      offersText: "Seasonal offer available on request.",
-      terms: "Standard deposit and cancellation policy applies.",
-      mapLink: "https://maps.google.com",
-      website: "https://example.com",
-      rating: 4.7,
-      reviewCount: 84,
-      vibe:
-        "Warm bush atmosphere, softer pacing, and strong nature immersion without ultra-formal luxury.",
+
+    class: "Tented (Premium)",
+    rooms: 12,
+    family: 3,
+    double: 7,
+    single: 2,
+
+    vibe:
+      "A warm bush atmosphere with softer pacing and strong nature immersion in Tarangire.",
+
+    inclusions: ["Three meals", "Bottled water", "Shared game drives"],
+    exclusions: ["Park fees", "Flights", "Premium beverages"],
+
+    freeActivities: ["Game Drive", "Birding Walk"],
+    paidActivities: ["Private Sundowner", "Night Drive"],
+
+    offersText: "Long-stay value offer available in select shoulder months.",
+    terms: "Deposit and cancellation policy available on request.",
+
+    tradeProfileLabel: "Nyumbani-Collections",
+    tradeProfileSub: "Trade profile.",
+
+    locationLabel: "Tarangire National Park, Tanzania",
+    mapLink: "https://maps.google.com",
+
+    rating: 4.7,
+    reviewCount: 84,
+
+    website: "https://example.com",
+    facebookUrl: "https://facebook.com/",
+    instagramUrl: "https://instagram.com/nyumbani.collections",
+    tiktokUrl: "https://tiktok.com/",
+    youtubeUrl: "https://youtube.com/",
+
+    roomTypeLabels: {
+      family: "Family tent",
+      double: "Double tent",
+      single: "Single tent",
     },
-    socialLinks: {
-      facebookUrl: "https://facebook.com/",
-      instagramUrl: "https://instagram.com/",
-      tiktokUrl: "https://tiktok.com/",
-      youtubeUrl: "https://youtube.com/",
+
+    roomPhotos: {
+      family: [],
+      double: [],
+      single: [],
     },
-    contactCard: {
-      contactName: "Nyumbani Reservations",
-      contactTitle: "Trade Desk",
-      contactCompany: "Nyumbani Collections",
-      contactEmail: "trade@nyumbani.example",
-      contactPhone: "+255 000 000 000",
-      contactWebsite: "https://example.com",
-    },
-    leadCapture: {
-      headline: "Get rates, availability & trade support in one reply.",
-      subcopy:
-        "Leave your details and we’ll send a trade-ready fact sheet and quick quote.",
-      bullet1: "Agent-ready proposal + net rates",
-      bullet2: "Seasonality guidance + offers",
-      bullet3: "Fast response from reservations",
-      cta: "Request Trade Pack",
-      disclaimer:
-        "By submitting, you agree to be contacted by our reservations team.",
-      enquiryEmail: "trade@nyumbani.example",
-      enquiryWhatsApp: "+255000000000",
-      enquirySubject: "Trade Request / Rates & Availability",
-    },
+
+    leadHeadline: "Ask for rates, fit, and trade support.",
+    leadSubcopy:
+      "Send a quick enquiry and receive a trade-ready response from reservations.",
+    leadBullet1: "Fast turnaround for trade partners",
+    leadBullet2: "Clear fit guidance by client type",
+    leadBullet3: "Useful current offers and positioning",
+    leadCta: "Request Trade Pack",
+    leadDisclaimer:
+      "By submitting, you agree to be contacted by our reservations team.",
+
+    contactName: "Nyumbani Tarangire Reservations",
+    contactTitle: "Trade Desk",
+    contactCompany: "Nyumbani Collections",
+    contactEmail: "trade@nyumbani.example",
+    contactPhone: "+255 000 000 000",
+    contactWebsite: "https://example.com",
+
+    enquiryEmail: "trade@nyumbani.example",
+    enquiryWhatsApp: "+255000000000",
+    enquirySubject: "Trade Request / Rates & Availability",
+
     downloadables: [
       {
-        id: "dl-nyumbani-tarangire-factsheet",
-        title: "Trade Fact Sheet",
+        id: "dl-tarangire-factsheet",
+        title: "Trade Fact Sheet (Google Drive)",
         type: "link",
         url: "https://drive.google.com/",
       },
     ],
+
     taLogoUrl:
       "https://static.tacdn.com/img2/brand_refresh/Tripadvisor_lockup_horizontal_secondary_registered.svg",
     taLink: "https://www.tripadvisor.com/",
-    taRating: 4.4,
+    taRating: 4.3,
     taStyle: "dots",
+
     matchAttributes: {
       idealFor: [
         "family-safari",
