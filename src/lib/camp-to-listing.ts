@@ -96,21 +96,12 @@ function cleanText(value: string): string {
 
 function unique(values: string[]): string[] {
   return Array.from(
-    new Set(
-      values
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
+    new Set(values.map((item) => item.trim()).filter(Boolean)),
   );
 }
 
 function inferDestinations(camp: Camp): string[] {
-  const haystack = [
-    camp.locationLabel,
-    camp.name,
-    camp.vibe,
-    camp.descriptionFallback ?? "",
-  ]
+  const haystack = [camp.locationLabel, camp.name, camp.vibe]
     .join(" ")
     .toLowerCase();
 
@@ -130,10 +121,12 @@ function inferDestinations(camp: Camp): string[] {
     "south luangwa",
   ];
 
-  return knownDestinations.filter((destination) => haystack.includes(destination));
+  return knownDestinations.filter((destination) =>
+    haystack.includes(destination),
+  );
 }
 
-function inferKind(camp: Camp): Listing["kind"] {
+function inferKind(_camp: Camp): Listing["kind"] {
   return "camp";
 }
 
@@ -153,7 +146,6 @@ function inferBudgetBands(camp: Camp): string[] {
 
 function inferStyleTags(camp: Camp): string[] {
   const tags: string[] = [];
-
   const source = `${camp.class} ${camp.vibe}`.toLowerCase();
 
   if (source.includes("luxury")) tags.push("luxury");
@@ -169,7 +161,8 @@ function inferStyleTags(camp: Camp): string[] {
 
 function inferIdealFor(camp: Camp): string[] {
   const tags: string[] = [];
-  const source = `${camp.vibe} ${camp.leadHeadline} ${camp.leadSubcopy}`.toLowerCase();
+  const source =
+    `${camp.vibe} ${camp.leadHeadline} ${camp.leadSubcopy}`.toLowerCase();
 
   if (source.includes("honeymoon")) tags.push("honeymoon");
   if (source.includes("family")) tags.push("family-safari");
@@ -226,7 +219,9 @@ export function campToListing(
     ...camp.freeActivities
       .map((item) => item.toLowerCase())
       .filter((item) =>
-        ["photography", "birding", "walking-safari", "game-drive"].includes(item),
+        ["photography", "birding", "walking-safari", "game-drive"].includes(
+          item,
+        ),
       ),
   ]);
 
@@ -236,7 +231,7 @@ export function campToListing(
       .filter(Boolean),
   );
 
-  const listing: Listing = {
+  return {
     id: options?.id ?? `camp-${slug}`,
     ownerAccountId: options?.ownerAccountId ?? "acct-admin",
     slug,
@@ -261,8 +256,6 @@ export function campToListing(
       suitability: inferSuitability(camp),
     },
   };
-
-  return listing;
 }
 
 export function campsToListings(
