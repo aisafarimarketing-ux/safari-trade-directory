@@ -609,18 +609,18 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   {leadCapture.subcopy}
                 </p>
 
-                <div className="mt-5 space-y-2">
-                  [leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
-                    .filter(Boolean)
-                    .map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/75"
-                      >
-                        {item}
-                      </div>
-                    ))
-                </div>
+               <div className="mt-5 space-y-2">
+  {[leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
+    .filter(Boolean)
+    .map((item) => (
+      <div
+        key={item}
+        className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/75"
+      >
+        {item}
+      </div>
+    ))}
+</div>
 
                 <div className="mt-5 flex flex-col gap-3">
                   {leadCapture.enquiryEmail ? (
