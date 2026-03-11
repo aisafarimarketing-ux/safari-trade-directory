@@ -1,17 +1,122 @@
-import { listings } from "../../../data/listings";
-import { companies } from "../../../data/companies";
-import { isPublicListing } from "../../../lib/listing-visibility";
+import { headers } from "next/headers";
 
 type ProfilePageProps = {
-  params: {
+  params: Promise<{
     slug: string;
+  }>;
+};
+
+type Downloadable = {
+  id: string;
+  title: string;
+  type: "file" | "link";
+  url: string;
+  mime?: string;
+  fileName?: string;
+};
+
+type ApiListingRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  companySlug: string | null;
+  status: "draft" | "published" | "archived";
+  locationLabel: string | null;
+  class: string | null;
+  vibe: string | null;
+  website: string | null;
+  mapLink: string | null;
+  tripadvisorRating: number | null;
+  data: {
+    name?: string;
+    class?: string;
+    vibe?: string;
+    tradeProfileLabel?: string;
+    tradeProfileSub?: string;
+    locationLabel?: string;
+    mapLink?: string;
+    website?: string;
+    logoImage?: string;
+    coverImage?: string;
+    rating?: number | string;
+    reviewCount?: number | string;
+    facebookUrl?: string;
+    instagramUrl?: string;
+    tiktokUrl?: string;
+    youtubeUrl?: string;
+    roomTypeLabels?: {
+      family?: string;
+      double?: string;
+      single?: string;
+    };
+    roomPhotos?: {
+      family?: string[];
+      double?: string[];
+      single?: string[];
+    };
+    inclusions?: string[];
+    exclusions?: string[];
+    freeActivities?: string[];
+    paidActivities?: string[];
+    offersText?: string;
+    terms?: string;
+    downloadables?: Downloadable[];
+    contactName?: string;
+    contactTitle?: string;
+    contactCompany?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    contactWebsite?: string;
+    leadHeadline?: string;
+    leadSubcopy?: string;
+    leadBullet1?: string;
+    leadBullet2?: string;
+    leadBullet3?: string;
+    leadCta?: string;
+    leadDisclaimer?: string;
+    enquiryEmail?: string;
+    enquiryWhatsApp?: string;
+    enquirySubject?: string;
+    taLogoUrl?: string;
+    taLink?: string;
+    taRating?: number | string;
   };
 };
 
-export default function ProfilePage({ params }: ProfilePageProps) {
-  const listing = listings.find(
-    (item) => item.slug === params.slug && isPublicListing(item),
-  );
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> {
+  const headersList = await headers();
+  const host = headersList.get("host");
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+
+  if (!host) return null;
+
+  const res = await fetch(`${protocol}://${host}/api/admin/listings`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) return null;
+
+  const json = await res.json();
+  const listings = Array.isArray(json.listings) ? json.listings : [];
+
+  return listings.find(
+    (item: ApiListingRecord) =>
+      item.slug === slug && item.status !== "archived",
+  ) || null;
+}
+
+export default async function ProfilePage({ params }: ProfilePageProps) {
+  const { slug } = await params;
+  const listing = await getListingBySlug(slug);
 
   if (!listing) {
     return (
@@ -48,31 +153,85 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     );
   }
 
-  const company = companies.find((item) => item.slug === listing.companySlug);
+  const data = listing.data || {};
 
-  const propertyDetails = listing.propertyDetails;
-  const socialLinks = listing.socialLinks;
-  const contactCard = listing.contactCard;
-  const leadCapture = listing.leadCapture;
-  const downloadables = listing.downloadables ?? [];
+  const location = listing.locationLabel || data.locationLabel || "Location not set";
+  const vibe = listing.vibe || data.vibe || "";
+  const website = listing.website || data.website || "";
+  const rating = toNumber(data.rating);
+  const reviewCount = toNumber(data.reviewCount);
+
+  const socialLinks = {
+    facebookUrl: data.facebookUrl || "",
+    instagramUrl: data.instagramUrl || "",
+    tiktokUrl: data.tiktokUrl || "",
+    youtubeUrl: data.youtubeUrl || "",
+  };
+
+  const contactCard =
+    data.contactName ||
+    data.contactTitle ||
+    data.contactCompany ||
+    data.contactEmail ||
+    data.contactPhone ||
+    data.contactWebsite
+      ? {
+          contactName: data.contactName || "",
+          contactTitle: data.contactTitle || "",
+          contactCompany: data.contactCompany || "",
+          contactEmail: data.contactEmail || "",
+          contactPhone: data.contactPhone || "",
+          contactWebsite: data.contactWebsite || "",
+        }
+      : null;
+
+  const leadCapture =
+    data.leadHeadline ||
+    data.leadSubcopy ||
+    data.leadBullet1 ||
+    data.leadBullet2 ||
+    data.leadBullet3 ||
+    data.leadCta ||
+    data.leadDisclaimer ||
+    data.enquiryEmail ||
+    data.enquiryWhatsApp
+      ? {
+          headline: data.leadHeadline || "Trade Enquiries",
+          subcopy: data.leadSubcopy || "",
+          bullet1: data.leadBullet1 || "",
+          bullet2: data.leadBullet2 || "",
+          bullet3: data.leadBullet3 || "",
+          cta: data.leadCta || "Send Enquiry",
+          disclaimer: data.leadDisclaimer || "",
+          enquiryEmail: data.enquiryEmail || "",
+          enquiryWhatsApp: data.enquiryWhatsApp || "",
+          enquirySubject: data.enquirySubject || "",
+        }
+      : null;
+
+  const downloadables = Array.isArray(data.downloadables)
+    ? data.downloadables
+    : [];
 
   const roomPhotoGroups = [
     {
       key: "family",
-      label: propertyDetails?.roomTypeLabels?.family || "Family setup",
-      items: propertyDetails?.roomPhotos?.family || [],
+      label: data.roomTypeLabels?.family || "Family setup",
+      items: data.roomPhotos?.family || [],
     },
     {
       key: "double",
-      label: propertyDetails?.roomTypeLabels?.double || "Double setup",
-      items: propertyDetails?.roomPhotos?.double || [],
+      label: data.roomTypeLabels?.double || "Double setup",
+      items: data.roomPhotos?.double || [],
     },
     {
       key: "single",
-      label: propertyDetails?.roomTypeLabels?.single || "Single setup",
-      items: propertyDetails?.roomPhotos?.single || [],
+      label: data.roomTypeLabels?.single || "Single setup",
+      items: data.roomPhotos?.single || [],
     },
   ].filter((group) => group.items.length > 0);
+
+  const taRating = toNumber(data.taRating ?? listing.tripadvisorRating);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -83,12 +242,12 @@ export default function ProfilePage({ params }: ProfilePageProps) {
           <div className="grid items-start gap-10 lg:grid-cols-[1.3fr_0.7fr]">
             <div>
               <div className="inline-flex items-center rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-100">
-                {listing.kind.replace("-", " ")}
+                property
               </div>
 
-              {(listing.tradeProfileLabel || listing.tradeProfileSub) && (
+              {(data.tradeProfileLabel || data.tradeProfileSub) && (
                 <p className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-white/45">
-                  {[listing.tradeProfileLabel, listing.tradeProfileSub]
+                  {[data.tradeProfileLabel, data.tradeProfileSub]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
@@ -100,39 +259,36 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
               <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-white/60">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                  {listing.location}
+                  {location}
                 </span>
 
-                {company ? (
-                  <a
-                    href={`/companies/${company.slug}`}
-                    className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-emerald-100 hover:bg-emerald-300/15"
-                  >
-                    {company.name}
-                  </a>
+                {typeof rating === "number" ? (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                    Rating {rating.toFixed(1)}
+                    {typeof reviewCount === "number"
+                      ? ` · ${reviewCount} reviews`
+                      : ""}
+                  </span>
                 ) : null}
 
-                {typeof propertyDetails?.rating === "number" ? (
+                {listing.class ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                    Rating {propertyDetails.rating.toFixed(1)}
-                    {typeof propertyDetails.reviewCount === "number"
-                      ? ` · ${propertyDetails.reviewCount} reviews`
-                      : ""}
+                    {listing.class}
                   </span>
                 ) : null}
               </div>
 
               <p className="mt-8 max-w-3xl text-lg leading-8 text-white/70">
-                {listing.description}
+                {vibe || "Trade-ready safari property profile."}
               </p>
 
-              {propertyDetails?.vibe ? (
+              {vibe ? (
                 <div className="mt-8 rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
                   <p className="text-sm uppercase tracking-[0.2em] text-white/40">
                     Property Vibe
                   </p>
                   <p className="mt-4 text-base leading-8 text-white/70">
-                    {propertyDetails.vibe}
+                    {vibe}
                   </p>
                 </div>
               ) : null}
@@ -145,43 +301,39 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   Back to Directory
                 </a>
 
-                {company ? (
-                  <a
-                    href={`/companies/${company.slug}`}
-                    className="rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white"
-                  >
-                    View Company
-                  </a>
-                ) : null}
-
                 <a
                   href="/compare"
                   className="rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white"
                 >
                   Compare
                 </a>
+
+                {data.mapLink ? (
+                  <a
+                    href={data.mapLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white"
+                  >
+                    Open Map
+                  </a>
+                ) : null}
               </div>
 
               <div className="mt-12 grid gap-4 md:grid-cols-3">
-                <FactCard
-                  label="Listing Type"
-                  value={listing.kind.replace("-", " ")}
-                />
-                <FactCard label="Location" value={listing.location} />
-                <FactCard
-                  label="Company"
-                  value={company ? company.name : "Independent"}
-                />
+                <FactCard label="Listing Type" value="property" />
+                <FactCard label="Location" value={location} />
+                <FactCard label="Status" value={listing.status} />
               </div>
             </div>
 
             <div className="lg:pt-8">
               <div className="overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-br from-white/[0.10] to-white/[0.03] p-5 shadow-2xl">
                 <div className="relative aspect-[4/5] rounded-[24px] border border-white/10 bg-neutral-900/70">
-                  {listing.coverImage ? (
+                  {data.coverImage ? (
                     <>
                       <img
-                        src={listing.coverImage}
+                        src={data.coverImage}
                         alt={`${listing.name} cover`}
                         className="h-full w-full object-cover"
                       />
@@ -195,9 +347,9 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   )}
 
                   <div className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
-                    {listing.logoImage ? (
+                    {data.logoImage ? (
                       <img
-                        src={listing.logoImage}
+                        src={data.logoImage}
                         alt={`${listing.name} logo`}
                         className="h-full w-full object-cover"
                       />
@@ -216,25 +368,25 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   </div>
 
                   <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-amber-100">
-                    Live
+                    {listing.status}
                   </div>
                 </div>
               </div>
 
-              {(socialLinks?.facebookUrl ||
-                socialLinks?.instagramUrl ||
-                socialLinks?.tiktokUrl ||
-                socialLinks?.youtubeUrl ||
-                propertyDetails?.website) && (
+              {(socialLinks.facebookUrl ||
+                socialLinks.instagramUrl ||
+                socialLinks.tiktokUrl ||
+                socialLinks.youtubeUrl ||
+                website) && (
                 <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
                   <p className="text-sm uppercase tracking-[0.2em] text-white/40">
                     Links
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-3">
-                    {propertyDetails?.website ? (
+                    {website ? (
                       <a
-                        href={propertyDetails.website}
+                        href={website}
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
@@ -243,7 +395,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       </a>
                     ) : null}
 
-                    {socialLinks?.facebookUrl ? (
+                    {socialLinks.facebookUrl ? (
                       <a
                         href={socialLinks.facebookUrl}
                         target="_blank"
@@ -254,7 +406,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       </a>
                     ) : null}
 
-                    {socialLinks?.instagramUrl ? (
+                    {socialLinks.instagramUrl ? (
                       <a
                         href={socialLinks.instagramUrl}
                         target="_blank"
@@ -265,7 +417,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       </a>
                     ) : null}
 
-                    {socialLinks?.tiktokUrl ? (
+                    {socialLinks.tiktokUrl ? (
                       <a
                         href={socialLinks.tiktokUrl}
                         target="_blank"
@@ -276,7 +428,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       </a>
                     ) : null}
 
-                    {socialLinks?.youtubeUrl ? (
+                    {socialLinks.youtubeUrl ? (
                       <a
                         href={socialLinks.youtubeUrl}
                         target="_blank"
@@ -297,61 +449,23 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       <section className="mx-auto max-w-7xl px-6 py-16 md:px-10">
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6">
-            <DataBlock
-              title="Ideal For"
-              items={listing.matchAttributes.idealFor}
-            />
-
-            <DataBlock
-              title="Experiences"
-              items={listing.matchAttributes.experiences}
-            />
-
-            <DataBlock
-              title="Style"
-              items={listing.matchAttributes.styleTags}
-            />
-
-            <DataBlock
-              title="Suitability"
-              items={listing.matchAttributes.suitability}
-            />
-
-            <DataBlock
-              title="Budget Bands"
-              items={listing.matchAttributes.budgetBands}
-            />
-
-            <DataBlock
-              title="Travel Months"
-              items={listing.matchAttributes.travelMonths}
-            />
-
-            <DataBlock
-              title="Destinations"
-              items={listing.matchAttributes.destinations}
-            />
-
-            {propertyDetails?.inclusions?.length ? (
-              <DataBlock title="Inclusions" items={propertyDetails.inclusions} />
+            {Array.isArray(data.inclusions) && data.inclusions.length ? (
+              <DataBlock title="Inclusions" items={data.inclusions} />
             ) : null}
 
-            {propertyDetails?.exclusions?.length ? (
-              <DataBlock title="Exclusions" items={propertyDetails.exclusions} />
+            {Array.isArray(data.exclusions) && data.exclusions.length ? (
+              <DataBlock title="Exclusions" items={data.exclusions} />
             ) : null}
 
-            {propertyDetails?.freeActivities?.length ? (
+            {Array.isArray(data.freeActivities) && data.freeActivities.length ? (
               <DataBlock
                 title="Included Activities"
-                items={propertyDetails.freeActivities}
+                items={data.freeActivities}
               />
             ) : null}
 
-            {propertyDetails?.paidActivities?.length ? (
-              <DataBlock
-                title="Paid Activities"
-                items={propertyDetails.paidActivities}
-              />
+            {Array.isArray(data.paidActivities) && data.paidActivities.length ? (
+              <DataBlock title="Paid Activities" items={data.paidActivities} />
             ) : null}
 
             {roomPhotoGroups.length ? (
@@ -387,40 +501,29 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               </div>
             ) : null}
 
-            {propertyDetails?.offersText ? (
+            {data.offersText ? (
               <div className="rounded-[32px] border border-amber-300/15 bg-amber-300/[0.06] p-8">
                 <p className="text-sm uppercase tracking-[0.2em] text-amber-100/70">
                   Offer
                 </p>
 
                 <p className="mt-5 text-base leading-8 text-white/80">
-                  {propertyDetails.offersText}
+                  {data.offersText}
                 </p>
               </div>
             ) : null}
 
-            {propertyDetails?.terms ? (
+            {data.terms ? (
               <div className="rounded-[32px] border border-white/10 bg-white/[0.03] p-8">
                 <p className="text-sm uppercase tracking-[0.2em] text-white/40">
                   Terms
                 </p>
 
                 <p className="mt-5 text-base leading-8 text-white/70">
-                  {propertyDetails.terms}
+                  {data.terms}
                 </p>
               </div>
             ) : null}
-
-            <div className="rounded-[32px] border border-white/10 bg-white/[0.03] p-8">
-              <p className="text-sm uppercase tracking-[0.2em] text-white/40">
-                Fit Notes
-              </p>
-
-              <p className="mt-5 text-base leading-8 text-white/70">
-                {listing.matchAttributes.customFitNotes ||
-                  "No additional notes yet."}
-              </p>
-            </div>
           </div>
 
           <aside className="space-y-6">
@@ -436,15 +539,6 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 >
                   Browse More Profiles
                 </a>
-
-                {company ? (
-                  <a
-                    href={`/companies/${company.slug}`}
-                    className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center text-sm font-semibold text-white"
-                  >
-                    Open Company Page
-                  </a>
-                ) : null}
 
                 <a
                   href="/workspace"
@@ -516,7 +610,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 </p>
 
                 <div className="mt-5 space-y-2">
-                  {[leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
+                  [leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
                     .filter(Boolean)
                     .map((item) => (
                       <div
@@ -525,7 +619,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       >
                         {item}
                       </div>
-                    ))}
+                    ))
                 </div>
 
                 <div className="mt-5 flex flex-col gap-3">
@@ -582,32 +676,32 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               </div>
             ) : null}
 
-            {(listing.taLink || typeof listing.taRating === "number") && (
+            {(data.taLink || typeof taRating === "number") && (
               <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6">
                 <p className="text-sm uppercase tracking-[0.2em] text-white/40">
                   Tripadvisor
                 </p>
 
                 <div className="mt-5 space-y-4">
-                  {listing.taLogoUrl ? (
+                  {data.taLogoUrl ? (
                     <div className="overflow-hidden rounded-2xl border border-white/10 bg-white px-4 py-3">
                       <img
-                        src={listing.taLogoUrl}
+                        src={data.taLogoUrl}
                         alt="Tripadvisor"
                         className="h-8 w-auto object-contain"
                       />
                     </div>
                   ) : null}
 
-                  {typeof listing.taRating === "number" ? (
+                  {typeof taRating === "number" ? (
                     <div className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white">
-                      Rating {listing.taRating.toFixed(1)}
+                      Rating {taRating.toFixed(1)}
                     </div>
                   ) : null}
 
-                  {listing.taLink ? (
+                  {data.taLink ? (
                     <a
-                      href={listing.taLink}
+                      href={data.taLink}
                       target="_blank"
                       rel="noreferrer"
                       className="block rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
