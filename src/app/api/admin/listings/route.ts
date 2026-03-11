@@ -1,5 +1,50 @@
 import { NextResponse } from "next/server";
 
+type ThemeState = {
+  pageBg: string;
+  blockBg: string;
+  accent: string;
+  highlight: string;
+  borderColor: string;
+};
+
+type BlockColorState = {
+  header: string;
+  tripadvisor: string;
+  tradeDetails: string;
+  matrix: string;
+  inclusions: string;
+  exclusions: string;
+  experiences: string;
+  offers: string;
+  terms: string;
+  leadCapture: string;
+  contactCard: string;
+  downloadables: string;
+};
+
+type VisibleBlocksState = {
+  header: boolean;
+  tripadvisor: boolean;
+  tradeDetails: boolean;
+  matrix: boolean;
+  inclusions: boolean;
+  exclusions: boolean;
+  experiences: boolean;
+  offers: boolean;
+  terms: boolean;
+  leadCapture: boolean;
+  contactCard: boolean;
+  downloadables: boolean;
+  hero: boolean;
+};
+
+type ListingDesign = {
+  theme: ThemeState | null;
+  blockColors: BlockColorState | null;
+  visibleBlocks: VisibleBlocksState | null;
+};
+
 type ListingRecord = {
   id: string;
   slug: string;
@@ -13,6 +58,7 @@ type ListingRecord = {
   mapLink: string | null;
   tripadvisorRating: number | null;
   data: unknown;
+  design: ListingDesign;
   createdAt: string;
   updatedAt: string;
 };
@@ -46,6 +92,50 @@ function toNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function pickDesign(
+  body: Record<string, unknown>,
+  existing?: ListingRecord,
+): ListingDesign {
+  const theme = isObject(body.theme)
+    ? (body.theme as ThemeState)
+    : existing?.design.theme ?? null;
+
+  const blockColors = isObject(body.blockColors)
+    ? (body.blockColors as BlockColorState)
+    : existing?.design.blockColors ?? null;
+
+  const visibleBlocks = isObject(body.visibleBlocks)
+    ? (body.visibleBlocks as VisibleBlocksState)
+    : existing?.design.visibleBlocks ?? null;
+
+  return {
+    theme,
+    blockColors,
+    visibleBlocks,
+  };
+}
+
+function extractListingInput(body: Record<string, unknown>) {
+  if (isObject(body.camp)) {
+    return body.camp;
+  }
+
+  if (
+    Array.isArray(body.portfolio) &&
+    typeof body.selectedCampIndex === "number" &&
+    body.portfolio[body.selectedCampIndex] &&
+    isObject(body.portfolio[body.selectedCampIndex])
+  ) {
+    return body.portfolio[body.selectedCampIndex] as Record<string, unknown>;
+  }
+
+  return body;
+}
+
 export async function GET() {
   const listings = Array.from(listingsStore.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -60,10 +150,26 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+
+    if (!isObject(rawBody)) {
+      return NextResponse.json(
+        { error: "Invalid JSON payload." },
+        { status: 400 },
+      );
+    }
+
+    const listingInput = extractListingInput(rawBody);
+
+    if (!isObject(listingInput)) {
+      return NextResponse.json(
+        { error: "Listing payload is missing." },
+        { status: 400 },
+      );
+    }
 
     const name =
-      typeof body?.name === "string" ? body.name.trim() : "";
+      typeof listingInput.name === "string" ? listingInput.name.trim() : "";
 
     if (!name) {
       return NextResponse.json(
@@ -73,7 +179,7 @@ export async function POST(req: Request) {
     }
 
     const slugInput =
-      typeof body?.slug === "string" ? body.slug.trim() : "";
+      typeof listingInput.slug === "string" ? listingInput.slug.trim() : "";
 
     const slug = slugInput || slugify(name);
 
@@ -92,35 +198,40 @@ export async function POST(req: Request) {
       slug,
       name,
       companySlug:
-        typeof body?.companySlug === "string" && body.companySlug.trim()
-          ? body.companySlug.trim()
-          : null,
+        typeof listingInput.companySlug === "string" &&
+        listingInput.companySlug.trim()
+          ? listingInput.companySlug.trim()
+          : existing?.companySlug ?? null,
       status:
-        body?.status === "published" || body?.status === "archived"
-          ? body.status
-          : "draft",
+        listingInput.status === "published" || listingInput.status === "archived"
+          ? listingInput.status
+          : existing?.status ?? "draft",
       locationLabel:
-        typeof body?.locationLabel === "string" && body.locationLabel.trim()
-          ? body.locationLabel.trim()
-          : null,
+        typeof listingInput.locationLabel === "string" &&
+        listingInput.locationLabel.trim()
+          ? listingInput.locationLabel.trim()
+          : existing?.locationLabel ?? null,
       class:
-        typeof body?.class === "string" && body.class.trim()
-          ? body.class.trim()
-          : null,
+        typeof listingInput.class === "string" && listingInput.class.trim()
+          ? listingInput.class.trim()
+          : existing?.class ?? null,
       vibe:
-        typeof body?.vibe === "string" && body.vibe.trim()
-          ? body.vibe.trim()
-          : null,
+        typeof listingInput.vibe === "string" && listingInput.vibe.trim()
+          ? listingInput.vibe.trim()
+          : existing?.vibe ?? null,
       website:
-        typeof body?.website === "string" && body.website.trim()
-          ? body.website.trim()
-          : null,
+        typeof listingInput.website === "string" && listingInput.website.trim()
+          ? listingInput.website.trim()
+          : existing?.website ?? null,
       mapLink:
-        typeof body?.mapLink === "string" && body.mapLink.trim()
-          ? body.mapLink.trim()
-          : null,
-      tripadvisorRating: toNumberOrNull(body?.taRating ?? body?.rating),
-      data: body,
+        typeof listingInput.mapLink === "string" && listingInput.mapLink.trim()
+          ? listingInput.mapLink.trim()
+          : existing?.mapLink ?? null,
+      tripadvisorRating: toNumberOrNull(
+        listingInput.taRating ?? listingInput.rating,
+      ),
+      data: listingInput,
+      design: pickDesign(rawBody, existing),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
