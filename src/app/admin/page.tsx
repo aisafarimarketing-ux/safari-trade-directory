@@ -710,8 +710,10 @@ export default function RestorationSafariAdmin() {
     window.localStorage.setItem(STORAGE_KEY, serializeState(payload));
     return payload;
   };
+const handleSave = async () => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 12000);
 
- const handleSave = async () => {
   try {
     setSaveState("saving");
     setSaveMessage("Saving...");
@@ -728,7 +730,13 @@ export default function RestorationSafariAdmin() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(activeCamp),
+      body: JSON.stringify({
+        camp: activeCamp,
+        theme: payload.theme,
+        blockColors: payload.blockColors,
+        visibleBlocks: payload.visibleBlocks,
+      }),
+      signal: controller.signal,
     });
 
     const json = await res.json();
@@ -745,12 +753,18 @@ export default function RestorationSafariAdmin() {
     window.setTimeout(() => setSaveState("idle"), 1800);
   } catch (error) {
     setSaveState("error");
-    setSaveMessage(
-      error instanceof Error ? error.message : "Save failed",
-    );
+
+    if (error instanceof DOMException && error.name === "AbortError") {
+      setSaveMessage("Save timed out after 12 seconds");
+    } else {
+      setSaveMessage(
+        error instanceof Error ? error.message : "Save failed",
+      );
+    }
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 };
-
   const exportBackup = () => {
     try {
       const payload = persistToLocalStorage();
