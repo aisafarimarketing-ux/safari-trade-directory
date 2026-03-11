@@ -1,9 +1,68 @@
-import { listings } from "../../data/listings";
-import { companies } from "../../data/companies";
-import { isPublicListing } from "../../lib/listing-visibility";
+type ApiListingRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  companySlug: string | null;
+  status: "draft" | "published" | "archived";
+  locationLabel: string | null;
+  class: string | null;
+  vibe: string | null;
+  website: string | null;
+  mapLink: string | null;
+  tripadvisorRating: number | null;
+  data: {
+    name?: string;
+    class?: string;
+    vibe?: string;
+    tradeProfileLabel?: string;
+    tradeProfileSub?: string;
+    locationLabel?: string;
+    logoImage?: string;
+    coverImage?: string;
+    website?: string;
+    facebookUrl?: string;
+    instagramUrl?: string;
+    tiktokUrl?: string;
+    youtubeUrl?: string;
+    rating?: number | string;
+    reviewCount?: number | string;
+  };
+};
 
-export default function DirectoryPage() {
-  const publishedListings = listings.filter(isPublicListing);
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+export default async function DirectoryPage() {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
+
+  let listings: ApiListingRecord[] = [];
+  let loadError = false;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/admin/listings`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to load listings");
+    }
+
+    const json = await res.json();
+    listings = Array.isArray(json.listings) ? json.listings : [];
+  } catch {
+    loadError = true;
+  }
+
+  const visibleListings = listings.filter((listing) => listing.status !== "archived");
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -23,20 +82,41 @@ export default function DirectoryPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12 md:px-10">
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {publishedListings.map((listing) => {
-            const company = companies.find(
-              (item) => item.slug === listing.companySlug,
-            );
+        {loadError ? (
+          <div className="rounded-[30px] border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-100">
+            Failed to load listings from the API.
+          </div>
+        ) : null}
 
-            const propertyDetails = listing.propertyDetails;
-            const socialLinks = listing.socialLinks;
+        {!loadError && visibleListings.length === 0 ? (
+          <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8 text-white/65">
+            No listings available yet.
+          </div>
+        ) : null}
+
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {visibleListings.map((listing) => {
+            const data = listing.data || {};
+            const coverImage = data.coverImage || "";
+            const logoImage = data.logoImage || "";
+            const location = listing.locationLabel || data.locationLabel || "Location not set";
+            const vibe = listing.vibe || data.vibe || "";
+            const website = listing.website || data.website || "";
+            const rating = toNumber(data.rating ?? listing.tripadvisorRating);
+            const reviewCount = toNumber(data.reviewCount);
+            const socialLinks = {
+              facebookUrl: data.facebookUrl || "",
+              instagramUrl: data.instagramUrl || "",
+              tiktokUrl: data.tiktokUrl || "",
+              youtubeUrl: data.youtubeUrl || "",
+            };
+
             const hasLinks =
-              !!propertyDetails?.website ||
-              !!socialLinks?.facebookUrl ||
-              !!socialLinks?.instagramUrl ||
-              !!socialLinks?.tiktokUrl ||
-              !!socialLinks?.youtubeUrl;
+              !!website ||
+              !!socialLinks.facebookUrl ||
+              !!socialLinks.instagramUrl ||
+              !!socialLinks.tiktokUrl ||
+              !!socialLinks.youtubeUrl;
 
             return (
               <div
@@ -44,10 +124,10 @@ export default function DirectoryPage() {
                 className="group overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.05]"
               >
                 <div className="relative aspect-[4/3] border-b border-white/10 bg-neutral-900">
-                  {listing.coverImage ? (
+                  {coverImage ? (
                     <>
                       <img
-                        src={listing.coverImage}
+                        src={coverImage}
                         alt={`${listing.name} cover`}
                         className="h-full w-full object-cover"
                       />
@@ -62,20 +142,18 @@ export default function DirectoryPage() {
 
                   <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-4">
                     <span className="rounded-full border border-amber-300/20 bg-black/35 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-amber-100 backdrop-blur">
-                      {listing.kind.replace("-", " ")}
+                      property
                     </span>
 
-                    {company ? (
-                      <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
-                        {company.name}
-                      </span>
-                    ) : null}
+                    <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
+                      {listing.status}
+                    </span>
                   </div>
 
                   <div className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
-                    {listing.logoImage ? (
+                    {logoImage ? (
                       <img
-                        src={listing.logoImage}
+                        src={logoImage}
                         alt={`${listing.name} logo`}
                         className="h-full w-full object-cover"
                       />
@@ -88,9 +166,9 @@ export default function DirectoryPage() {
                 </div>
 
                 <div className="p-6">
-                  {(listing.tradeProfileLabel || listing.tradeProfileSub) && (
+                  {(data.tradeProfileLabel || data.tradeProfileSub) && (
                     <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                      {[listing.tradeProfileLabel, listing.tradeProfileSub]
+                      {[data.tradeProfileLabel, data.tradeProfileSub]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
@@ -99,15 +177,15 @@ export default function DirectoryPage() {
                   <h2 className="text-2xl font-semibold">{listing.name}</h2>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/55">
-                    <span>{listing.location}</span>
+                    <span>{location}</span>
 
-                    {typeof propertyDetails?.rating === "number" ? (
+                    {typeof rating === "number" ? (
                       <>
                         <span className="text-white/25">•</span>
                         <span>
-                          {propertyDetails.rating.toFixed(1)}
-                          {typeof propertyDetails.reviewCount === "number"
-                            ? ` (${propertyDetails.reviewCount})`
+                          {rating.toFixed(1)}
+                          {typeof reviewCount === "number"
+                            ? ` (${reviewCount})`
                             : ""}
                         </span>
                       </>
@@ -115,49 +193,41 @@ export default function DirectoryPage() {
                   </div>
 
                   <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
-                    {listing.description}
+                    {vibe || "Trade-ready safari property profile."}
                   </p>
 
-                  {propertyDetails?.vibe ? (
-                    <p className="mt-4 line-clamp-2 text-sm leading-7 text-white/50">
-                      {propertyDetails.vibe}
-                    </p>
-                  ) : null}
-
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {listing.matchAttributes.idealFor.slice(0, 3).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
-                      >
-                        {tag}
+                    {listing.class ? (
+                      <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+                        {listing.class}
                       </span>
-                    ))}
+                    ) : null}
+
+                    {website ? (
+                      <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-xs text-emerald-100">
+                        Website
+                      </span>
+                    ) : null}
                   </div>
 
                   {hasLinks ? (
                     <div className="mt-5 flex flex-wrap gap-2">
-                      {propertyDetails?.website ? (
-                        <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-[11px] text-emerald-100">
-                          Website
-                        </span>
-                      ) : null}
-                      {socialLinks?.instagramUrl ? (
+                      {socialLinks.instagramUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           Instagram
                         </span>
                       ) : null}
-                      {socialLinks?.facebookUrl ? (
+                      {socialLinks.facebookUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           Facebook
                         </span>
                       ) : null}
-                      {socialLinks?.tiktokUrl ? (
+                      {socialLinks.tiktokUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           TikTok
                         </span>
                       ) : null}
-                      {socialLinks?.youtubeUrl ? (
+                      {socialLinks.youtubeUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           YouTube
                         </span>
@@ -179,15 +249,6 @@ export default function DirectoryPage() {
                     >
                       Compare
                     </a>
-
-                    {company ? (
-                      <a
-                        href={`/companies/${company.slug}`}
-                        className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
-                      >
-                        Company
-                      </a>
-                    ) : null}
                   </div>
                 </div>
               </div>
