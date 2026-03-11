@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+
 type ApiListingRecord = {
   id: string;
   slug: string;
@@ -39,16 +41,20 @@ function toNumber(value: unknown): number | null {
 }
 
 export default async function DirectoryPage() {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
-
   let listings: ApiListingRecord[] = [];
   let loadError = false;
 
   try {
-    const res = await fetch(`${baseUrl}/api/admin/listings`, {
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const protocol =
+      process.env.NODE_ENV === "development" ? "http" : "https";
+
+    if (!host) {
+      throw new Error("Missing host header");
+    }
+
+    const res = await fetch(`${protocol}://${host}/api/admin/listings`, {
       cache: "no-store",
     });
 
@@ -62,7 +68,9 @@ export default async function DirectoryPage() {
     loadError = true;
   }
 
-  const visibleListings = listings.filter((listing) => listing.status !== "archived");
+  const visibleListings = listings.filter(
+    (listing) => listing.status !== "archived",
+  );
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -99,7 +107,8 @@ export default async function DirectoryPage() {
             const data = listing.data || {};
             const coverImage = data.coverImage || "";
             const logoImage = data.logoImage || "";
-            const location = listing.locationLabel || data.locationLabel || "Location not set";
+            const location =
+              listing.locationLabel || data.locationLabel || "Location not set";
             const vibe = listing.vibe || data.vibe || "";
             const website = listing.website || data.website || "";
             const rating = toNumber(data.rating ?? listing.tripadvisorRating);
