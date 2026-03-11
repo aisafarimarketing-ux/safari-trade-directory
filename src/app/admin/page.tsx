@@ -692,18 +692,45 @@ export default function RestorationSafariAdmin() {
     return payload;
   };
 
-  const handleSave = () => {
-    try {
-      setSaveState("saving");
-      const payload = persistToLocalStorage();
-      setSaveState("saved");
-      setSaveMessage(`Saved locally at ${new Date(payload.savedAt).toLocaleTimeString()}`);
-      window.setTimeout(() => setSaveState("idle"), 1800);
-    } catch {
-      setSaveState("error");
-      setSaveMessage("Save failed");
+ const handleSave = async () => {
+  try {
+    setSaveState("saving");
+    setSaveMessage("Saving...");
+
+    const payload = persistToLocalStorage();
+    const activeCamp = payload.portfolio[payload.selectedCampIndex];
+
+    if (!activeCamp) {
+      throw new Error("No active camp selected.");
     }
-  };
+
+    const res = await fetch("/api/admin/listings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(activeCamp),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json?.error || "Save failed.");
+    }
+
+    setSaveState("saved");
+    setSaveMessage(
+      `Saved to API at ${new Date().toLocaleTimeString()} (${json.storage})`,
+    );
+
+    window.setTimeout(() => setSaveState("idle"), 1800);
+  } catch (error) {
+    setSaveState("error");
+    setSaveMessage(
+      error instanceof Error ? error.message : "Save failed",
+    );
+  }
+};
 
   const exportBackup = () => {
     try {
