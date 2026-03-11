@@ -586,24 +586,43 @@ export default function RestorationSafariAdmin() {
   const [portfolio, setPortfolio] = useState<Camp[]>(DEFAULT_PORTFOLIO);
 
   useEffect(() => {
-    const saved = safeJsonParse<SavePayload>(window.localStorage.getItem(STORAGE_KEY));
+  async function loadListings() {
+    try {
+      const res = await fetch("/api/admin/listings");
+      const json = await res.json();
 
-    if (saved) {
-      setPortfolio(saved.portfolio?.length ? saved.portfolio : DEFAULT_PORTFOLIO);
-      setSelectedCampIndex(
-        Math.min(
-          Math.max(saved.selectedCampIndex ?? 0, 0),
-          Math.max((saved.portfolio?.length ?? 1) - 1, 0),
-        ),
-      );
-      setTheme({ ...DEFAULT_THEME, ...saved.theme });
-      setBlockColors({ ...DEFAULT_BLOCK_COLORS, ...saved.blockColors });
-      setVisibleBlocks({ ...DEFAULT_VISIBLE_BLOCKS, ...saved.visibleBlocks });
-      setSaveMessage(`Loaded local draft from ${new Date(saved.savedAt).toLocaleString()}`);
+      if (res.ok && json.listings && json.listings.length > 0) {
+        const camps = json.listings.map((l: any) => l.data);
+
+        setPortfolio(camps);
+        setSelectedCampIndex(0);
+        setSaveMessage(`Loaded ${camps.length} listing(s) from API`);
+      } else {
+        const saved = safeJsonParse<SavePayload>(
+          window.localStorage.getItem(STORAGE_KEY)
+        );
+
+        if (saved) {
+          setPortfolio(saved.portfolio?.length ? saved.portfolio : DEFAULT_PORTFOLIO);
+          setSelectedCampIndex(saved.selectedCampIndex ?? 0);
+          setTheme({ ...DEFAULT_THEME, ...saved.theme });
+          setBlockColors({ ...DEFAULT_BLOCK_COLORS, ...saved.blockColors });
+          setVisibleBlocks({ ...DEFAULT_VISIBLE_BLOCKS, ...saved.visibleBlocks });
+
+          setSaveMessage(
+            `Loaded local draft from ${new Date(saved.savedAt).toLocaleString()}`
+          );
+        }
+      }
+    } catch {
+      setSaveMessage("Failed to load listings");
     }
 
     setHasHydrated(true);
-  }, []);
+  }
+
+  loadListings();
+}, []);
 
   const camp = portfolio[selectedCampIndex] ?? portfolio[0];
 
