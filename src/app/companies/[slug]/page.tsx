@@ -54,12 +54,7 @@ export default function CompanyPage({ params }: CompanyPageProps) {
   const leadListing = showcaseListings[0];
   const supportListings = showcaseListings.slice(1, 5);
 
-  const leadImage =
-    leadListing?.coverImage ||
-    company.coverImage ||
-    company.logoImage ||
-    "";
-
+  const leadImage = leadListing?.coverImage || "";
   const supportImages = supportListings.map((listing) => ({
     src: listing.coverImage || listing.logoImage || "",
     alt: listing.name,
