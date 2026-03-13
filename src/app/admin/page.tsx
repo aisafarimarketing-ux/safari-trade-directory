@@ -53,10 +53,12 @@ type Downloadable = {
   fileName?: string;
 };
 
+type CampStatus = "draft" | "published" | "archived";
+
 type Camp = {
-  slug?: string;
-  companySlug?: string;
-  status?: "draft" | "published" | "archived";
+  slug: string;
+  companySlug: string;
+  status: CampStatus;
 
   name: string;
   class: string;
@@ -186,9 +188,28 @@ type SavePayload = {
   visibleBlocks: VisibleBlocksState;
 };
 
+type ApiListingRecord = {
+  slug?: string;
+  companySlug?: string;
+  status?: CampStatus;
+  data?: Partial<Camp>;
+};
+
 const STORAGE_KEY = "restoration-safari-admin-v1";
 
-const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+const uid = () =>
+  Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 const DEFAULT_TA_LOGO =
   "https://static.tacdn.com/img2/brand_refresh/Tripadvisor_lockup_horizontal_secondary_registered.svg";
@@ -256,7 +277,7 @@ const makeNewCamp = (): Camp => ({
   offersText: "Seasonal offer goes here.",
   terms: "Deposit and cancellation policy goes here.",
 
-  tradeProfileLabel: "Nyumbani-Collections",
+  tradeProfileLabel: "Nyumbani Collection",
   tradeProfileSub: "Trade profile.",
 
   locationLabel: "Location name here",
@@ -326,6 +347,9 @@ const DEFAULT_PORTFOLIO: Camp[] = [
   {
     ...makeNewCamp(),
     name: "Nyumbani Serengeti",
+    slug: "nyumbani-serengeti",
+    companySlug: "nyumbani-collection",
+    status: "published",
     class: "Tented (Luxury)",
     rooms: 10,
     family: 2,
@@ -479,7 +503,7 @@ function RatingPips({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                const shift = (e as unknown as { shiftKey?: boolean }).shiftKey;
+                const shift = (e as React.MouseEvent<HTMLDivElement>).shiftKey;
                 if (shift) onChange(idx - 0.5);
                 else onChange(idx);
               }}
@@ -548,13 +572,38 @@ function serializeState(payload: SavePayload): string {
   return JSON.stringify(payload);
 }
 
+function normalizeCamp(input?: Partial<Camp>): Camp {
+  const base = makeNewCamp();
+
+  return {
+    ...base,
+    ...input,
+    slug: input?.slug?.trim() || slugify(input?.name || base.name),
+    companySlug: input?.companySlug?.trim() || "nyumbani-collection",
+    status: input?.status || "published",
+    roomTypeLabels: {
+      ...base.roomTypeLabels,
+      ...(input?.roomTypeLabels ?? {}),
+    },
+    roomPhotos: {
+      ...base.roomPhotos,
+      ...(input?.roomPhotos ?? {}),
+    },
+    inclusions: input?.inclusions ?? base.inclusions,
+    exclusions: input?.exclusions ?? base.exclusions,
+    freeActivities: input?.freeActivities ?? base.freeActivities,
+    paidActivities: input?.paidActivities ?? base.paidActivities,
+    downloadables: input?.downloadables ?? base.downloadables,
+  };
+}
+
 export default function RestorationSafariAdmin() {
   const [isPreview, setIsPreview] = useState(false);
   const [selectedCampIndex, setSelectedCampIndex] = useState(0);
   const [sendState, setSendState] = useState<"idle" | "sending">("idle");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [saveMessage, setSaveMessage] = useState("Local save ready");
   const [hasHydrated, setHasHydrated] = useState(false);
 
@@ -587,64 +636,78 @@ export default function RestorationSafariAdmin() {
     { k: "contactPhone", ph: "Phone" },
   ];
 
+  const [portfolio, setPortfolio] = useState<Camp[]>(DEFAULT_PORTFOLIO);
+
   const toggleBlock = (key: keyof typeof visibleBlocks) => {
     setVisibleBlocks((p) => ({ ...p, [key]: !p[key] }));
   };
 
-  const [portfolio, setPortfolio] = useState<Camp[]>(DEFAULT_PORTFOLIO);
-
   useEffect(() => {
-  async function loadListings() {
-    try {
-      const res = await fetch("/api/admin/listings");
-      const json = await res.json();
+    async function loadListings() {
+      try {
+        const res = await fetch("/api/admin/listings");
+        const json = await res.json();
 
-      if (res.ok && json.listings && json.listings.length > 0) {
-        const camps = json.listings.map((l: any) => l.data);
-
-        setPortfolio(camps);
-        setSelectedCampIndex(0);
-        setSaveMessage(`Loaded ${camps.length} listing(s) from API`);
-      } else {
-        const saved = safeJsonParse<SavePayload>(
-          window.localStorage.getItem(STORAGE_KEY)
-        );
-
-        if (saved) {
-          setPortfolio(saved.portfolio?.length ? saved.portfolio : DEFAULT_PORTFOLIO);
-          setSelectedCampIndex(saved.selectedCampIndex ?? 0);
-          setTheme({ ...DEFAULT_THEME, ...saved.theme });
-          setBlockColors({ ...DEFAULT_BLOCK_COLORS, ...saved.blockColors });
-          setVisibleBlocks({ ...DEFAULT_VISIBLE_BLOCKS, ...saved.visibleBlocks });
-
-          setSaveMessage(
-            `Loaded local draft from ${new Date(saved.savedAt).toLocaleString()}`
+        if (res.ok && Array.isArray(json.listings) && json.listings.length > 0) {
+          const camps: Camp[] = (json.listings as ApiListingRecord[]).map((l) =>
+            normalizeCamp({
+              ...(l.data ?? {}),
+              slug: l.slug ?? l.data?.slug ?? "",
+              companySlug:
+                l.companySlug ?? l.data?.companySlug ?? "nyumbani-collection",
+              status: l.status ?? l.data?.status ?? "published",
+            }),
           );
+
+          setPortfolio(camps);
+          setSelectedCampIndex(0);
+          setSaveMessage(`Loaded ${camps.length} listing(s) from API`);
+        } else {
+          const saved = safeJsonParse<SavePayload>(
+            window.localStorage.getItem(STORAGE_KEY),
+          );
+
+          if (saved) {
+            setPortfolio(
+              saved.portfolio?.length
+                ? saved.portfolio.map((item) => normalizeCamp(item))
+                : DEFAULT_PORTFOLIO,
+            );
+            setSelectedCampIndex(saved.selectedCampIndex ?? 0);
+            setTheme({ ...DEFAULT_THEME, ...saved.theme });
+            setBlockColors({ ...DEFAULT_BLOCK_COLORS, ...saved.blockColors });
+            setVisibleBlocks({ ...DEFAULT_VISIBLE_BLOCKS, ...saved.visibleBlocks });
+
+            setSaveMessage(
+              `Loaded local draft from ${new Date(saved.savedAt).toLocaleString()}`,
+            );
+          }
         }
+      } catch {
+        setSaveMessage("Failed to load listings");
       }
-    } catch {
-      setSaveMessage("Failed to load listings");
+
+      setHasHydrated(true);
     }
 
-    setHasHydrated(true);
-  }
+    loadListings();
+  }, []);
 
-  loadListings();
-}, []);
+  const camp = portfolio[selectedCampIndex] ?? portfolio[0] ?? makeNewCamp();
 
-  const camp = portfolio[selectedCampIndex] ?? portfolio[0];
-
-  const profileSlug =
-    camp?.name
-      ?.toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-") || "new-camp";
+  const profileSlug = camp?.slug?.trim() || slugify(camp?.name || "new-camp");
 
   const updateField = <K extends keyof Camp>(field: K, value: Camp[K]) => {
     setPortfolio((prev) => {
       const next = [...prev];
-      next[selectedCampIndex] = { ...next[selectedCampIndex], [field]: value };
+      const current = next[selectedCampIndex] ?? makeNewCamp();
+      const updated: Camp = { ...current, [field]: value };
+
+      if (field === "name") {
+        updated.slug = current.slug?.trim() || slugify(String(value || ""));
+      }
+
+      next[selectedCampIndex] = updated;
       return next;
     });
   };
@@ -652,7 +715,9 @@ export default function RestorationSafariAdmin() {
   const updateNested = (updater: (draft: Camp) => Camp) => {
     setPortfolio((prev) => {
       const next = [...prev];
-      next[selectedCampIndex] = updater(next[selectedCampIndex]);
+      next[selectedCampIndex] = normalizeCamp(
+        updater(next[selectedCampIndex] ?? makeNewCamp()),
+      );
       return next;
     });
   };
@@ -706,7 +771,7 @@ export default function RestorationSafariAdmin() {
   const buildPayload = (): SavePayload => ({
     version: 1,
     savedAt: new Date().toISOString(),
-    portfolio,
+    portfolio: portfolio.map((item) => normalizeCamp(item)),
     selectedCampIndex,
     theme,
     blockColors,
@@ -718,61 +783,69 @@ export default function RestorationSafariAdmin() {
     window.localStorage.setItem(STORAGE_KEY, serializeState(payload));
     return payload;
   };
-const handleSave = async () => {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 12000);
 
-  try {
-    setSaveState("saving");
-    setSaveMessage("Saving...");
+  const handleSave = async () => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 12000);
 
-    const payload = persistToLocalStorage();
-    const activeCamp = payload.portfolio[payload.selectedCampIndex];
+    try {
+      setSaveState("saving");
+      setSaveMessage("Saving...");
 
-    if (!activeCamp) {
-      throw new Error("No active camp selected.");
-    }
+      const payload = persistToLocalStorage();
+      const activeCamp = payload.portfolio[payload.selectedCampIndex];
 
-    const res = await fetch("/api/admin/listings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        camp: activeCamp,
-        theme: payload.theme,
-        blockColors: payload.blockColors,
-        visibleBlocks: payload.visibleBlocks,
-      }),
-      signal: controller.signal,
-    });
+      if (!activeCamp) {
+        throw new Error("No active camp selected.");
+      }
 
-    const json = await res.json();
+      const normalizedCamp: Camp = normalizeCamp({
+        ...activeCamp,
+        slug: activeCamp.slug?.trim() || slugify(activeCamp.name || "new-camp"),
+        companySlug: activeCamp.companySlug?.trim() || "nyumbani-collection",
+        status: activeCamp.status || "published",
+      });
 
-    if (!res.ok) {
-      throw new Error(json?.error || "Save failed.");
-    }
+      const res = await fetch("/api/admin/listings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(normalizedCamp),
+        signal: controller.signal,
+      });
 
-    setSaveState("saved");
-    setSaveMessage(
-      `Saved to API at ${new Date().toLocaleTimeString()} (${json.storage})`,
-    );
+      const json = await res.json();
 
-    window.setTimeout(() => setSaveState("idle"), 1800);
-  } catch (error) {
-    setSaveState("error");
+      if (!res.ok) {
+        throw new Error(json?.error || "Save failed.");
+      }
 
-    if (error instanceof DOMException && error.name === "AbortError") {
-      setSaveMessage("Save timed out after 12 seconds");
-    } else {
+      setPortfolio((prev) => {
+        const next = [...prev];
+        next[selectedCampIndex] = normalizedCamp;
+        return next;
+      });
+
+      setSaveState("saved");
       setSaveMessage(
-        error instanceof Error ? error.message : "Save failed",
+        `Saved to API at ${new Date().toLocaleTimeString()} (${json.storage ?? "api"})`,
       );
+
+      window.setTimeout(() => setSaveState("idle"), 1800);
+    } catch (error) {
+      setSaveState("error");
+
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setSaveMessage("Save timed out after 12 seconds");
+      } else {
+        setSaveMessage(error instanceof Error ? error.message : "Save failed");
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
     }
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-};
+  };
+
   const exportBackup = () => {
     try {
       const payload = persistToLocalStorage();
@@ -798,15 +871,21 @@ const handleSave = async () => {
   const importBackupFile = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
+
     try {
       const text = await file.text();
       const parsed = safeJsonParse<SavePayload>(text);
+
       if (!parsed) {
         alert("That backup file could not be read.");
         return;
       }
 
-      setPortfolio(parsed.portfolio?.length ? parsed.portfolio : DEFAULT_PORTFOLIO);
+      setPortfolio(
+        parsed.portfolio?.length
+          ? parsed.portfolio.map((item) => normalizeCamp(item))
+          : DEFAULT_PORTFOLIO,
+      );
       setSelectedCampIndex(
         Math.min(
           Math.max(parsed.selectedCampIndex ?? 0, 0),
@@ -864,10 +943,12 @@ const handleSave = async () => {
   const addRoomPhotos = async (roomKey: RoomKey, files: FileList | null) => {
     if (!files || files.length === 0) return;
     const urls: string[] = [];
+
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/")) continue;
       urls.push(await toDataUrl(file));
     }
+
     updateNested((c) => ({
       ...c,
       roomPhotos: {
@@ -959,13 +1040,20 @@ const handleSave = async () => {
     }
   }, [vcardText]);
 
+  useEffect(() => {
+    return () => {
+      if (vcardUrl) URL.revokeObjectURL(vcardUrl);
+    };
+  }, [vcardUrl]);
+
   const shareContact = async () => {
     try {
       const blob = new Blob([vcardText], { type: "text/vcard;charset=utf-8" });
       const file = new File([blob], "contact.vcf", { type: "text/vcard" });
-      // @ts-ignore
+
+      // @ts-expect-error Web Share file support is not fully typed across browsers
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        // @ts-ignore
+        // @ts-expect-error Web Share file support is not fully typed across browsers
         await navigator.share({
           title: camp.contactName,
           text: "Contact card",
@@ -1124,46 +1212,62 @@ const handleSave = async () => {
     window.open(d.url, "_blank");
   };
 
-  const updateListItem = (key: keyof Camp, idx: number, value: string) => {
+  const updateListItem = (
+    key:
+      | "inclusions"
+      | "exclusions"
+      | "freeActivities"
+      | "paidActivities",
+    idx: number,
+    value: string,
+  ) => {
     setPortfolio((prev) => {
       const next = [...prev];
-      const current = { ...next[selectedCampIndex] } as Record<string, unknown>;
-      const list = [...(current[key as string] as string[])];
+      const current = { ...next[selectedCampIndex] };
+      const list = [...current[key]];
       list[idx] = value;
-      current[key as string] = list;
-      next[selectedCampIndex] = current as Camp;
+      current[key] = list;
+      next[selectedCampIndex] = current;
       return next;
     });
   };
 
-  const addListItem = (key: keyof Camp) => {
+  const addListItem = (
+    key:
+      | "inclusions"
+      | "exclusions"
+      | "freeActivities"
+      | "paidActivities",
+  ) => {
     setPortfolio((prev) => {
       const next = [...prev];
-      const current = { ...next[selectedCampIndex] } as Record<string, unknown>;
-      current[key as string] = [
-        ...((current[key as string] as string[]) || []),
-        "New Item",
-      ];
-      next[selectedCampIndex] = current as Camp;
+      const current = { ...next[selectedCampIndex] };
+      current[key] = [...current[key], "New Item"];
+      next[selectedCampIndex] = current;
       return next;
     });
   };
 
-  const removeListItem = (key: keyof Camp, idx: number) => {
+  const removeListItem = (
+    key:
+      | "inclusions"
+      | "exclusions"
+      | "freeActivities"
+      | "paidActivities",
+    idx: number,
+  ) => {
     setPortfolio((prev) => {
       const next = [...prev];
-      const current = { ...next[selectedCampIndex] } as Record<string, unknown>;
-      current[key as string] = (current[key as string] as string[]).filter(
-        (_: string, i: number) => i !== idx,
-      );
-      next[selectedCampIndex] = current as Camp;
+      const current = { ...next[selectedCampIndex] };
+      current[key] = current[key].filter((_, i) => i !== idx);
+      next[selectedCampIndex] = current;
       return next;
     });
   };
 
   const addCamp = () => {
     setPortfolio((prev) => [...prev, makeNewCamp()]);
-    setSelectedCampIndex((prev) => prev + 1);
+    setSelectedCampIndex(portfolio.length);
   };
 
   const deleteCamp = () => {
@@ -1193,10 +1297,10 @@ const handleSave = async () => {
       `Email: ${data.email}`,
       `Phone/WhatsApp: ${data.phone}`,
       "",
-      `Message:`,
+      "Message:",
       data.message,
       "",
-      `Requested via: Trade Directory Lead Capture`,
+      "Requested via: Trade Directory Lead Capture",
     ];
     return lines.join("\n");
   };
@@ -1285,7 +1389,10 @@ const handleSave = async () => {
     return (
       <div
         className="flex min-h-screen items-center justify-center"
-        style={{ backgroundColor: DEFAULT_THEME.pageBg, color: DEFAULT_THEME.accent }}
+        style={{
+          backgroundColor: DEFAULT_THEME.pageBg,
+          color: DEFAULT_THEME.accent,
+        }}
       >
         <div className="rounded-2xl border bg-white px-6 py-4 text-sm font-semibold shadow-sm">
           Loading editor…
@@ -1609,7 +1716,7 @@ const handleSave = async () => {
               >
                 {portfolio.map((c, i) => (
                   <button
-                    key={`${c.name}-${i}`}
+                    key={`${c.slug || c.name}-${i}`}
                     onClick={() => setSelectedCampIndex(i)}
                     className="w-full rounded-xl px-3 py-2 text-left transition-all"
                     style={{
@@ -1660,7 +1767,9 @@ const handleSave = async () => {
                 {Object.keys(visibleBlocks).map((key) => (
                   <button
                     key={key}
-                    onClick={() => toggleBlock(key as keyof typeof visibleBlocks)}
+                    onClick={() =>
+                      toggleBlock(key as keyof typeof visibleBlocks)
+                    }
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-90"
                     type="button"
                     style={{ color: theme.accent }}
@@ -1706,7 +1815,10 @@ const handleSave = async () => {
                     type="color"
                     value={v}
                     onChange={(e) =>
-                      setTheme((t) => ({ ...t, [k]: e.target.value }))
+                      setTheme((t) => ({
+                        ...t,
+                        [k]: e.target.value,
+                      }))
                     }
                     className="h-4 w-4 cursor-pointer rounded-full border-none"
                   />
@@ -1760,7 +1872,10 @@ const handleSave = async () => {
       <main className={`flex-1 transition-all ${!isPreview ? "ml-72" : "ml-0"}`}>
         <div
           className="sticky top-0 z-40 border-b px-4 py-3 sm:px-6"
-          style={{ backgroundColor: theme.blockBg, borderColor: theme.borderColor }}
+          style={{
+            backgroundColor: theme.blockBg,
+            borderColor: theme.borderColor,
+          }}
         >
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -1948,18 +2063,25 @@ const handleSave = async () => {
                   </div>
                 </div>
 
-                <div className="mt-2 w-full max-w-2xl space-y-1 text-center">
-                  <div
-                    className="text-[10px] font-black uppercase tracking-[0.25em]"
-                    style={{ color: theme.accent, opacity: 0.75 }}
-                  >
+                <div className="mt-2 w-full max-w-2xl space-y-2 text-center">
+                  <div className="grid gap-2 md:grid-cols-2">
                     <input
-                      className="w-full bg-transparent text-center outline-none"
-                      value={`${camp.tradeProfileLabel} ${camp.tradeProfileSub}`}
+                      className="w-full bg-transparent text-center text-[10px] font-black uppercase tracking-[0.25em] outline-none"
+                      value={camp.tradeProfileLabel}
                       onChange={(e) =>
                         updateField("tradeProfileLabel", e.target.value)
                       }
-                      style={{ color: theme.accent }}
+                      style={{ color: theme.accent, opacity: 0.75 }}
+                      placeholder="Trade profile label"
+                    />
+                    <input
+                      className="w-full bg-transparent text-center text-[10px] font-black uppercase tracking-[0.25em] outline-none"
+                      value={camp.tradeProfileSub}
+                      onChange={(e) =>
+                        updateField("tradeProfileSub", e.target.value)
+                      }
+                      style={{ color: theme.accent, opacity: 0.75 }}
+                      placeholder="Trade profile subtext"
                     />
                   </div>
 
@@ -2059,9 +2181,7 @@ const handleSave = async () => {
                       <input
                         className="w-36 bg-transparent text-[10px] font-black outline-none md:w-44"
                         value={camp[item.key]}
-                        onChange={(e) =>
-                          updateField(item.key, e.target.value)
-                        }
+                        onChange={(e) => updateField(item.key, e.target.value)}
                         placeholder={item.label}
                         style={{ color: theme.accent }}
                       />
@@ -2143,7 +2263,10 @@ const handleSave = async () => {
                           value={camp.taStyle}
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) =>
-                            updateField("taStyle", e.target.value as Camp["taStyle"])
+                            updateField(
+                              "taStyle",
+                              e.target.value as Camp["taStyle"],
+                            )
                           }
                           className="rounded-xl border bg-transparent px-3 py-2 text-[10px] font-black uppercase tracking-widest outline-none"
                           style={{
@@ -2159,7 +2282,9 @@ const handleSave = async () => {
 
                         <div onClick={(e) => e.stopPropagation()}>
                           <RatingPips
-                            value={typeof camp.taRating === "number" ? camp.taRating : 0}
+                            value={
+                              typeof camp.taRating === "number" ? camp.taRating : 0
+                            }
                             onChange={(v) => updateField("taRating", v)}
                             highlight="#34A853"
                             mode={camp.taStyle}
@@ -2252,7 +2377,7 @@ const handleSave = async () => {
                 <CompactPanel
                   title="Property Section"
                   subtitle="Inventory + hover preview + room photos"
-                  defaultOpen={true}
+                  defaultOpen
                   style={blockCardStyle("matrix")}
                   headerStyle={headerStyle}
                 >
@@ -2284,7 +2409,10 @@ const handleSave = async () => {
                             className="w-16 bg-transparent text-3xl font-black italic outline-none"
                             value={camp[type]}
                             onChange={(e) =>
-                              updateField(type, numDraft(e.target.value) as Camp[typeof type])
+                              updateField(
+                                type,
+                                numDraft(e.target.value) as Camp[typeof type],
+                              )
                             }
                             style={{ color: theme.accent, opacity: 0.95 }}
                           />
@@ -2442,7 +2570,9 @@ const handleSave = async () => {
                           className="text-xs font-black uppercase tracking-[0.2em]"
                           style={{ color: theme.accent, opacity: 0.75 }}
                         >
-                          {hoveredRoomPhoto ? hoveredRoomPhoto.title : "Property media preview"}
+                          {hoveredRoomPhoto
+                            ? hoveredRoomPhoto.title
+                            : "Property media preview"}
                         </div>
 
                         <p
@@ -2735,7 +2865,7 @@ const handleSave = async () => {
                 <CompactPanel
                   title="Lead Capture"
                   subtitle="Send by Email or WhatsApp"
-                  defaultOpen={true}
+                  defaultOpen
                   style={blockCardStyle("leadCapture")}
                   headerStyle={headerStyle}
                 >
@@ -2966,7 +3096,9 @@ const handleSave = async () => {
                                     style={{ color: theme.accent, opacity: 0.9 }}
                                     value={d.title}
                                     onChange={(e) =>
-                                      updateDownloadable(d.id, { title: e.target.value })
+                                      updateDownloadable(d.id, {
+                                        title: e.target.value,
+                                      })
                                     }
                                   />
 
@@ -2976,7 +3108,9 @@ const handleSave = async () => {
                                       style={{ color: theme.accent, opacity: 0.75 }}
                                       value={d.url}
                                       onChange={(e) =>
-                                        updateDownloadable(d.id, { url: e.target.value })
+                                        updateDownloadable(d.id, {
+                                          url: e.target.value,
+                                        })
                                       }
                                     />
                                   ) : (
@@ -3035,7 +3169,10 @@ const handleSave = async () => {
                         </label>
                       </div>
 
-                      <div className="mt-3 rounded-2xl border p-3 sm:p-4" style={cardStyle}>
+                      <div
+                        className="mt-3 rounded-2xl border p-3 sm:p-4"
+                        style={cardStyle}
+                      >
                         <div className="flex items-start gap-3">
                           <div
                             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border"
@@ -3195,9 +3332,7 @@ const handleSave = async () => {
                         className="rounded-xl border bg-transparent p-3 text-xs font-semibold outline-none"
                         style={cardStyle}
                         value={camp[f.k]}
-                        onChange={(e) =>
-                          updateField(f.k, e.target.value)
-                        }
+                        onChange={(e) => updateField(f.k, e.target.value)}
                         placeholder={f.ph}
                       />
                     ))}
