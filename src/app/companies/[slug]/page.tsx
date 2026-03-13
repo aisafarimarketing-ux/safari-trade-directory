@@ -188,7 +188,7 @@ const companyListings = apiListings.filter(
                   </span>
                 ))}
 
-                {listingTypes.map((type) => (
+             {listingTypes.map((type: string) => (
                   <span
                     key={type}
                     className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/78"
