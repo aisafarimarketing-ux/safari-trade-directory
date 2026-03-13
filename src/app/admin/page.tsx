@@ -54,6 +54,10 @@ type Downloadable = {
 };
 
 type Camp = {
+  slug?: string;
+  companySlug?: string;
+  status?: "draft" | "published" | "archived";
+
   name: string;
   class: string;
 
