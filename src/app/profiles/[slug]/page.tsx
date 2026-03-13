@@ -84,6 +84,10 @@ type ApiListingRecord = {
     coverImage?: string;
     rating?: number | string;
     reviewCount?: number | string;
+    rooms?: number | string;
+    family?: number | string;
+    double?: number | string;
+    single?: number | string;
     facebookUrl?: string;
     instagramUrl?: string;
     tiktokUrl?: string;
@@ -258,6 +262,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const website = listing.website || data.website || "";
   const rating = toNumber(data.rating);
   const reviewCount = toNumber(data.reviewCount);
+  const rooms = toNumber(data.rooms);
+  const family = toNumber(data.family);
+  const doubleRooms = toNumber(data.double);
+  const singleRooms = toNumber(data.single);
+  const taRating = toNumber(data.taRating ?? listing.tripadvisorRating);
 
   const socialLinks = {
     facebookUrl: data.facebookUrl || "",
@@ -265,6 +274,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     tiktokUrl: data.tiktokUrl || "",
     youtubeUrl: data.youtubeUrl || "",
   };
+
+  const downloadables = Array.isArray(data.downloadables)
+    ? data.downloadables
+    : [];
 
   const contactCard =
     data.contactName ||
@@ -299,17 +312,13 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           bullet1: data.leadBullet1 || "",
           bullet2: data.leadBullet2 || "",
           bullet3: data.leadBullet3 || "",
-          cta: data.leadCta || "Send Enquiry",
+          cta: data.leadCta || "Request Trade Pack",
           disclaimer: data.leadDisclaimer || "",
           enquiryEmail: data.enquiryEmail || "",
           enquiryWhatsApp: data.enquiryWhatsApp || "",
           enquirySubject: data.enquirySubject || "",
         }
       : null;
-
-  const downloadables = Array.isArray(data.downloadables)
-    ? data.downloadables
-    : [];
 
   const roomPhotoGroups = [
     {
@@ -329,23 +338,38 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     },
   ].filter((group) => group.items.length > 0);
 
-  const taRating = toNumber(data.taRating ?? listing.tripadvisorRating);
+  const galleryImages = roomPhotoGroups.flatMap((group) =>
+    group.items.map((src, index) => ({
+      src,
+      label: `${group.label} ${index + 1}`,
+    })),
+  );
+
+  const topInclusions = Array.isArray(data.inclusions)
+    ? data.inclusions.slice(0, 4)
+    : [];
+  const topIncludedActivities = Array.isArray(data.freeActivities)
+    ? data.freeActivities.slice(0, 4)
+    : [];
+  const topPaidActivities = Array.isArray(data.paidActivities)
+    ? data.paidActivities.slice(0, 4)
+    : [];
 
   const pageStyle: React.CSSProperties = {
     backgroundColor: theme.pageBg,
     color: theme.accent,
   };
 
-  const blockStyle = (bg: string): React.CSSProperties => ({
+  const panelStyle = (bg: string): React.CSSProperties => ({
     backgroundColor: bg || theme.blockBg,
     borderColor: theme.borderColor,
     color: theme.accent,
   });
 
-  const chipStyle: React.CSSProperties = {
+  const pillStyle: React.CSSProperties = {
     borderColor: theme.borderColor,
-    color: theme.accent,
     backgroundColor: theme.blockBg,
+    color: theme.accent,
   };
 
   const primaryButtonStyle: React.CSSProperties = {
@@ -359,509 +383,511 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     color: theme.accent,
   };
 
-  const subtleText = { color: theme.accent, opacity: 0.65 };
-  const faintText = { color: theme.accent, opacity: 0.45 };
+  const titleStyle: React.CSSProperties = {
+    color: theme.accent,
+    opacity: 0.48,
+  };
+
+  const bodyStyle: React.CSSProperties = {
+    color: theme.accent,
+    opacity: 0.75,
+  };
+
+  const heroImage = data.coverImage || galleryImages[0]?.src || "";
 
   return (
     <main className="min-h-screen" style={pageStyle}>
-      {visibleBlocks.header && (
+      {visibleBlocks.hero && (
         <section
-          className="relative overflow-hidden border-b"
+          className="border-b"
           style={{
             borderColor: theme.borderColor,
             backgroundColor: blockColors.header || theme.blockBg,
           }}
         >
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.10),transparent_24%),linear-gradient(to_bottom,rgba(255,255,255,0.04),transparent)",
-            }}
-          />
-
-          <div className="mx-auto max-w-7xl px-6 py-16 md:px-10 md:py-24">
-            <div className="grid items-start gap-10 lg:grid-cols-[1.3fr_0.7fr]">
-              <div>
-                <div
-                  className="inline-flex items-center rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em]"
-                  style={{
-                    borderColor: theme.highlight,
-                    backgroundColor: `${theme.highlight}22`,
-                    color: theme.accent,
-                  }}
-                >
-                  property
-                </div>
-
-                {(data.tradeProfileLabel || data.tradeProfileSub) && (
-                  <p
-                    className="mt-6 text-xs font-semibold uppercase tracking-[0.24em]"
-                    style={faintText}
-                  >
-                    {[data.tradeProfileLabel, data.tradeProfileSub]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                )}
-
-                <h1
-                  className="mt-4 text-5xl font-semibold tracking-tight md:text-7xl"
-                  style={{ color: theme.accent }}
-                >
-                  {listing.name}
-                </h1>
-
-                <div
-                  className="mt-5 flex flex-wrap items-center gap-3 text-sm"
-                  style={subtleText}
-                >
+          <div className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:py-14">
+            <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center gap-3">
                   <span
-                    className="rounded-full border px-3 py-1.5"
-                    style={chipStyle}
+                    className="rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em]"
+                    style={{
+                      borderColor: theme.highlight,
+                      backgroundColor: `${theme.highlight}22`,
+                      color: theme.accent,
+                    }}
                   >
-                    {location}
+                    Property
                   </span>
 
-                  {typeof rating === "number" ? (
+                  {(data.tradeProfileLabel || data.tradeProfileSub) && (
                     <span
-                      className="rounded-full border px-3 py-1.5"
-                      style={chipStyle}
+                      className="text-[11px] font-semibold uppercase tracking-[0.22em]"
+                      style={titleStyle}
                     >
-                      Rating {rating.toFixed(1)}
-                      {typeof reviewCount === "number"
-                        ? ` · ${reviewCount} reviews`
-                        : ""}
+                      {[data.tradeProfileLabel, data.tradeProfileSub]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-4">
+                  {data.logoImage ? (
+                    <div
+                      className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[22px] border"
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                      }}
+                    >
+                      <img
+                        src={data.logoImage}
+                        alt={`${listing.name} logo`}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
                   ) : null}
 
-                  {listing.class ? (
-                    <span
-                      className="rounded-full border px-3 py-1.5"
-                      style={chipStyle}
-                    >
-                      {listing.class}
-                    </span>
+                  <div className="min-w-0">
+                    <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
+                      {listing.name}
+                    </h1>
+                    <p className="mt-3 max-w-3xl text-base leading-8 md:text-lg" style={bodyStyle}>
+                      {vibe || "Trade-ready safari property profile."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Pill text={location} style={pillStyle} />
+                  {listing.class ? <Pill text={listing.class} style={pillStyle} /> : null}
+                  {typeof rating === "number" ? (
+                    <Pill
+                      text={`Rating ${rating.toFixed(1)}${typeof reviewCount === "number" ? ` · ${reviewCount}` : ""}`}
+                      style={pillStyle}
+                    />
+                  ) : null}
+                  {rooms !== null ? (
+                    <Pill text={`Rooms ${rooms}`} style={pillStyle} />
                   ) : null}
                 </div>
 
-                <p
-                  className="mt-8 max-w-3xl text-lg leading-8"
-                  style={subtleText}
-                >
-                  {vibe || "Trade-ready safari property profile."}
-                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <QuickFact
+                    label="Rooms"
+                    value={rooms !== null ? String(rooms) : "—"}
+                    theme={theme}
+                  />
+                  <QuickFact
+                    label="Family"
+                    value={family !== null ? String(family) : "—"}
+                    theme={theme}
+                  />
+                  <QuickFact
+                    label="Double"
+                    value={doubleRooms !== null ? String(doubleRooms) : "—"}
+                    theme={theme}
+                  />
+                  <QuickFact
+                    label="Single"
+                    value={singleRooms !== null ? String(singleRooms) : "—"}
+                    theme={theme}
+                  />
+                </div>
 
-                {visibleBlocks.tradeDetails && vibe ? (
-                  <div
-                    className="mt-8 rounded-[28px] border p-6"
-                    style={blockStyle(blockColors.tradeDetails)}
-                  >
-                    <p
-                      className="text-sm uppercase tracking-[0.2em]"
-                      style={faintText}
-                    >
-                      Property Vibe
-                    </p>
-                    <p className="mt-4 text-base leading-8" style={subtleText}>
-                      {vibe}
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="mt-10 flex flex-wrap gap-4">
-                  <a
-                    href="/directory"
-                    className="rounded-2xl px-6 py-3 text-sm font-semibold"
-                    style={primaryButtonStyle}
-                  >
-                    Back to Directory
-                  </a>
-
-                  <a
-                    href="/compare"
-                    className="rounded-2xl border px-6 py-3 text-sm font-semibold"
-                    style={secondaryButtonStyle}
-                  >
-                    Compare
-                  </a>
-
-                  {data.mapLink ? (
+                <div className="flex flex-wrap gap-3">
+                  {downloadables.length ? (
                     <a
-                      href={data.mapLink}
+                      href={downloadables[0].url}
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-2xl border px-6 py-3 text-sm font-semibold"
+                      className="rounded-2xl px-5 py-3 text-sm font-semibold"
+                      style={primaryButtonStyle}
+                    >
+                      Download Trade Pack
+                    </a>
+                  ) : null}
+
+                  {leadCapture?.enquiryEmail ? (
+                    <a
+                      href={`mailto:${leadCapture.enquiryEmail}?subject=${encodeURIComponent(
+                        leadCapture.enquirySubject ||
+                          leadCapture.cta ||
+                          "Trade Request",
+                      )}`}
+                      className="rounded-2xl border px-5 py-3 text-sm font-semibold"
                       style={secondaryButtonStyle}
                     >
-                      Open Map
+                      Request Rates
+                    </a>
+                  ) : null}
+
+                  {leadCapture?.enquiryWhatsApp ? (
+                    <a
+                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(/[^\d]/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-2xl border px-5 py-3 text-sm font-semibold"
+                      style={secondaryButtonStyle}
+                    >
+                      WhatsApp
                     </a>
                   ) : null}
                 </div>
 
-                <div className="mt-12 grid gap-4 md:grid-cols-3">
-                  <FactCard
-                    label="Listing Type"
-                    value="property"
-                    theme={theme}
-                  />
-                  <FactCard label="Location" value={location} theme={theme} />
-                  <FactCard label="Status" value={listing.status} theme={theme} />
-                </div>
-              </div>
-
-              <div className="lg:pt-8">
-                <div
-                  className="overflow-hidden rounded-[36px] border p-5 shadow-2xl"
-                  style={blockStyle(blockColors.header)}
-                >
+                {(topInclusions.length > 0 ||
+                  topIncludedActivities.length > 0 ||
+                  topPaidActivities.length > 0) && (
                   <div
-                    className="relative aspect-[4/5] rounded-[24px] border"
-                    style={{
-                      borderColor: theme.borderColor,
-                      backgroundColor: theme.blockBg,
-                    }}
+                    className="rounded-[30px] border p-6"
+                    style={panelStyle(blockColors.tradeDetails)}
                   >
-                    {data.coverImage ? (
-                      <>
-                        <img
-                          src={data.coverImage}
-                          alt={`${listing.name} cover`}
-                          className="h-full w-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                      </>
-                    ) : (
-                      <>
-                        <div className="absolute inset-0 bg-gradient-to-br from-amber-300/15 via-white/5 to-emerald-300/10" />
-                        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" />
-                      </>
-                    )}
-
-                    <div
-                      className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border shadow-lg backdrop-blur"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: `${theme.blockBg}CC`,
-                      }}
-                    >
-                      {data.logoImage ? (
-                        <img
-                          src={data.logoImage}
-                          alt={`${listing.name} logo`}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span
-                          className="px-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em]"
-                          style={subtleText}
-                        >
-                          {listing.name.slice(0, 2)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm" style={faintText}>
-                        Hosted trade profile
-                      </p>
-                      <p
-                        className="mt-1 text-lg font-semibold"
-                        style={{ color: theme.accent }}
-                      >
-                        {listing.name}
-                      </p>
-                    </div>
-
-                    <div
-                      className="rounded-2xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-                      style={{
-                        borderColor: theme.highlight,
-                        backgroundColor: `${theme.highlight}22`,
-                        color: theme.accent,
-                      }}
-                    >
-                      {listing.status}
-                    </div>
-                  </div>
-                </div>
-
-                {(socialLinks.facebookUrl ||
-                  socialLinks.instagramUrl ||
-                  socialLinks.tiktokUrl ||
-                  socialLinks.youtubeUrl ||
-                  website) && (
-                  <div
-                    className="mt-6 rounded-[28px] border p-6"
-                    style={blockStyle(blockColors.tradeDetails)}
-                  >
-                    <p
-                      className="text-sm uppercase tracking-[0.2em]"
-                      style={faintText}
-                    >
-                      Links
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      {website ? (
-                        <a
-                          href={website}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-2xl border px-4 py-2 text-sm font-semibold"
-                          style={secondaryButtonStyle}
-                        >
-                          Website
-                        </a>
-                      ) : null}
-
-                      {socialLinks.facebookUrl ? (
-                        <a
-                          href={socialLinks.facebookUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-2xl border px-4 py-2 text-sm font-semibold"
-                          style={secondaryButtonStyle}
-                        >
-                          Facebook
-                        </a>
-                      ) : null}
-
-                      {socialLinks.instagramUrl ? (
-                        <a
-                          href={socialLinks.instagramUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-2xl border px-4 py-2 text-sm font-semibold"
-                          style={secondaryButtonStyle}
-                        >
-                          Instagram
-                        </a>
-                      ) : null}
-
-                      {socialLinks.tiktokUrl ? (
-                        <a
-                          href={socialLinks.tiktokUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-2xl border px-4 py-2 text-sm font-semibold"
-                          style={secondaryButtonStyle}
-                        >
-                          TikTok
-                        </a>
-                      ) : null}
-
-                      {socialLinks.youtubeUrl ? (
-                        <a
-                          href={socialLinks.youtubeUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-2xl border px-4 py-2 text-sm font-semibold"
-                          style={secondaryButtonStyle}
-                        >
-                          YouTube
-                        </a>
-                      ) : null}
+                    <div className="grid gap-5 lg:grid-cols-3">
+                      <SnapshotList
+                        title="Key Inclusions"
+                        items={topInclusions}
+                        theme={theme}
+                      />
+                      <SnapshotList
+                        title="Included Experiences"
+                        items={topIncludedActivities}
+                        theme={theme}
+                      />
+                      <SnapshotList
+                        title="Paid Experiences"
+                        items={topPaidActivities}
+                        theme={theme}
+                      />
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-5">
+                <div
+                  className="overflow-hidden rounded-[34px] border"
+                  style={panelStyle(blockColors.header)}
+                >
+                  <div
+                    className="relative aspect-[4/3] overflow-hidden"
+                    style={{ backgroundColor: theme.blockBg }}
+                  >
+                    {heroImage ? (
+                      <img
+                        src={heroImage}
+                        alt={`${listing.name} hero`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-[linear-gradient(135deg,rgba(255,255,255,0.03),rgba(255,255,255,0.08))]" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  </div>
+
+                  <div className="grid gap-3 p-5 sm:grid-cols-2">
+                    {website ? (
+                      <a
+                        href={website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
+                        style={secondaryButtonStyle}
+                      >
+                        Website
+                      </a>
+                    ) : null}
+                    {data.mapLink ? (
+                      <a
+                        href={data.mapLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
+                        style={secondaryButtonStyle}
+                      >
+                        Open Map
+                      </a>
+                    ) : null}
+                    {socialLinks.instagramUrl ? (
+                      <a
+                        href={socialLinks.instagramUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
+                        style={secondaryButtonStyle}
+                      >
+                        Instagram
+                      </a>
+                    ) : null}
+                    {socialLinks.facebookUrl ? (
+                      <a
+                        href={socialLinks.facebookUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
+                        style={secondaryButtonStyle}
+                      >
+                        Facebook
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[30px] border p-6"
+                  style={panelStyle(blockColors.leadCapture)}
+                >
+                  <p className="text-sm uppercase tracking-[0.2em]" style={titleStyle}>
+                    First Look Summary
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <SummaryRow
+                      label="Status"
+                      value={listing.status}
+                      theme={theme}
+                    />
+                    <SummaryRow
+                      label="Best for"
+                      value={listing.class || "Luxury safari trade"}
+                      theme={theme}
+                    />
+                    <SummaryRow
+                      label="Location"
+                      value={location}
+                      theme={theme}
+                    />
+                    <SummaryRow
+                      label="Commercial"
+                      value={data.offersText ? "Offer available" : "Standard terms"}
+                      theme={theme}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
       )}
 
-      <section className="mx-auto max-w-7xl px-6 py-16 md:px-10">
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <div className="space-y-6">
-            {visibleBlocks.inclusions &&
-            Array.isArray(data.inclusions) &&
-            data.inclusions.length ? (
-              <DataBlock
-                title="Inclusions"
-                items={data.inclusions}
+      <section className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:py-12">
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="space-y-8">
+            {visibleBlocks.matrix && galleryImages.length > 0 ? (
+              <SectionCard
+                title="Gallery"
                 theme={theme}
-                bg={blockColors.inclusions}
-              />
-            ) : null}
-
-            {visibleBlocks.exclusions &&
-            Array.isArray(data.exclusions) &&
-            data.exclusions.length ? (
-              <DataBlock
-                title="Exclusions"
-                items={data.exclusions}
-                theme={theme}
-                bg={blockColors.exclusions}
-              />
-            ) : null}
-
-            {visibleBlocks.experiences &&
-            Array.isArray(data.freeActivities) &&
-            data.freeActivities.length ? (
-              <DataBlock
-                title="Included Activities"
-                items={data.freeActivities}
-                theme={theme}
-                bg={blockColors.experiences}
-              />
-            ) : null}
-
-            {visibleBlocks.experiences &&
-            Array.isArray(data.paidActivities) &&
-            data.paidActivities.length ? (
-              <DataBlock
-                title="Paid Activities"
-                items={data.paidActivities}
-                theme={theme}
-                bg={blockColors.experiences}
-              />
-            ) : null}
-
-            {visibleBlocks.matrix && roomPhotoGroups.length ? (
-              <div
-                className="rounded-[32px] border p-8"
-                style={blockStyle(blockColors.matrix)}
+                bg={blockColors.matrix}
               >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
-                >
-                  Property Photos
-                </p>
-
-                <div className="mt-6 space-y-6">
-                  {roomPhotoGroups.map((group) => (
-                    <div key={group.key}>
-                      <h3
-                        className="text-sm font-semibold uppercase tracking-[0.18em]"
-                        style={subtleText}
-                      >
-                        {group.label}
-                      </h3>
-
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {group.items.map((src, index) => (
-                          <div
-                            key={`${group.key}-${index}`}
-                            className="overflow-hidden rounded-[24px] border"
-                            style={{
-                              borderColor: theme.borderColor,
-                              backgroundColor: theme.blockBg,
-                            }}
-                          >
-                            <img
-                              src={src}
-                              alt={`${listing.name} ${group.label} ${index + 1}`}
-                              className="aspect-[4/3] h-full w-full object-cover"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {galleryImages.slice(0, 6).map((image) => (
+                    <div
+                      key={`${image.src}-${image.label}`}
+                      className="overflow-hidden rounded-[22px] border"
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                      }}
+                    >
+                      <img
+                        src={image.src}
+                        alt={image.label}
+                        className="aspect-[4/3] h-full w-full object-cover"
+                      />
                     </div>
                   ))}
                 </div>
-              </div>
+              </SectionCard>
             ) : null}
 
-            {visibleBlocks.offers && data.offersText ? (
-              <div
-                className="rounded-[32px] border p-8"
-                style={blockStyle(blockColors.offers)}
-              >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {visibleBlocks.inclusions && Array.isArray(data.inclusions) && data.inclusions.length ? (
+                <SectionCard
+                  title="Inclusions"
+                  theme={theme}
+                  bg={blockColors.inclusions}
                 >
-                  Offer
-                </p>
+                  <TagList items={data.inclusions} theme={theme} />
+                </SectionCard>
+              ) : null}
 
-                <p className="mt-5 text-base leading-8" style={subtleText}>
-                  {data.offersText}
-                </p>
-              </div>
+              {visibleBlocks.exclusions && Array.isArray(data.exclusions) && data.exclusions.length ? (
+                <SectionCard
+                  title="Exclusions"
+                  theme={theme}
+                  bg={blockColors.exclusions}
+                >
+                  <TagList items={data.exclusions} theme={theme} />
+                </SectionCard>
+              ) : null}
+            </div>
+
+            {visibleBlocks.experiences &&
+            ((Array.isArray(data.freeActivities) && data.freeActivities.length) ||
+              (Array.isArray(data.paidActivities) && data.paidActivities.length)) ? (
+              <SectionCard
+                title="Experiences"
+                theme={theme}
+                bg={blockColors.experiences}
+              >
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={titleStyle}>
+                      Included
+                    </p>
+                    <div className="mt-3">
+                      <TagList items={data.freeActivities || []} theme={theme} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={titleStyle}>
+                      Paid
+                    </p>
+                    <div className="mt-3">
+                      <TagList items={data.paidActivities || []} theme={theme} />
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
             ) : null}
 
-            {visibleBlocks.terms && data.terms ? (
-              <div
-                className="rounded-[32px] border p-8"
-                style={blockStyle(blockColors.terms)}
-              >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
-                >
-                  Terms
-                </p>
+            {(visibleBlocks.offers && data.offersText) ||
+            (visibleBlocks.terms && data.terms) ? (
+              <div className="grid gap-6 lg:grid-cols-2">
+                {visibleBlocks.offers && data.offersText ? (
+                  <SectionCard
+                    title="Offer"
+                    theme={theme}
+                    bg={blockColors.offers}
+                  >
+                    <p className="text-base leading-8" style={bodyStyle}>
+                      {data.offersText}
+                    </p>
+                  </SectionCard>
+                ) : null}
 
-                <p className="mt-5 text-base leading-8" style={subtleText}>
-                  {data.terms}
-                </p>
+                {visibleBlocks.terms && data.terms ? (
+                  <SectionCard
+                    title="Terms"
+                    theme={theme}
+                    bg={blockColors.terms}
+                  >
+                    <p className="text-base leading-8" style={bodyStyle}>
+                      {data.terms}
+                    </p>
+                  </SectionCard>
+                ) : null}
               </div>
             ) : null}
           </div>
 
           <aside className="space-y-6">
-            <div
-              className="rounded-[32px] border p-6"
-              style={blockStyle(theme.blockBg)}
-            >
-              <p
-                className="text-sm uppercase tracking-[0.2em]"
-                style={faintText}
+            {visibleBlocks.leadCapture && leadCapture ? (
+              <SectionCard
+                title="Trade Enquiries"
+                theme={theme}
+                bg={blockColors.leadCapture}
               >
-                Trade Actions
-              </p>
+                <h3 className="text-2xl font-semibold">{leadCapture.headline}</h3>
+                {leadCapture.subcopy ? (
+                  <p className="mt-3 text-sm leading-7" style={bodyStyle}>
+                    {leadCapture.subcopy}
+                  </p>
+                ) : null}
 
-              <div className="mt-5 flex flex-col gap-3">
-                <a
-                  href="/directory"
-                  className="rounded-2xl px-5 py-3 text-center text-sm font-semibold"
-                  style={primaryButtonStyle}
-                >
-                  Browse More Profiles
-                </a>
+                <div className="mt-5 space-y-2">
+                  {[leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
+                    .filter(Boolean)
+                    .map((item) => (
+                      <div
+                        key={item}
+                        className="rounded-2xl border px-4 py-3 text-sm"
+                        style={secondaryButtonStyle}
+                      >
+                        {item}
+                      </div>
+                    ))}
+                </div>
 
-                <a
-                  href="/workspace"
-                  className="rounded-2xl border px-5 py-3 text-center text-sm font-semibold"
-                  style={secondaryButtonStyle}
-                >
-                  Add to Workspace
-                </a>
-              </div>
-            </div>
+                <div className="mt-5 flex flex-col gap-3">
+                  {leadCapture.enquiryEmail ? (
+                    <a
+                      href={`mailto:${leadCapture.enquiryEmail}?subject=${encodeURIComponent(
+                        leadCapture.enquirySubject ||
+                          leadCapture.cta ||
+                          "Trade Request",
+                      )}`}
+                      className="rounded-2xl px-5 py-3 text-center text-sm font-semibold"
+                      style={primaryButtonStyle}
+                    >
+                      {leadCapture.cta || "Request Trade Pack"}
+                    </a>
+                  ) : null}
+
+                  {leadCapture.enquiryWhatsApp ? (
+                    <a
+                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(/[^\d]/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-2xl border px-5 py-3 text-center text-sm font-semibold"
+                      style={secondaryButtonStyle}
+                    >
+                      WhatsApp
+                    </a>
+                  ) : null}
+                </div>
+
+                {leadCapture.disclaimer ? (
+                  <p className="mt-4 text-xs leading-6" style={titleStyle}>
+                    {leadCapture.disclaimer}
+                  </p>
+                ) : null}
+              </SectionCard>
+            ) : null}
+
+            {visibleBlocks.downloadables && downloadables.length ? (
+              <SectionCard
+                title="Fact Sheets & Downloads"
+                theme={theme}
+                bg={blockColors.downloadables}
+              >
+                <div className="space-y-3">
+                  {downloadables.map((item) => (
+                    <a
+                      key={item.id}
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
+                      style={secondaryButtonStyle}
+                    >
+                      {item.title}
+                    </a>
+                  ))}
+                </div>
+              </SectionCard>
+            ) : null}
 
             {visibleBlocks.contactCard && contactCard ? (
-              <div
-                className="rounded-[32px] border p-6"
-                style={blockStyle(blockColors.contactCard)}
+              <SectionCard
+                title="Contact"
+                theme={theme}
+                bg={blockColors.contactCard}
               >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
-                >
-                  Contact Card
-                </p>
-
-                <div className="mt-5 space-y-3">
-                  <div>
-                    <p
-                      className="text-lg font-semibold"
-                      style={{ color: theme.accent }}
-                    >
-                      {contactCard.contactName}
-                    </p>
-                    <p className="text-sm" style={subtleText}>
+                <div>
+                  <p className="text-xl font-semibold">{contactCard.contactName}</p>
+                  {contactCard.contactTitle ? (
+                    <p className="mt-1 text-sm" style={bodyStyle}>
                       {contactCard.contactTitle}
                     </p>
-                    <p className="text-sm" style={subtleText}>
+                  ) : null}
+                  {contactCard.contactCompany ? (
+                    <p className="text-sm" style={bodyStyle}>
                       {contactCard.contactCompany}
                     </p>
-                  </div>
+                  ) : null}
+                </div>
 
+                <div className="mt-5 space-y-3">
                   {contactCard.contactEmail ? (
                     <a
                       href={`mailto:${contactCard.contactEmail}`}
@@ -893,163 +919,53 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     </a>
                   ) : null}
                 </div>
-              </div>
-            ) : null}
-
-            {visibleBlocks.leadCapture && leadCapture ? (
-              <div
-                className="rounded-[32px] border p-6"
-                style={blockStyle(blockColors.leadCapture)}
-              >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
-                >
-                  Trade Enquiries
-                </p>
-
-                <h3
-                  className="mt-4 text-xl font-semibold"
-                  style={{ color: theme.accent }}
-                >
-                  {leadCapture.headline}
-                </h3>
-
-                <p className="mt-3 text-sm leading-7" style={subtleText}>
-                  {leadCapture.subcopy}
-                </p>
-
-                <div className="mt-5 space-y-2">
-                  {[leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
-                    .filter(Boolean)
-                    .map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-2xl border px-4 py-3 text-sm"
-                        style={secondaryButtonStyle}
-                      >
-                        {item}
-                      </div>
-                    ))}
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3">
-                  {leadCapture.enquiryEmail ? (
-                    <a
-                      href={`mailto:${leadCapture.enquiryEmail}?subject=${encodeURIComponent(
-                        leadCapture.enquirySubject ||
-                          leadCapture.cta ||
-                          "Trade Request",
-                      )}`}
-                      className="rounded-2xl px-5 py-3 text-center text-sm font-semibold"
-                      style={primaryButtonStyle}
-                    >
-                      {leadCapture.cta || "Send Enquiry"}
-                    </a>
-                  ) : null}
-
-                  {leadCapture.enquiryWhatsApp ? (
-                    <a
-                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(/[^\d]/g, "")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-2xl border px-5 py-3 text-center text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      WhatsApp
-                    </a>
-                  ) : null}
-                </div>
-
-                {leadCapture.disclaimer ? (
-                  <p className="mt-4 text-xs leading-6" style={faintText}>
-                    {leadCapture.disclaimer}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {visibleBlocks.downloadables && downloadables.length ? (
-              <div
-                className="rounded-[32px] border p-6"
-                style={blockStyle(blockColors.downloadables)}
-              >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
-                >
-                  Downloads
-                </p>
-
-                <div className="mt-5 space-y-3">
-                  {downloadables.map((item) => (
-                    <a
-                      key={item.id}
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      {item.title}
-                    </a>
-                  ))}
-                </div>
-              </div>
+              </SectionCard>
             ) : null}
 
             {visibleBlocks.tripadvisor &&
             (data.taLink || typeof taRating === "number") ? (
-              <div
-                className="rounded-[32px] border p-6"
-                style={blockStyle(blockColors.tripadvisor)}
+              <SectionCard
+                title="Tripadvisor"
+                theme={theme}
+                bg={blockColors.tripadvisor}
               >
-                <p
-                  className="text-sm uppercase tracking-[0.2em]"
-                  style={faintText}
-                >
-                  Tripadvisor
-                </p>
+                {data.taLogoUrl ? (
+                  <div
+                    className="overflow-hidden rounded-2xl border px-4 py-3"
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <img
+                      src={data.taLogoUrl}
+                      alt="Tripadvisor"
+                      className="h-8 w-auto object-contain"
+                    />
+                  </div>
+                ) : null}
 
-                <div className="mt-5 space-y-4">
-                  {data.taLogoUrl ? (
-                    <div
-                      className="overflow-hidden rounded-2xl border px-4 py-3"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: "#ffffff",
-                      }}
-                    >
-                      <img
-                        src={data.taLogoUrl}
-                        alt="Tripadvisor"
-                        className="h-8 w-auto object-contain"
-                      />
-                    </div>
-                  ) : null}
+                {typeof taRating === "number" ? (
+                  <div
+                    className="mt-3 rounded-2xl border px-4 py-3 text-sm font-semibold"
+                    style={secondaryButtonStyle}
+                  >
+                    Rating {taRating.toFixed(1)}
+                  </div>
+                ) : null}
 
-                  {typeof taRating === "number" ? (
-                    <div
-                      className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      Rating {taRating.toFixed(1)}
-                    </div>
-                  ) : null}
-
-                  {data.taLink ? (
-                    <a
-                      href={data.taLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      Open Tripadvisor
-                    </a>
-                  ) : null}
-                </div>
-              </div>
+                {data.taLink ? (
+                  <a
+                    href={data.taLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 block rounded-2xl border px-4 py-3 text-sm font-semibold"
+                    style={secondaryButtonStyle}
+                  >
+                    Open Tripadvisor
+                  </a>
+                ) : null}
+              </SectionCard>
             ) : null}
           </aside>
         </div>
@@ -1058,81 +974,24 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   );
 }
 
-function DataBlock({
-  title,
-  items,
-  theme,
-  bg,
+function Pill({
+  text,
+  style,
 }: {
-  title: string;
-  items: string[];
-  theme: ThemeState;
-  bg: string;
+  text: string;
+  style: React.CSSProperties;
 }) {
-  if (!items.length) {
-    return (
-      <div
-        className="rounded-[30px] border p-8"
-        style={{
-          borderColor: theme.borderColor,
-          backgroundColor: bg || theme.blockBg,
-          color: theme.accent,
-        }}
-      >
-        <p
-          className="text-sm uppercase tracking-[0.18em]"
-          style={{ color: theme.accent, opacity: 0.45 }}
-        >
-          {title}
-        </p>
-
-        <p
-          className="mt-5 text-sm"
-          style={{ color: theme.accent, opacity: 0.6 }}
-        >
-          No information yet.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="rounded-[30px] border p-8"
-      style={{
-        borderColor: theme.borderColor,
-        backgroundColor: bg || theme.blockBg,
-        color: theme.accent,
-      }}
+    <span
+      className="rounded-full border px-3 py-1.5 text-sm"
+      style={style}
     >
-      <p
-        className="text-sm uppercase tracking-[0.18em]"
-        style={{ color: theme.accent, opacity: 0.45 }}
-      >
-        {title}
-      </p>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {items.map((item) => (
-          <span
-            key={item}
-            className="rounded-full border px-3 py-1.5 text-xs"
-            style={{
-              borderColor: theme.borderColor,
-              backgroundColor: theme.blockBg,
-              color: theme.accent,
-              opacity: 0.9,
-            }}
-          >
-            {item}
-          </span>
-        ))}
-      </div>
-    </div>
+      {text}
+    </span>
   );
 }
 
-function FactCard({
+function QuickFact({
   label,
   value,
   theme,
@@ -1143,7 +1002,7 @@ function FactCard({
 }) {
   return (
     <div
-      className="rounded-[22px] border p-4"
+      className="rounded-[24px] border p-4"
       style={{
         borderColor: theme.borderColor,
         backgroundColor: theme.blockBg,
@@ -1151,12 +1010,135 @@ function FactCard({
       }}
     >
       <p
-        className="text-xs uppercase tracking-[0.18em]"
-        style={{ color: theme.accent, opacity: 0.4 }}
+        className="text-[11px] uppercase tracking-[0.18em]"
+        style={{ color: theme.accent, opacity: 0.45 }}
       >
         {label}
       </p>
-      <p className="mt-2 text-base font-semibold">{value}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  theme,
+  bg,
+  children,
+}: {
+  title: string;
+  theme: ThemeState;
+  bg: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-[30px] border p-6 md:p-8"
+      style={{
+        borderColor: theme.borderColor,
+        backgroundColor: bg || theme.blockBg,
+        color: theme.accent,
+      }}
+    >
+      <p
+        className="text-sm uppercase tracking-[0.2em]"
+        style={{ color: theme.accent, opacity: 0.45 }}
+      >
+        {title}
+      </p>
+      <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+function SnapshotList({
+  title,
+  items,
+  theme,
+}: {
+  title: string;
+  items: string[];
+  theme: ThemeState;
+}) {
+  return (
+    <div>
+      <p
+        className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+        style={{ color: theme.accent, opacity: 0.45 }}
+      >
+        {title}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.length ? (
+          items.map((item) => (
+            <span
+              key={item}
+              className="rounded-full border px-3 py-1.5 text-xs"
+              style={{
+                borderColor: theme.borderColor,
+                backgroundColor: theme.blockBg,
+                color: theme.accent,
+              }}
+            >
+              {item}
+            </span>
+          ))
+        ) : (
+          <span style={{ color: theme.accent, opacity: 0.55 }}>
+            None listed
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  theme,
+}: {
+  label: string;
+  value: string;
+  theme: ThemeState;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between gap-4 rounded-2xl border px-4 py-3"
+      style={{
+        borderColor: theme.borderColor,
+        backgroundColor: theme.blockBg,
+        color: theme.accent,
+      }}
+    >
+      <span style={{ opacity: 0.5 }}>{label}</span>
+      <span className="text-right font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function TagList({
+  items,
+  theme,
+}: {
+  items: string[];
+  theme: ThemeState;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <span
+          key={item}
+          className="rounded-full border px-3 py-1.5 text-xs"
+          style={{
+            borderColor: theme.borderColor,
+            backgroundColor: theme.blockBg,
+            color: theme.accent,
+          }}
+        >
+          {item}
+        </span>
+      ))}
     </div>
   );
 }
