@@ -179,6 +179,22 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
+function isValidPropertyProfile(item: ApiListingRecord, slug: string): boolean {
+  const data = item.data || {};
+  const effectiveName = (item.name || data.name || "").trim().toLowerCase();
+  const companySlug = (item.companySlug || "").trim().toLowerCase();
+  const listingSlug = (item.slug || "").trim().toLowerCase();
+
+  if (item.status !== "published") return false;
+  if (listingSlug !== slug.toLowerCase()) return false;
+  if (!listingSlug) return false;
+
+  if (companySlug && listingSlug === companySlug) return false;
+  if (companySlug && effectiveName === companySlug.replace(/-/g, " ")) return false;
+
+  return true;
+}
+
 async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> {
   const headersList = await headers();
   const host = headersList.get("host");
@@ -196,10 +212,8 @@ async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> 
   const listings = Array.isArray(json.listings) ? json.listings : [];
 
   return (
-    listings.find(
-      (item: ApiListingRecord) =>
-        item.slug === slug && item.status !== "archived",
-    ) || null
+    listings.find((item: ApiListingRecord) => isValidPropertyProfile(item, slug)) ||
+    null
   );
 }
 
@@ -453,7 +467,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
                       {listing.name}
                     </h1>
-                    <p className="mt-3 max-w-3xl text-base leading-8 md:text-lg" style={bodyStyle}>
+                    <p
+                      className="mt-3 max-w-3xl text-base leading-8 md:text-lg"
+                      style={bodyStyle}
+                    >
                       {vibe || "Trade-ready safari property profile."}
                     </p>
                   </div>
@@ -464,7 +481,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   {listing.class ? <Pill text={listing.class} style={pillStyle} /> : null}
                   {typeof rating === "number" ? (
                     <Pill
-                      text={`Rating ${rating.toFixed(1)}${typeof reviewCount === "number" ? ` · ${reviewCount}` : ""}`}
+                      text={`Rating ${rating.toFixed(1)}${
+                        typeof reviewCount === "number" ? ` · ${reviewCount}` : ""
+                      }`}
                       style={pillStyle}
                     />
                   ) : null}
@@ -525,7 +544,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
                   {leadCapture?.enquiryWhatsApp ? (
                     <a
-                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(/[^\d]/g, "")}`}
+                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(
+                        /[^\d]/g,
+                        "",
+                      )}`}
                       target="_blank"
                       rel="noreferrer"
                       className="rounded-2xl border px-5 py-3 text-sm font-semibold"
@@ -597,9 +619,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                         Website
                       </a>
                     ) : null}
-                    {data.mapLink ? (
+                    {(data.mapLink || listing.mapLink) ? (
                       <a
-                        href={data.mapLink}
+                        href={data.mapLink || listing.mapLink || "#"}
                         target="_blank"
                         rel="noreferrer"
                         className="rounded-2xl border px-4 py-3 text-sm font-semibold"
@@ -648,7 +670,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     />
                     <SummaryRow
                       label="Best for"
-                      value={listing.class || "Luxury safari trade"}
+                      value={listing.class || data.class || "Luxury safari trade"}
                       theme={theme}
                     />
                     <SummaryRow
@@ -700,7 +722,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             ) : null}
 
             <div className="grid gap-6 lg:grid-cols-2">
-              {visibleBlocks.inclusions && Array.isArray(data.inclusions) && data.inclusions.length ? (
+              {visibleBlocks.inclusions &&
+              Array.isArray(data.inclusions) &&
+              data.inclusions.length ? (
                 <SectionCard
                   title="Inclusions"
                   theme={theme}
@@ -710,7 +734,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 </SectionCard>
               ) : null}
 
-              {visibleBlocks.exclusions && Array.isArray(data.exclusions) && data.exclusions.length ? (
+              {visibleBlocks.exclusions &&
+              Array.isArray(data.exclusions) &&
+              data.exclusions.length ? (
                 <SectionCard
                   title="Exclusions"
                   theme={theme}
@@ -731,7 +757,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               >
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={titleStyle}>
+                    <p
+                      className="text-xs font-semibold uppercase tracking-[0.18em]"
+                      style={titleStyle}
+                    >
                       Included
                     </p>
                     <div className="mt-3">
@@ -739,7 +768,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={titleStyle}>
+                    <p
+                      className="text-xs font-semibold uppercase tracking-[0.18em]"
+                      style={titleStyle}
+                    >
                       Paid
                     </p>
                     <div className="mt-3">
@@ -825,7 +857,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
                   {leadCapture.enquiryWhatsApp ? (
                     <a
-                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(/[^\d]/g, "")}`}
+                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(
+                        /[^\d]/g,
+                        "",
+                      )}`}
                       target="_blank"
                       rel="noreferrer"
                       className="rounded-2xl border px-5 py-3 text-center text-sm font-semibold"
@@ -982,10 +1017,7 @@ function Pill({
   style: React.CSSProperties;
 }) {
   return (
-    <span
-      className="rounded-full border px-3 py-1.5 text-sm"
-      style={style}
-    >
+    <span className="rounded-full border px-3 py-1.5 text-sm" style={style}>
       {text}
     </span>
   );
