@@ -40,6 +40,22 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
+function isPropertyListing(listing: ApiListingRecord): boolean {
+  const data = listing.data || {};
+
+  const effectiveName = (listing.name || data.name || "").trim().toLowerCase();
+  const companySlug = (listing.companySlug || "").trim().toLowerCase();
+  const slug = (listing.slug || "").trim().toLowerCase();
+
+  if (listing.status !== "published") return false;
+  if (!slug) return false;
+
+  if (companySlug && slug === companySlug) return false;
+  if (companySlug && effectiveName === companySlug.replace(/-/g, " ")) return false;
+
+  return true;
+}
+
 export default async function DirectoryPage() {
   let listings: ApiListingRecord[] = [];
   let loadError = false;
@@ -47,8 +63,7 @@ export default async function DirectoryPage() {
   try {
     const headersList = await headers();
     const host = headersList.get("host");
-    const protocol =
-      process.env.NODE_ENV === "development" ? "http" : "https";
+    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
     if (!host) {
       throw new Error("Missing host header");
@@ -68,9 +83,7 @@ export default async function DirectoryPage() {
     loadError = true;
   }
 
-  const visibleListings = listings.filter(
-    (listing) => listing.status !== "archived",
-  );
+  const visibleListings = listings.filter(isPropertyListing);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -98,7 +111,7 @@ export default async function DirectoryPage() {
 
         {!loadError && visibleListings.length === 0 ? (
           <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8 text-white/65">
-            No listings available yet.
+            No published property listings available yet.
           </div>
         ) : null}
 
@@ -113,6 +126,7 @@ export default async function DirectoryPage() {
             const website = listing.website || data.website || "";
             const rating = toNumber(data.rating ?? listing.tripadvisorRating);
             const reviewCount = toNumber(data.reviewCount);
+            const propertyClass = listing.class || data.class || "";
             const socialLinks = {
               facebookUrl: data.facebookUrl || "",
               instagramUrl: data.instagramUrl || "",
@@ -151,7 +165,7 @@ export default async function DirectoryPage() {
 
                   <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-4">
                     <span className="rounded-full border border-amber-300/20 bg-black/35 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-amber-100 backdrop-blur">
-                      property
+                      Property
                     </span>
 
                     <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
@@ -206,9 +220,9 @@ export default async function DirectoryPage() {
                   </p>
 
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {listing.class ? (
+                    {propertyClass ? (
                       <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
-                        {listing.class}
+                        {propertyClass}
                       </span>
                     ) : null}
 
