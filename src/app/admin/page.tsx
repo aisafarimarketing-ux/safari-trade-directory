@@ -1068,10 +1068,6 @@ export default function RestorationSafariAdmin() {
     if (vcardUrl) window.open(vcardUrl, "_blank");
   }
 };
-    } catch {
-      if (vcardUrl) window.open(vcardUrl, "_blank");
-    }
-  };
 
   const saveContact = () => {
     const a = document.createElement("a");
