@@ -229,6 +229,10 @@ const DEFAULT_VISIBLE_BLOCKS: VisibleBlocksState = {
 };
 
 const makeNewCamp = (): Camp => ({
+  slug: "",
+  companySlug: "nyumbani-collection",
+  status: "published",
+
   name: "New Camp",
   class: "Tented (Luxury)",
 
