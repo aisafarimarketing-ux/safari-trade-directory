@@ -1047,21 +1047,27 @@ export default function RestorationSafariAdmin() {
   }, [vcardUrl]);
 
   const shareContact = async () => {
-    try {
-      const blob = new Blob([vcardText], { type: "text/vcard;charset=utf-8" });
-      const file = new File([blob], "contact.vcf", { type: "text/vcard" });
+  try {
+    const blob = new Blob([vcardText], { type: "text/vcard;charset=utf-8" });
+    const file = new File([blob], "contact.vcf", { type: "text/vcard" });
 
-      // @ts-expect-error Web Share file support is not fully typed across browsers
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        // @ts-expect-error Web Share file support is not fully typed across browsers
-        await navigator.share({
-          title: camp.contactName,
-          text: "Contact card",
-          files: [file],
-        });
-      } else if (vcardUrl) {
-        window.open(vcardUrl, "_blank");
-      }
+    if (
+      typeof navigator !== "undefined" &&
+      "share" in navigator &&
+      (!("canShare" in navigator) || navigator.canShare?.({ files: [file] }))
+    ) {
+      await navigator.share({
+        title: camp.contactName,
+        text: "Contact card",
+        files: [file],
+      });
+    } else if (vcardUrl) {
+      window.open(vcardUrl, "_blank");
+    }
+  } catch {
+    if (vcardUrl) window.open(vcardUrl, "_blank");
+  }
+};
     } catch {
       if (vcardUrl) window.open(vcardUrl, "_blank");
     }
