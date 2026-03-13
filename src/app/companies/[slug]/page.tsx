@@ -4,10 +4,30 @@ type CompanyPageProps = {
   };
 };
 
+import { headers } from "next/headers";
 import { companies } from "../../../data/companies";
 import { listings } from "../../../data/listings";
 import { isPublicListing } from "../../../lib/listing-visibility";
+async function getApiListings() {
+  const headersList = headers();
+  const host = headersList.get("host");
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
+  if (!host) return [];
+
+  try {
+    const res = await fetch(`${protocol}://${host}/api/admin/listings`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    return Array.isArray(json.listings) ? json.listings : [];
+  } catch {
+    return [];
+  }
+}
 export default function CompanyPage({ params }: CompanyPageProps) {
   const company = companies.find((item) => item.slug === params.slug);
 
