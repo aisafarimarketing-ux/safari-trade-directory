@@ -179,7 +179,7 @@ const companyListings = apiListings.filter(
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {regions.map((region) => (
+               {regions.map((region: string) => (
                   <span
                     key={region}
                     className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/78"
