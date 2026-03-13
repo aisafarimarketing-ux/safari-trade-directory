@@ -28,7 +28,7 @@ async function getApiListings() {
     return [];
   }
 }
-export default function CompanyPage({ params }: CompanyPageProps) {
+export default async function CompanyPage({ params }: CompanyPageProps) {
   const company = companies.find((item) => item.slug === params.slug);
 
   if (!company) {
