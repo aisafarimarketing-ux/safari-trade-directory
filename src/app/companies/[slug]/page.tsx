@@ -65,10 +65,13 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
     );
   }
 
-  const companyListings = listings.filter(
-    (listing) =>
-      listing.companySlug === company.slug && isPublicListing(listing),
-  );
+  const apiListings = await getApiListings();
+
+const companyListings = apiListings.filter(
+  (listing: any) =>
+    listing.companySlug === company.slug &&
+    listing.status !== "archived",
+);
 
   const showcaseListings = companyListings.slice(0, 5);
   const leadListing = showcaseListings[0];
