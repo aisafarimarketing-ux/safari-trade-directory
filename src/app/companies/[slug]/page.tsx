@@ -93,12 +93,12 @@ const companyListings = apiListings.filter(
   }
 
   const regions = Array.from(
-    new Set(
-      companyListings
-        .map((listing) => listing.location)
-        .filter(Boolean),
-    ),
-  ).slice(0, 3);
+  new Set(
+    companyListings
+      .map((listing: any) => String(listing.location || ""))
+      .filter((value: string) => value.length > 0),
+  ),
+).slice(0, 3);
 
   const listingTypes = Array.from(
     new Set(
