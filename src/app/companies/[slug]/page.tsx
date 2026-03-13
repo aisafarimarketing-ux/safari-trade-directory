@@ -1,14 +1,41 @@
+import { headers } from "next/headers";
+import { companies } from "../../../data/companies";
+
 type CompanyPageProps = {
   params: {
     slug: string;
   };
 };
 
-import { headers } from "next/headers";
-import { companies } from "../../../data/companies";
-import { listings } from "../../../data/listings";
-import { isPublicListing } from "../../../lib/listing-visibility";
-async function getApiListings() {
+type ApiListing = {
+  id: string;
+  slug: string;
+  name: string;
+  companySlug: string | null;
+  status: "draft" | "published" | "archived";
+  locationLabel?: string | null;
+  class?: string | null;
+  vibe?: string | null;
+  website?: string | null;
+  tripadvisorRating?: number | null;
+  data?: {
+    coverImage?: string;
+    logoImage?: string;
+    tradeProfileLabel?: string;
+    tradeProfileSub?: string;
+    locationLabel?: string;
+    website?: string;
+    facebookUrl?: string;
+    instagramUrl?: string;
+    tiktokUrl?: string;
+    youtubeUrl?: string;
+    rating?: number | string;
+    reviewCount?: number | string;
+    vibe?: string;
+  };
+};
+
+async function getApiListings(): Promise<ApiListing[]> {
   const headersList = headers();
   const host = headersList.get("host");
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
@@ -23,11 +50,21 @@ async function getApiListings() {
     if (!res.ok) return [];
 
     const json = await res.json();
-    return Array.isArray(json.listings) ? json.listings : [];
+    return Array.isArray(json.listings) ? (json.listings as ApiListing[]) : [];
   } catch {
     return [];
   }
 }
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export default async function CompanyPage({ params }: CompanyPageProps) {
   const company = companies.find((item) => item.slug === params.slug);
 
@@ -67,22 +104,23 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
 
   const apiListings = await getApiListings();
 
-const companyListings = apiListings.filter(
-  (listing: any) =>
-    listing.companySlug === company.slug &&
-    listing.status !== "archived",
-);
+  const companyListings: ApiListing[] = apiListings.filter(
+    (listing) =>
+      listing.companySlug === company.slug && listing.status !== "archived",
+  );
 
   const showcaseListings = companyListings.slice(0, 5);
   const leadListing = showcaseListings[0];
   const supportListings = showcaseListings.slice(1, 5);
 
-  const leadImage = leadListing?.coverImage || "";
-  const supportImages = supportListings.map((listing) => ({
-    src: listing.coverImage || listing.logoImage || "",
-    alt: listing.name,
-    href: `/profiles/${listing.slug}`,
-  }));
+  const leadImage = leadListing?.data?.coverImage || "";
+
+  const supportImages: Array<{ src: string; alt: string; href: string }> =
+    supportListings.map((listing) => ({
+      src: listing.data?.coverImage || listing.data?.logoImage || "",
+      alt: listing.name,
+      href: `/profiles/${listing.slug}`,
+    }));
 
   while (supportImages.length < 4) {
     supportImages.push({
@@ -92,42 +130,42 @@ const companyListings = apiListings.filter(
     });
   }
 
-  const regions = Array.from(
-  new Set(
-    companyListings
-      .map((listing: any) => String(listing.location || ""))
-      .filter((value: string) => value.length > 0),
-  ),
-).slice(0, 3);
-
-  const listingTypes = Array.from(
+  const regions: string[] = Array.from(
     new Set(
       companyListings
-        .map((listing) => listing.kind?.replace("-", " "))
-        .filter(Boolean),
+        .map((listing) =>
+          String(listing.locationLabel || listing.data?.locationLabel || "").trim(),
+        )
+        .filter((value) => value.length > 0),
     ),
   ).slice(0, 3);
 
-  const bestForTags = Array.from(
+  const listingTypes: string[] = Array.from(
     new Set(
-      companyListings.flatMap((listing) =>
-        listing.matchAttributes?.idealFor?.slice(0, 2) || [],
-      ),
+      companyListings
+        .map((listing) => String(listing.class || "").trim())
+        .filter((value) => value.length > 0),
+    ),
+  ).slice(0, 3);
+
+  const bestForTags: string[] = Array.from(
+    new Set(
+      companyListings
+        .map((listing) => String(listing.vibe || listing.data?.vibe || "").trim())
+        .filter((value) => value.length > 0),
     ),
   ).slice(0, 4);
 
   const featuredListings = companyListings.slice(0, 6);
 
-  const answerRows = [
+  const answerRows: Array<{ q: string; a: string }> = [
     {
       q: "Who are they?",
       a: company.name,
     },
     {
       q: "What kind of portfolio?",
-      a: listingTypes.length
-        ? listingTypes.join(" · ")
-        : company.type,
+      a: listingTypes.length ? listingTypes.join(" · ") : company.type,
     },
     {
       q: "Where do they operate?",
@@ -141,11 +179,11 @@ const companyListings = apiListings.filter(
       q: "Why should a TO care?",
       a:
         bestForTags.length > 0
-          ? `Strong fit for ${bestForTags.join(", ")}`
+          ? `Strong fit for ${bestForTags.slice(0, 2).join(", ")}`
           : "Trade-ready safari portfolio with quick qualification value",
     },
     {
-      q: "How do I get facts fast?",
+      q: "How do I get the facts fast?",
       a: "Open listings, view profiles, and contact the trade desk",
     },
   ];
@@ -179,7 +217,7 @@ const companyListings = apiListings.filter(
               </div>
 
               <div className="flex flex-wrap gap-2">
-               {regions.map((region: string) => (
+                {regions.map((region) => (
                   <span
                     key={region}
                     className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/78"
@@ -188,7 +226,7 @@ const companyListings = apiListings.filter(
                   </span>
                 ))}
 
-             {listingTypes.map((type: string) => (
+                {listingTypes.map((type) => (
                   <span
                     key={type}
                     className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/78"
@@ -397,14 +435,30 @@ const companyListings = apiListings.filter(
         ) : (
           <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {featuredListings.map((listing) => {
-              const propertyDetails = listing.propertyDetails;
-              const socialLinks = listing.socialLinks;
+              const coverImage = listing.data?.coverImage || "";
+              const logoImage = listing.data?.logoImage || "";
+              const location =
+                listing.locationLabel || listing.data?.locationLabel || "Location not set";
+              const vibe = listing.vibe || listing.data?.vibe || "";
+              const website = listing.website || listing.data?.website || "";
+              const rating = toNumber(
+                listing.data?.rating ?? listing.tripadvisorRating,
+              );
+              const reviewCount = toNumber(listing.data?.reviewCount);
+
+              const socialLinks = {
+                facebookUrl: listing.data?.facebookUrl || "",
+                instagramUrl: listing.data?.instagramUrl || "",
+                tiktokUrl: listing.data?.tiktokUrl || "",
+                youtubeUrl: listing.data?.youtubeUrl || "",
+              };
+
               const hasLinks =
-                !!propertyDetails?.website ||
-                !!socialLinks?.facebookUrl ||
-                !!socialLinks?.instagramUrl ||
-                !!socialLinks?.tiktokUrl ||
-                !!socialLinks?.youtubeUrl;
+                !!website ||
+                !!socialLinks.facebookUrl ||
+                !!socialLinks.instagramUrl ||
+                !!socialLinks.tiktokUrl ||
+                !!socialLinks.youtubeUrl;
 
               return (
                 <div
@@ -412,10 +466,10 @@ const companyListings = apiListings.filter(
                   className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] transition hover:-translate-y-1 hover:bg-white/[0.05]"
                 >
                   <div className="relative aspect-[4/3] border-b border-white/10 bg-neutral-900">
-                    {listing.coverImage ? (
+                    {coverImage ? (
                       <>
                         <img
-                          src={listing.coverImage}
+                          src={coverImage}
                           alt={`${listing.name} cover`}
                           className="h-full w-full object-cover"
                         />
@@ -430,14 +484,14 @@ const companyListings = apiListings.filter(
 
                     <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-4">
                       <span className="rounded-full border border-amber-300/20 bg-black/35 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-amber-100 backdrop-blur">
-                        {listing.kind.replace("-", " ")}
+                        {listing.class || "property"}
                       </span>
                     </div>
 
                     <div className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
-                      {listing.logoImage ? (
+                      {logoImage ? (
                         <img
-                          src={listing.logoImage}
+                          src={logoImage}
                           alt={`${listing.name} logo`}
                           className="h-full w-full object-cover"
                         />
@@ -450,26 +504,27 @@ const companyListings = apiListings.filter(
                   </div>
 
                   <div className="p-6">
-                    {(listing.tradeProfileLabel || listing.tradeProfileSub) && (
+                    {(listing.data?.tradeProfileLabel ||
+                      listing.data?.tradeProfileSub) && (
                       <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                        {[listing.tradeProfileLabel, listing.tradeProfileSub]
+                        [listing.data?.tradeProfileLabel, listing.data?.tradeProfileSub]
                           .filter(Boolean)
-                          .join(" · ")}
+                          .join(" · ")
                       </p>
                     )}
 
                     <h3 className="text-2xl font-semibold">{listing.name}</h3>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/55">
-                      <span>{listing.location}</span>
+                      <span>{location}</span>
 
-                      {typeof propertyDetails?.rating === "number" ? (
+                      {typeof rating === "number" ? (
                         <>
                           <span className="text-white/25">•</span>
                           <span>
-                            {propertyDetails.rating.toFixed(1)}
-                            {typeof propertyDetails.reviewCount === "number"
-                              ? ` (${propertyDetails.reviewCount})`
+                            {rating.toFixed(1)}
+                            {typeof reviewCount === "number"
+                              ? ` (${reviewCount})`
                               : ""}
                           </span>
                         </>
@@ -477,51 +532,40 @@ const companyListings = apiListings.filter(
                     </div>
 
                     <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
-                      {listing.description}
+                      {vibe || "Trade-ready safari property profile."}
                     </p>
 
-                    {propertyDetails?.vibe ? (
-                      <p className="mt-4 line-clamp-2 text-sm leading-7 text-white/50">
-                        {propertyDetails.vibe}
-                      </p>
-                    ) : null}
-
                     <div className="mt-5 flex flex-wrap gap-2">
-                      {listing.matchAttributes.idealFor
-                        .slice(0, 3)
-                        .map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                      {vibe ? (
+                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+                          Signature vibe
+                        </span>
+                      ) : null}
+                      {website ? (
+                        <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-[11px] text-emerald-100">
+                          Website
+                        </span>
+                      ) : null}
                     </div>
 
                     {hasLinks ? (
                       <div className="mt-5 flex flex-wrap gap-2">
-                        {propertyDetails?.website ? (
-                          <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-[11px] text-emerald-100">
-                            Website
-                          </span>
-                        ) : null}
-                        {socialLinks?.instagramUrl ? (
+                        {socialLinks.instagramUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             Instagram
                           </span>
                         ) : null}
-                        {socialLinks?.facebookUrl ? (
+                        {socialLinks.facebookUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             Facebook
                           </span>
                         ) : null}
-                        {socialLinks?.tiktokUrl ? (
+                        {socialLinks.tiktokUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             TikTok
                           </span>
                         ) : null}
-                        {socialLinks?.youtubeUrl ? (
+                        {socialLinks.youtubeUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             YouTube
                           </span>
