@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FileText,
   Plus,
   Save,
   Trash2,
@@ -145,6 +146,78 @@ type UploadApiResponse = {
     mimeType: string;
     size: number;
   };
+  error?: string;
+};
+
+type PdfImportResponse = {
+  success: boolean;
+  extractedText?: string;
+  parsed?: {
+    name?: string;
+    companySlug?: string;
+    location?: string;
+    class?: string;
+    vibe?: string;
+    website?: string;
+    mapLink?: string;
+    snapshot?: {
+      rooms?: string;
+      location?: string;
+      bestFor?: string;
+      setting?: string;
+      style?: string;
+      access?: string;
+    };
+    rates?: {
+      notes?: string[];
+      rows?: Array<{
+        season?: string;
+        dates?: string;
+        rackPPPN?: string;
+      }>;
+    };
+    experiences?: {
+      included?: string[];
+      paid?: string[];
+    };
+    policies?: {
+      childPolicy?: string;
+      honeymoonPolicy?: string;
+      cancellation?: string;
+      importantNotes?: string[];
+      tradeNotes?: string[];
+    };
+    contacts?: {
+      reservations?: Array<{
+        name?: string;
+        role?: string;
+        email?: string;
+        phone?: string;
+        whatsapp?: string;
+      }>;
+      sales?: Array<{
+        name?: string;
+        role?: string;
+        email?: string;
+        phone?: string;
+        whatsapp?: string;
+      }>;
+      marketing?: Array<{
+        name?: string;
+        role?: string;
+        email?: string;
+        phone?: string;
+        whatsapp?: string;
+      }>;
+    };
+    enquiryEmail?: string;
+    enquiryWhatsApp?: string;
+    enquirySubject?: string;
+    quickTags?: string[];
+    tradeProfileLabel?: string;
+    tradeProfileSub?: string;
+  };
+  warnings?: string[];
   error?: string;
 };
 
@@ -647,6 +720,123 @@ function toApiPayload(listing: ListingEditorState) {
   };
 }
 
+function mergeImportedListing(
+  current: ListingEditorState,
+  parsed?: PdfImportResponse["parsed"],
+) {
+  if (!parsed) return current;
+
+  const next: ListingEditorState = {
+    ...current,
+    name: parsed.name || current.name,
+    slug: current.slug || (parsed.name ? slugify(parsed.name) : current.slug),
+    companySlug: parsed.companySlug || current.companySlug,
+    location: parsed.location || current.location,
+    class: parsed.class || current.class,
+    vibe: parsed.vibe || current.vibe,
+    website: parsed.website || current.website,
+    mapLink: parsed.mapLink || current.mapLink,
+    enquiryEmail: parsed.enquiryEmail || current.enquiryEmail,
+    enquiryWhatsApp: parsed.enquiryWhatsApp || current.enquiryWhatsApp,
+    enquirySubject: parsed.enquirySubject || current.enquirySubject,
+    tradeProfileLabel: parsed.tradeProfileLabel || current.tradeProfileLabel,
+    tradeProfileSub: parsed.tradeProfileSub || current.tradeProfileSub,
+    quickTagsText:
+      parsed.quickTags && parsed.quickTags.length > 0
+        ? parsed.quickTags.join("\n")
+        : current.quickTagsText,
+    snapshot: {
+      ...current.snapshot,
+      rooms: parsed.snapshot?.rooms || current.snapshot.rooms,
+      location: parsed.snapshot?.location || current.snapshot.location,
+      bestFor: parsed.snapshot?.bestFor || current.snapshot.bestFor,
+      setting: parsed.snapshot?.setting || current.snapshot.setting,
+      style: parsed.snapshot?.style || current.snapshot.style,
+      access: parsed.snapshot?.access || current.snapshot.access,
+    },
+    rates: {
+      ...current.rates,
+      notesText:
+        parsed.rates?.notes && parsed.rates.notes.length > 0
+          ? parsed.rates.notes.join("\n")
+          : current.rates.notesText,
+      rows:
+        parsed.rates?.rows && parsed.rates.rows.length > 0
+          ? parsed.rates.rows.map((row) => ({
+              id: uid(),
+              season: row.season || "",
+              dates: row.dates || "",
+              rackPPPN: row.rackPPPN || "",
+            }))
+          : current.rates.rows,
+    },
+    experiences: {
+      includedText:
+        parsed.experiences?.included && parsed.experiences.included.length > 0
+          ? parsed.experiences.included.join("\n")
+          : current.experiences.includedText,
+      paidText:
+        parsed.experiences?.paid && parsed.experiences.paid.length > 0
+          ? parsed.experiences.paid.join("\n")
+          : current.experiences.paidText,
+    },
+    policies: {
+      ...current.policies,
+      childPolicy:
+        parsed.policies?.childPolicy || current.policies.childPolicy,
+      honeymoonPolicy:
+        parsed.policies?.honeymoonPolicy || current.policies.honeymoonPolicy,
+      cancellation:
+        parsed.policies?.cancellation || current.policies.cancellation,
+      importantNotesText:
+        parsed.policies?.importantNotes && parsed.policies.importantNotes.length > 0
+          ? parsed.policies.importantNotes.join("\n")
+          : current.policies.importantNotesText,
+      tradeNotesText:
+        parsed.policies?.tradeNotes && parsed.policies.tradeNotes.length > 0
+          ? parsed.policies.tradeNotes.join("\n")
+          : current.policies.tradeNotesText,
+    },
+    contacts: {
+      reservations:
+        parsed.contacts?.reservations && parsed.contacts.reservations.length > 0
+          ? parsed.contacts.reservations.map((item) => ({
+              id: uid(),
+              name: item.name || "",
+              role: item.role || "",
+              email: item.email || "",
+              phone: item.phone || "",
+              whatsapp: item.whatsapp || "",
+            }))
+          : current.contacts.reservations,
+      sales:
+        parsed.contacts?.sales && parsed.contacts.sales.length > 0
+          ? parsed.contacts.sales.map((item) => ({
+              id: uid(),
+              name: item.name || "",
+              role: item.role || "",
+              email: item.email || "",
+              phone: item.phone || "",
+              whatsapp: item.whatsapp || "",
+            }))
+          : current.contacts.sales,
+      marketing:
+        parsed.contacts?.marketing && parsed.contacts.marketing.length > 0
+          ? parsed.contacts.marketing.map((item) => ({
+              id: uid(),
+              name: item.name || "",
+              role: item.role || "",
+              email: item.email || "",
+              phone: item.phone || "",
+              whatsapp: item.whatsapp || "",
+            }))
+          : current.contacts.marketing,
+    },
+  };
+
+  return next;
+}
+
 function Section(props: {
   title: string;
   children: React.ReactNode;
@@ -719,6 +909,7 @@ export default function AdminPage() {
   const [uploadState, setUploadState] = useState("Upload ready");
 
   const downloadFileRef = useRef<HTMLInputElement | null>(null);
+  const importPdfRef = useRef<HTMLInputElement | null>(null);
 
   const selected = listings[selectedIndex] || listings[0];
 
@@ -1007,6 +1198,78 @@ export default function AdminPage() {
     }
   }
 
+  async function handlePdfImport(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "application/pdf") {
+      setUploadState("Only PDF files are supported for import");
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadState("Uploading and reading PDF...");
+
+      const uploaded = await uploadFile(file);
+
+      const form = new FormData();
+      form.append("file", file);
+
+      const response = await fetch("/api/admin/import-pdf", {
+        method: "POST",
+        body: form,
+      });
+
+      const json = (await response.json()) as PdfImportResponse;
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || "PDF import failed");
+      }
+
+      const merged = mergeImportedListing(selected, json.parsed);
+
+      const alreadyHasPdf = merged.downloads.some(
+        (item) => item.url === uploaded.url,
+      );
+
+      const nextListing: ListingEditorState = {
+        ...merged,
+        downloads: alreadyHasPdf
+          ? merged.downloads
+          : [
+              ...merged.downloads,
+              {
+                id: uid(),
+                label: file.name,
+                url: uploaded.url,
+                type: "application/pdf",
+              },
+            ],
+      };
+
+      setListings((prev) => {
+        const next = [...prev];
+        next[selectedIndex] = nextListing;
+        return next;
+      });
+
+      setUploadState(
+        json.warnings && json.warnings.length > 0
+          ? "PDF imported. Review suggested fields."
+          : "PDF imported",
+      );
+    } catch (error) {
+      setUploadState(
+        error instanceof Error ? error.message : "PDF import failed",
+      );
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function saveActiveListing() {
     try {
       setSaveState("Saving...");
@@ -1093,6 +1356,18 @@ export default function AdminPage() {
               <ExternalLink size={14} />
               Public Profile
             </a>
+
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
+              <FileText size={14} />
+              Import PDF
+              <input
+                ref={importPdfRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handlePdfImport}
+              />
+            </label>
           </div>
 
           <div className="flex items-center gap-3">
