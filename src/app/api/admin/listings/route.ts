@@ -153,6 +153,10 @@ function toNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+function isNonNull<T>(value: T | null): value is T {
+  return value !== null;
+}
+
 function extractListingInput(body: Record<string, unknown>) {
   if (isObject(body.camp)) {
     return body.camp;
@@ -174,7 +178,8 @@ function normalizeDesign(
   body: Record<string, unknown>,
   existing?: ListingRecord,
 ): ListingDesign {
-  const presetValue = asTrimmedString(body.preset) ?? asTrimmedString(body.designPreset);
+  const presetValue =
+    asTrimmedString(body.preset) ?? asTrimmedString(body.designPreset);
 
   const preset: ListingDesignPreset =
     presetValue === "modern-trade-deck" ||
@@ -210,7 +215,7 @@ function normalizeGallery(raw: unknown): GalleryGroup[] {
 
       return { label, images };
     })
-    .filter((item): item is GalleryGroup => Boolean(item));
+    .filter(isNonNull);
 }
 
 function normalizeRates(raw: unknown): ListingData["rates"] {
@@ -238,7 +243,7 @@ function normalizeRates(raw: unknown): ListingData["rates"] {
         })
         .filter(
           (row): row is RateRow =>
-            Boolean(row) && Boolean(row.season || row.dates || row.rackPPPN),
+            row !== null && Boolean(row.season || row.dates || row.rackPPPN),
         )
     : [];
 
@@ -284,7 +289,7 @@ function normalizeDownloads(raw: unknown): DownloadItem[] {
   if (!Array.isArray(raw)) return [];
 
   return raw
-    .map((item) => {
+    .map<DownloadItem | null>((item) => {
       if (!isObject(item)) return null;
 
       const label = asTrimmedString(item.label);
@@ -292,20 +297,27 @@ function normalizeDownloads(raw: unknown): DownloadItem[] {
 
       if (!label || !url) return null;
 
-      return {
-        label,
-        url,
-        type: asTrimmedString(item.type),
-      };
+      const type = asTrimmedString(item.type);
+
+      return type
+        ? {
+            label,
+            url,
+            type,
+          }
+        : {
+            label,
+            url,
+          };
     })
-    .filter((item): item is DownloadItem => Boolean(item));
+    .filter(isNonNull);
 }
 
 function normalizeContactList(raw: unknown): ContactItem[] {
   if (!Array.isArray(raw)) return [];
 
   return raw
-    .map((item) => {
+    .map<ContactItem | null>((item) => {
       if (!isObject(item)) return null;
 
       return {
@@ -316,7 +328,7 @@ function normalizeContactList(raw: unknown): ContactItem[] {
         whatsapp: asTrimmedString(item.whatsapp),
       };
     })
-    .filter((item): item is ContactItem => Boolean(item));
+    .filter(isNonNull);
 }
 
 function normalizeContacts(raw: unknown): ListingData["contacts"] {
@@ -345,10 +357,7 @@ function normalizeData(
   const snapshotSource = isObject(rawData.snapshot) ? rawData.snapshot : {};
 
   return {
-    overview:
-      asTrimmedString(rawData.overview) ??
-      previous?.overview ??
-      null,
+    overview: asTrimmedString(rawData.overview) ?? previous?.overview ?? null,
 
     snapshot: {
       rooms:
@@ -385,45 +394,39 @@ function normalizeData(
         ? normalizeGallery(rawData.gallery)
         : previous?.gallery ?? [],
 
-    rates:
-      isObject(rawData.rates)
-        ? normalizeRates(rawData.rates)
-        : previous?.rates ?? { currency: null, notes: [], rows: [] },
+    rates: isObject(rawData.rates)
+      ? normalizeRates(rawData.rates)
+      : previous?.rates ?? { currency: null, notes: [], rows: [] },
 
-    experiences:
-      isObject(rawData.experiences)
-        ? normalizeExperiences(rawData.experiences)
-        : previous?.experiences ?? { included: [], paid: [] },
+    experiences: isObject(rawData.experiences)
+      ? normalizeExperiences(rawData.experiences)
+      : previous?.experiences ?? { included: [], paid: [] },
 
-    policies:
-      isObject(rawData.policies)
-        ? normalizePolicies(rawData.policies)
-        : previous?.policies ?? {
-            childPolicy: null,
-            honeymoonPolicy: null,
-            cancellation: null,
-            importantNotes: [],
-            tradeNotes: [],
-          },
+    policies: isObject(rawData.policies)
+      ? normalizePolicies(rawData.policies)
+      : previous?.policies ?? {
+          childPolicy: null,
+          honeymoonPolicy: null,
+          cancellation: null,
+          importantNotes: [],
+          tradeNotes: [],
+        },
 
-    downloads:
-      Array.isArray(rawData.downloads)
-        ? normalizeDownloads(rawData.downloads)
-        : previous?.downloads ?? [],
+    downloads: Array.isArray(rawData.downloads)
+      ? normalizeDownloads(rawData.downloads)
+      : previous?.downloads ?? [],
 
-    contacts:
-      isObject(rawData.contacts)
-        ? normalizeContacts(rawData.contacts)
-        : previous?.contacts ?? {
-            reservations: [],
-            sales: [],
-            marketing: [],
-          },
+    contacts: isObject(rawData.contacts)
+      ? normalizeContacts(rawData.contacts)
+      : previous?.contacts ?? {
+          reservations: [],
+          sales: [],
+          marketing: [],
+        },
 
-    offers:
-      Array.isArray(rawData.offers)
-        ? asStringArray(rawData.offers)
-        : previous?.offers ?? [],
+    offers: Array.isArray(rawData.offers)
+      ? asStringArray(rawData.offers)
+      : previous?.offers ?? [],
 
     sustainability:
       asTrimmedString(rawData.sustainability) ??
@@ -521,10 +524,8 @@ export async function POST(req: Request) {
       location,
       class: asTrimmedString(listingInput.class) ?? existing?.class ?? null,
       vibe: asTrimmedString(listingInput.vibe) ?? existing?.vibe ?? null,
-      website:
-        asTrimmedString(listingInput.website) ?? existing?.website ?? null,
-      mapLink:
-        asTrimmedString(listingInput.mapLink) ?? existing?.mapLink ?? null,
+      website: asTrimmedString(listingInput.website) ?? existing?.website ?? null,
+      mapLink: asTrimmedString(listingInput.mapLink) ?? existing?.mapLink ?? null,
       tripadvisorRating: (() => {
         const next = toNumberOrNull(
           listingInput.tripadvisorRating ??
