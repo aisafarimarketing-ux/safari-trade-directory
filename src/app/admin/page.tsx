@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -135,6 +135,17 @@ type ApiListingRecord = {
     theme?: Partial<ThemeState> | null;
   } | null;
   data?: Record<string, unknown> | null;
+};
+
+type UploadApiResponse = {
+  success: boolean;
+  file?: {
+    url: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  };
+  error?: string;
 };
 
 const STORAGE_KEY = "safaritrade-admin-v2";
@@ -366,7 +377,10 @@ function normalizeContactList(value: unknown): ContactItem[] {
         whatsapp: getString(row.whatsapp),
       };
     })
-    .filter((item) => item.name || item.role || item.email || item.phone || item.whatsapp);
+    .filter(
+      (item) =>
+        item.name || item.role || item.email || item.phone || item.whatsapp,
+    );
 
   return rows.length > 0 ? rows : [makeContact()];
 }
@@ -418,7 +432,10 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
     status: listing.status || "draft",
     location,
     class: getString(listing.class) || getString(data.class),
-    vibe: getString(listing.vibe) || getString(data.vibe) || getString(data.overview),
+    vibe:
+      getString(listing.vibe) ||
+      getString(data.vibe) ||
+      getString(data.overview),
     website: getString(listing.website) || getString(data.website),
     mapLink: getString(listing.mapLink) || getString(data.mapLink),
     tripadvisorRating: getNumberString(
@@ -501,7 +518,8 @@ function toApiPayload(listing: ListingEditorState) {
     name: listing.name.trim() || "New Property",
     companySlug: listing.companySlug.trim() || "nyumbani-collection",
     status: listing.status,
-    location: listing.location.trim() || listing.snapshot.location.trim() || null,
+    location:
+      listing.location.trim() || listing.snapshot.location.trim() || null,
     class: listing.class.trim() || null,
     vibe: listing.vibe.trim() || null,
     website: listing.website.trim() || null,
@@ -564,7 +582,14 @@ function toApiPayload(listing: ListingEditorState) {
             phone: item.phone.trim() || null,
             whatsapp: item.whatsapp.trim() || null,
           }))
-          .filter((item) => item.name || item.role || item.email || item.phone || item.whatsapp),
+          .filter(
+            (item) =>
+              item.name ||
+              item.role ||
+              item.email ||
+              item.phone ||
+              item.whatsapp,
+          ),
         sales: listing.contacts.sales
           .map((item) => ({
             name: item.name.trim() || null,
@@ -573,7 +598,14 @@ function toApiPayload(listing: ListingEditorState) {
             phone: item.phone.trim() || null,
             whatsapp: item.whatsapp.trim() || null,
           }))
-          .filter((item) => item.name || item.role || item.email || item.phone || item.whatsapp),
+          .filter(
+            (item) =>
+              item.name ||
+              item.role ||
+              item.email ||
+              item.phone ||
+              item.whatsapp,
+          ),
         marketing: listing.contacts.marketing
           .map((item) => ({
             name: item.name.trim() || null,
@@ -582,7 +614,14 @@ function toApiPayload(listing: ListingEditorState) {
             phone: item.phone.trim() || null,
             whatsapp: item.whatsapp.trim() || null,
           }))
-          .filter((item) => item.name || item.role || item.email || item.phone || item.whatsapp),
+          .filter(
+            (item) =>
+              item.name ||
+              item.role ||
+              item.email ||
+              item.phone ||
+              item.whatsapp,
+          ),
       },
       offers: listing.offersText.trim() ? [listing.offersText.trim()] : [],
       sustainability: listing.sustainability.trim() || null,
@@ -628,7 +667,9 @@ function Field(props: {
 }) {
   return (
     <label className="block">
-      <div className="mb-1 text-xs font-semibold text-white/55">{props.label}</div>
+      <div className="mb-1 text-xs font-semibold text-white/55">
+        {props.label}
+      </div>
       {props.children}
     </label>
   );
@@ -669,20 +710,30 @@ function SmallButton(props: {
 }
 
 export default function AdminPage() {
-  const [listings, setListings] = useState<ListingEditorState[]>([makeEmptyListing()]);
+  const [listings, setListings] = useState<ListingEditorState[]>([
+    makeEmptyListing(),
+  ]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPreview, setIsPreview] = useState(false);
   const [saveState, setSaveState] = useState("Ready");
+  const [uploadState, setUploadState] = useState("Upload ready");
+
+  const downloadFileRef = useRef<HTMLInputElement | null>(null);
+
   const selected = listings[selectedIndex] || listings[0];
 
   useEffect(() => {
     async function load() {
       try {
-        const response = await fetch("/api/admin/listings", { cache: "no-store" });
+        const response = await fetch("/api/admin/listings", {
+          cache: "no-store",
+        });
         if (response.ok) {
           const json = await response.json();
           if (Array.isArray(json.listings) && json.listings.length > 0) {
-            const next = (json.listings as ApiListingRecord[]).map(fromApiListing);
+            const next = (json.listings as ApiListingRecord[]).map(
+              fromApiListing,
+            );
             setListings(next);
             setSelectedIndex(0);
             setSaveState(`Loaded ${next.length} listing(s) from API`);
@@ -760,7 +811,10 @@ export default function AdminPage() {
 
   function removeGalleryGroup(index: number) {
     const next = selected.gallery.filter((_, i) => i !== index);
-    updateListing({ gallery: next.length > 0 ? next : [makeGalleryGroup("Camp Exterior")] });
+    updateListing({
+      gallery:
+        next.length > 0 ? next : [makeGalleryGroup("Camp Exterior")],
+    });
   }
 
   function addRateRow() {
@@ -807,7 +861,9 @@ export default function AdminPage() {
 
   function removeDownload(index: number) {
     const rows = selected.downloads.filter((_, i) => i !== index);
-    updateListing({ downloads: rows.length > 0 ? rows : [makeDownload()] });
+    updateListing({
+      downloads: rows.length > 0 ? rows : [makeDownload()],
+    });
   }
 
   function addContact(group: "reservations" | "sales" | "marketing") {
@@ -834,7 +890,10 @@ export default function AdminPage() {
     });
   }
 
-  function removeContact(group: "reservations" | "sales" | "marketing", index: number) {
+  function removeContact(
+    group: "reservations" | "sales" | "marketing",
+    index: number,
+  ) {
     const rows = selected.contacts[group].filter((_, i) => i !== index);
     updateListing({
       contacts: {
@@ -844,13 +903,22 @@ export default function AdminPage() {
     });
   }
 
-  async function readImageAsDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+  async function uploadFile(file: File): Promise<UploadApiResponse["file"]> {
+    const form = new FormData();
+    form.append("file", file);
+
+    const response = await fetch("/api/admin/upload", {
+      method: "POST",
+      body: form,
     });
+
+    const json = (await response.json()) as UploadApiResponse;
+
+    if (!response.ok || !json.success || !json.file) {
+      throw new Error(json.error || "Upload failed");
+    }
+
+    return json.file;
   }
 
   async function handleSingleImageUpload(
@@ -859,8 +927,17 @@ export default function AdminPage() {
   ) {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
-    const value = await readImageAsDataUrl(file);
-    updateListing({ [field]: value } as Partial<ListingEditorState>);
+
+    try {
+      setUploadState("Uploading image...");
+      const uploaded = await uploadFile(file);
+      updateListing({ [field]: uploaded.url } as Partial<ListingEditorState>);
+      setUploadState("Image uploaded");
+    } catch (error) {
+      setUploadState(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      e.target.value = "";
+    }
   }
 
   async function handleGalleryUpload(
@@ -870,16 +947,64 @@ export default function AdminPage() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const images: string[] = [];
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) continue;
-      images.push(await readImageAsDataUrl(file));
-    }
+    try {
+      setUploadState("Uploading gallery images...");
+      const uploadedUrls: string[] = [];
 
-    const target = selected.gallery[groupIndex];
-    updateGalleryGroup(groupIndex, {
-      images: [...target.images, ...images],
-    });
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        const uploaded = await uploadFile(file);
+        uploadedUrls.push(uploaded.url);
+      }
+
+      const target = selected.gallery[groupIndex];
+      updateGalleryGroup(groupIndex, {
+        images: [...target.images, ...uploadedUrls],
+      });
+
+      setUploadState(
+        uploadedUrls.length > 0
+          ? `${uploadedUrls.length} image(s) uploaded`
+          : "No valid image files selected",
+      );
+    } catch (error) {
+      setUploadState(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function handleDownloadableUpload(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    try {
+      setUploadState("Uploading files...");
+
+      const uploadedItems: DownloadItem[] = [];
+
+      for (const file of files) {
+        const uploaded = await uploadFile(file);
+        uploadedItems.push({
+          id: uid(),
+          label: file.name,
+          url: uploaded.url,
+          type: file.type || uploaded.mimeType || "file",
+        });
+      }
+
+      updateListing({
+        downloads: [...selected.downloads, ...uploadedItems],
+      });
+
+      setUploadState(`${uploadedItems.length} file(s) uploaded`);
+    } catch (error) {
+      setUploadState(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      e.target.value = "";
+    }
   }
 
   async function saveActiveListing() {
@@ -919,7 +1044,9 @@ export default function AdminPage() {
   const previewRateRows = selected.rates.rows.filter(
     (row) => row.season || row.dates || row.rackPPPN,
   );
-  const previewDownloads = selected.downloads.filter((item) => item.label || item.url);
+  const previewDownloads = selected.downloads.filter(
+    (item) => item.label || item.url,
+  );
 
   return (
     <div
@@ -968,7 +1095,8 @@ export default function AdminPage() {
             </a>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-white/40">{uploadState}</div>
             <div className="text-xs text-white/55">{saveState}</div>
             <button
               onClick={saveActiveListing}
@@ -1072,14 +1200,18 @@ export default function AdminPage() {
                 <Field label="Slug">
                   <TextInput
                     value={selected.slug}
-                    onChange={(e) => updateListing({ slug: slugify(e.target.value) })}
+                    onChange={(e) =>
+                      updateListing({ slug: slugify(e.target.value) })
+                    }
                   />
                 </Field>
 
                 <Field label="Company slug">
                   <TextInput
                     value={selected.companySlug}
-                    onChange={(e) => updateListing({ companySlug: slugify(e.target.value) })}
+                    onChange={(e) =>
+                      updateListing({ companySlug: slugify(e.target.value) })
+                    }
                   />
                 </Field>
 
@@ -1100,7 +1232,9 @@ export default function AdminPage() {
                 <Field label="Location">
                   <TextInput
                     value={selected.location}
-                    onChange={(e) => updateListing({ location: e.target.value })}
+                    onChange={(e) =>
+                      updateListing({ location: e.target.value })
+                    }
                   />
                 </Field>
 
@@ -1114,14 +1248,18 @@ export default function AdminPage() {
                 <Field label="Website">
                   <TextInput
                     value={selected.website}
-                    onChange={(e) => updateListing({ website: e.target.value })}
+                    onChange={(e) =>
+                      updateListing({ website: e.target.value })
+                    }
                   />
                 </Field>
 
                 <Field label="Map link">
                   <TextInput
                     value={selected.mapLink}
-                    onChange={(e) => updateListing({ mapLink: e.target.value })}
+                    onChange={(e) =>
+                      updateListing({ mapLink: e.target.value })
+                    }
                   />
                 </Field>
 
@@ -1176,7 +1314,9 @@ export default function AdminPage() {
                   <div className="flex gap-2">
                     <TextInput
                       value={selected.logoImage}
-                      onChange={(e) => updateListing({ logoImage: e.target.value })}
+                      onChange={(e) =>
+                        updateListing({ logoImage: e.target.value })
+                      }
                     />
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
                       <Upload size={14} />
@@ -1184,7 +1324,9 @@ export default function AdminPage() {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => handleSingleImageUpload(e, "logoImage")}
+                        onChange={(e) =>
+                          handleSingleImageUpload(e, "logoImage")
+                        }
                       />
                     </label>
                   </div>
@@ -1194,7 +1336,9 @@ export default function AdminPage() {
                   <div className="flex gap-2">
                     <TextInput
                       value={selected.coverImage}
-                      onChange={(e) => updateListing({ coverImage: e.target.value })}
+                      onChange={(e) =>
+                        updateListing({ coverImage: e.target.value })
+                      }
                     />
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
                       <Upload size={14} />
@@ -1202,7 +1346,9 @@ export default function AdminPage() {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => handleSingleImageUpload(e, "coverImage")}
+                        onChange={(e) =>
+                          handleSingleImageUpload(e, "coverImage")
+                        }
                       />
                     </label>
                   </div>
@@ -1222,35 +1368,45 @@ export default function AdminPage() {
                 <Field label="Location">
                   <TextInput
                     value={selected.snapshot.location}
-                    onChange={(e) => updateSnapshot("location", e.target.value)}
+                    onChange={(e) =>
+                      updateSnapshot("location", e.target.value)
+                    }
                   />
                 </Field>
 
                 <Field label="Best for">
                   <TextInput
                     value={selected.snapshot.bestFor}
-                    onChange={(e) => updateSnapshot("bestFor", e.target.value)}
+                    onChange={(e) =>
+                      updateSnapshot("bestFor", e.target.value)
+                    }
                   />
                 </Field>
 
                 <Field label="Setting">
                   <TextInput
                     value={selected.snapshot.setting}
-                    onChange={(e) => updateSnapshot("setting", e.target.value)}
+                    onChange={(e) =>
+                      updateSnapshot("setting", e.target.value)
+                    }
                   />
                 </Field>
 
                 <Field label="Style">
                   <TextInput
                     value={selected.snapshot.style}
-                    onChange={(e) => updateSnapshot("style", e.target.value)}
+                    onChange={(e) =>
+                      updateSnapshot("style", e.target.value)
+                    }
                   />
                 </Field>
 
                 <Field label="Access">
                   <TextInput
                     value={selected.snapshot.access}
-                    onChange={(e) => updateSnapshot("access", e.target.value)}
+                    onChange={(e) =>
+                      updateSnapshot("access", e.target.value)
+                    }
                   />
                 </Field>
               </div>
@@ -1272,7 +1428,9 @@ export default function AdminPage() {
                       <TextInput
                         value={group.label}
                         onChange={(e) =>
-                          updateGalleryGroup(groupIndex, { label: e.target.value })
+                          updateGalleryGroup(groupIndex, {
+                            label: e.target.value,
+                          })
                         }
                       />
                       <SmallButton onClick={() => removeGalleryGroup(groupIndex)}>
@@ -1493,10 +1651,25 @@ export default function AdminPage() {
             </Section>
 
             <Section title="Downloads">
-              <SmallButton onClick={addDownload}>
-                <Plus size={14} />
-                Add download
-              </SmallButton>
+              <div className="flex items-center gap-2">
+                <SmallButton onClick={addDownload}>
+                  <Plus size={14} />
+                  Add download
+                </SmallButton>
+
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
+                  <Upload size={14} />
+                  Upload files
+                  <input
+                    ref={downloadFileRef}
+                    type="file"
+                    multiple
+                    accept="application/pdf,image/*,.doc,.docx"
+                    className="hidden"
+                    onChange={handleDownloadableUpload}
+                  />
+                </label>
+              </div>
 
               <div className="space-y-3">
                 {selected.downloads.map((item, index) => (
@@ -1534,68 +1707,83 @@ export default function AdminPage() {
             </Section>
 
             <Section title="Contacts">
-              {(["reservations", "sales", "marketing"] as const).map((group) => (
-                <div key={group} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold capitalize text-white">
-                      {group}
-                    </h3>
-                    <SmallButton onClick={() => addContact(group)}>
-                      <Plus size={14} />
-                      Add
-                    </SmallButton>
-                  </div>
+              {(["reservations", "sales", "marketing"] as const).map(
+                (group) => (
+                  <div
+                    key={group}
+                    className="rounded-xl border border-white/10 bg-black/20 p-3"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold capitalize text-white">
+                        {group}
+                      </h3>
+                      <SmallButton onClick={() => addContact(group)}>
+                        <Plus size={14} />
+                        Add
+                      </SmallButton>
+                    </div>
 
-                  <div className="space-y-3">
-                    {selected.contacts[group].map((item, index) => (
-                      <div
-                        key={item.id}
-                        className="grid gap-3 rounded-xl border border-white/10 p-3 md:grid-cols-2"
-                      >
-                        <TextInput
-                          value={item.name}
-                          onChange={(e) =>
-                            updateContact(group, index, { name: e.target.value })
-                          }
-                          placeholder="Name"
-                        />
-                        <TextInput
-                          value={item.role}
-                          onChange={(e) =>
-                            updateContact(group, index, { role: e.target.value })
-                          }
-                          placeholder="Role"
-                        />
-                        <TextInput
-                          value={item.email}
-                          onChange={(e) =>
-                            updateContact(group, index, { email: e.target.value })
-                          }
-                          placeholder="Email"
-                        />
-                        <TextInput
-                          value={item.phone}
-                          onChange={(e) =>
-                            updateContact(group, index, { phone: e.target.value })
-                          }
-                          placeholder="Phone"
-                        />
-                        <TextInput
-                          value={item.whatsapp}
-                          onChange={(e) =>
-                            updateContact(group, index, { whatsapp: e.target.value })
-                          }
-                          placeholder="WhatsApp"
-                        />
-                        <SmallButton onClick={() => removeContact(group, index)}>
-                          <Trash2 size={14} />
-                          Remove
-                        </SmallButton>
-                      </div>
-                    ))}
+                    <div className="space-y-3">
+                      {selected.contacts[group].map((item, index) => (
+                        <div
+                          key={item.id}
+                          className="grid gap-3 rounded-xl border border-white/10 p-3 md:grid-cols-2"
+                        >
+                          <TextInput
+                            value={item.name}
+                            onChange={(e) =>
+                              updateContact(group, index, {
+                                name: e.target.value,
+                              })
+                            }
+                            placeholder="Name"
+                          />
+                          <TextInput
+                            value={item.role}
+                            onChange={(e) =>
+                              updateContact(group, index, {
+                                role: e.target.value,
+                              })
+                            }
+                            placeholder="Role"
+                          />
+                          <TextInput
+                            value={item.email}
+                            onChange={(e) =>
+                              updateContact(group, index, {
+                                email: e.target.value,
+                              })
+                            }
+                            placeholder="Email"
+                          />
+                          <TextInput
+                            value={item.phone}
+                            onChange={(e) =>
+                              updateContact(group, index, {
+                                phone: e.target.value,
+                              })
+                            }
+                            placeholder="Phone"
+                          />
+                          <TextInput
+                            value={item.whatsapp}
+                            onChange={(e) =>
+                              updateContact(group, index, {
+                                whatsapp: e.target.value,
+                              })
+                            }
+                            placeholder="WhatsApp"
+                          />
+                          <SmallButton onClick={() => removeContact(group, index)}>
+                            <Trash2 size={14} />
+                            Remove
+                          </SmallButton>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </Section>
 
             <Section title="Commercial & extras">
@@ -1604,7 +1792,9 @@ export default function AdminPage() {
                   <TextArea
                     rows={4}
                     value={selected.offersText}
-                    onChange={(e) => updateListing({ offersText: e.target.value })}
+                    onChange={(e) =>
+                      updateListing({ offersText: e.target.value })
+                    }
                   />
                 </Field>
 
@@ -1648,7 +1838,9 @@ export default function AdminPage() {
                 <Field label="Tripadvisor logo URL">
                   <TextInput
                     value={selected.taLogoUrl}
-                    onChange={(e) => updateListing({ taLogoUrl: e.target.value })}
+                    onChange={(e) =>
+                      updateListing({ taLogoUrl: e.target.value })
+                    }
                   />
                 </Field>
 
@@ -1848,7 +2040,10 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="grid gap-8 border-t px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10" style={{ borderColor: previewTheme.borderColor }}>
+            <div
+              className="grid gap-8 border-t px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10"
+              style={{ borderColor: previewTheme.borderColor }}
+            >
               <div className="space-y-8">
                 {selected.gallery.some((group) => group.images.length > 0) ? (
                   <div
@@ -1908,7 +2103,10 @@ export default function AdminPage() {
                         backgroundColor: previewTheme.blockBg,
                       }}
                     >
-                      <div className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] opacity-60" style={{ borderColor: previewTheme.borderColor }}>
+                      <div
+                        className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] opacity-60"
+                        style={{ borderColor: previewTheme.borderColor }}
+                      >
                         <span>Season</span>
                         <span>Dates</span>
                         <span>Rack PPPN</span>
@@ -1920,7 +2118,9 @@ export default function AdminPage() {
                           className="grid grid-cols-3 px-4 py-3 text-sm"
                           style={{
                             borderTop:
-                              index === 0 ? "none" : `1px solid ${previewTheme.borderColor}`,
+                              index === 0
+                                ? "none"
+                                : `1px solid ${previewTheme.borderColor}`,
                           }}
                         >
                           <span>{row.season || "—"}</span>
@@ -1992,10 +2192,14 @@ export default function AdminPage() {
                             }}
                           >
                             {item.name ? (
-                              <p className="text-sm font-semibold">{item.name}</p>
+                              <p className="text-sm font-semibold">
+                                {item.name}
+                              </p>
                             ) : null}
                             {item.role ? (
-                              <p className="mt-1 text-sm opacity-75">{item.role}</p>
+                              <p className="mt-1 text-sm opacity-75">
+                                {item.role}
+                              </p>
                             ) : null}
                             {item.email ? (
                               <p className="mt-2 text-sm">{item.email}</p>
