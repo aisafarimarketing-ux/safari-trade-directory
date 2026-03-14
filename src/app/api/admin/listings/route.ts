@@ -77,6 +77,8 @@ function slugify(input: string) {
   return input
     .toLowerCase()
     .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
@@ -201,11 +203,13 @@ export async function POST(req: Request) {
         typeof listingInput.companySlug === "string" &&
         listingInput.companySlug.trim()
           ? listingInput.companySlug.trim()
-          : existing?.companySlug ?? null,
+          : existing?.companySlug ?? "nyumbani-collection",
       status:
-        listingInput.status === "published" || listingInput.status === "archived"
+        listingInput.status === "published" ||
+        listingInput.status === "archived" ||
+        listingInput.status === "draft"
           ? listingInput.status
-          : existing?.status ?? "draft",
+          : existing?.status ?? "published",
       locationLabel:
         typeof listingInput.locationLabel === "string" &&
         listingInput.locationLabel.trim()
