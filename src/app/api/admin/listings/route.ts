@@ -185,9 +185,25 @@ export async function POST(req: Request) {
 
     const slug = slugInput || slugify(name);
 
+    const companySlug =
+      typeof listingInput.companySlug === "string" &&
+      listingInput.companySlug.trim()
+        ? listingInput.companySlug.trim()
+        : "";
+
     if (!slug) {
       return NextResponse.json(
         { error: "Unable to generate slug." },
+        { status: 400 },
+      );
+    }
+
+    if (companySlug && slug === companySlug) {
+      return NextResponse.json(
+        {
+          error:
+            "Property slug cannot be the same as the company slug. Use a property name like 'nyumbani-serengeti'.",
+        },
         { status: 400 },
       );
     }
@@ -199,11 +215,7 @@ export async function POST(req: Request) {
       id: existing?.id ?? crypto.randomUUID(),
       slug,
       name,
-      companySlug:
-        typeof listingInput.companySlug === "string" &&
-        listingInput.companySlug.trim()
-          ? listingInput.companySlug.trim()
-          : existing?.companySlug ?? "nyumbani-collection",
+      companySlug: companySlug || existing?.companySlug || "nyumbani-collection",
       status:
         listingInput.status === "published" ||
         listingInput.status === "archived" ||
