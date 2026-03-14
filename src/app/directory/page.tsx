@@ -41,17 +41,10 @@ function toNumber(value: unknown): number | null {
 }
 
 function isPropertyListing(listing: ApiListingRecord): boolean {
-  const data = listing.data || {};
-
-  const effectiveName = (listing.name || data.name || "").trim().toLowerCase();
-  const companySlug = (listing.companySlug || "").trim().toLowerCase();
   const slug = (listing.slug || "").trim().toLowerCase();
 
   if (listing.status !== "published") return false;
   if (!slug) return false;
-
-  if (companySlug && slug === companySlug) return false;
-  if (companySlug && effectiveName === companySlug.replace(/-/g, " ")) return false;
 
   return true;
 }
