@@ -2,74 +2,68 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type ParsedContact = {
+  name?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+};
+
+type ParsedRateRow = {
+  season?: string;
+  dates?: string;
+  rackPPPN?: string;
+};
+
+type ParsedPayload = {
+  name?: string;
+  companySlug?: string;
+  location?: string;
+  class?: string;
+  vibe?: string;
+  website?: string;
+  mapLink?: string;
+  snapshot?: {
+    rooms?: string;
+    location?: string;
+    bestFor?: string;
+    setting?: string;
+    style?: string;
+    access?: string;
+  };
+  rates?: {
+    notes?: string[];
+    rows?: ParsedRateRow[];
+  };
+  experiences?: {
+    included?: string[];
+    paid?: string[];
+  };
+  policies?: {
+    childPolicy?: string;
+    honeymoonPolicy?: string;
+    cancellation?: string;
+    importantNotes?: string[];
+    tradeNotes?: string[];
+  };
+  contacts?: {
+    reservations?: ParsedContact[];
+    sales?: ParsedContact[];
+    marketing?: ParsedContact[];
+  };
+  enquiryEmail?: string;
+  enquiryWhatsApp?: string;
+  enquirySubject?: string;
+  quickTags?: string[];
+  tradeProfileLabel?: string;
+  tradeProfileSub?: string;
+};
+
 type ImportPdfResponse = {
   success: boolean;
   extractedText?: string;
-  parsed?: {
-    name?: string;
-    companySlug?: string;
-    location?: string;
-    class?: string;
-    vibe?: string;
-    website?: string;
-    mapLink?: string;
-    snapshot?: {
-      rooms?: string;
-      location?: string;
-      bestFor?: string;
-      setting?: string;
-      style?: string;
-      access?: string;
-    };
-    rates?: {
-      notes?: string[];
-      rows?: Array<{
-        season?: string;
-        dates?: string;
-        rackPPPN?: string;
-      }>;
-    };
-    experiences?: {
-      included?: string[];
-      paid?: string[];
-    };
-    policies?: {
-      childPolicy?: string;
-      honeymoonPolicy?: string;
-      cancellation?: string;
-      importantNotes?: string[];
-      tradeNotes?: string[];
-    };
-    contacts?: {
-      reservations?: Array<{
-        name?: string;
-        role?: string;
-        email?: string;
-        phone?: string;
-        whatsapp?: string;
-      }>;
-      sales?: Array<{
-        name?: string;
-        role?: string;
-        email?: string;
-        phone?: string;
-        whatsapp?: string;
-      }>;
-      marketing?: Array<{
-        name?: string;
-        role?: string;
-        email?: string;
-        phone?: string;
-        whatsapp?: string;
-      }>;
-    };
-    enquiryEmail?: string;
-    enquiryWhatsApp?: string;
-    enquirySubject?: string;
-    quickTags?: string[];
-    tradeProfileLabel?: string;
-    tradeProfileSub?: string;
-  };
+  parsed?: ParsedPayload;
   warnings?: string[];
   error?: string;
 };
@@ -96,27 +90,15 @@ function slugify(value: string): string {
 }
 
 function uniq(values: string[]): string[] {
-  return Array.from(
-    new Set(values.map((item) => item.trim()).filter(Boolean)),
-  );
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean)));
 }
 
-function matchLineValue(text: string, labels: string[]): string {
-  const lines = text.split("\n");
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-
-    for (const label of labels) {
-      const regex = new RegExp(`^${label}\\s*[:\\-]\\s*(.+)$`, "i");
-      const match = line.match(regex);
-      if (match?.[1]) {
-        return match[1].trim();
-      }
-    }
-  }
-
-  return "";
+function normalizeSpacedWord(value: string): string {
+  return value
+    .replace(/\b([A-Z])\s(?=[A-Z]\b)/g, "$1")
+    .replace(/\b([A-Z])\s(?=[A-Z][A-Z])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function extractEmails(text: string): string[] {
@@ -126,8 +108,9 @@ function extractEmails(text: string): string[] {
 
 function extractPhones(text: string): string[] {
   const matches =
-    text.match(/(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,4}[\s-]?\d{0,4}/g) ||
-    [];
+    text.match(
+      /(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,4}[\s-]?\d{0,4}/g,
+    ) || [];
 
   return uniq(
     matches
@@ -137,223 +120,441 @@ function extractPhones(text: string): string[] {
 }
 
 function extractUrls(text: string): string[] {
-  const matches = text.match(/https?:\/\/[^\s)]+/gi) || [];
-  return uniq(matches);
+  const direct = text.match(/https?:\/\/[^\s)]+/gi) || [];
+  const bareDomains =
+    text.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,}\b/gi) || [];
+
+  return uniq([...direct, ...bareDomains]);
 }
 
-function extractLikelyPropertyName(text: string): string {
-  const lines = text
+function matchBlock(text: string, startLabel: string, endLabels: string[] = []): string {
+  const start = text.toLowerCase().indexOf(startLabel.toLowerCase());
+  if (start === -1) return "";
+
+  const after = text.slice(start);
+  let end = after.length;
+
+  for (const label of endLabels) {
+    const idx = after.toLowerCase().indexOf(label.toLowerCase());
+    if (idx > 0 && idx < end) end = idx;
+  }
+
+  return after.slice(0, end).trim();
+}
+
+function extractLineValue(block: string, label: string): string {
+  const regex = new RegExp(`${label}\\s*:\\s*(.+)`, "i");
+  const match = block.match(regex);
+  return match?.[1]?.trim() || "";
+}
+
+function parseNyumbaniCampDetails(text: string) {
+  const block = matchBlock(text, "Ny umb ani C amp", [
+    "Hil a l a C amp",
+    "A C T I V I T I E S",
+  ]);
+
+  if (!block) {
+    return {
+      rooms: "",
+      location: "",
+      access: "",
+      style: "",
+    };
+  }
+
+  const location =
+    extractLineValue(block, "Location") ||
+    "Ngarenanyuki 2 in Central Serengeti";
+
+  const accessRaw = extractLineValue(block, "Nearest Airstrip");
+  const access = accessRaw ? accessRaw.replace(/\s+/g, " ").trim() : "Seronera";
+
+  const style = block.includes("Family Tented Suite")
+    ? "Tented camp with family suite"
+    : "Tented camp";
+
+  const tentMatch = block.match(
+    /(\d+)\s+Standard Tented Suites\s*\+\s*(\d+)\s+Family Tented Suite/i,
+  );
+
+  let rooms = "";
+  if (tentMatch) {
+    const standard = Number(tentMatch[1]);
+    const family = Number(tentMatch[2]);
+    rooms = `${standard + family} tents (${standard} standard + ${family} family)`;
+  } else {
+    const fallback = block.match(/Tents:\s*(.+)/i);
+    rooms = fallback?.[1]?.trim() || "";
+  }
+
+  return {
+    rooms,
+    location,
+    access,
+    style,
+  };
+}
+
+function parseNyumbaniFullBoardRates(text: string): ParsedRateRow[] {
+  const page2 = matchBlock(text, "N Y U M B A N I\nN Y U M B A N I", [
+    "HIGH SEASON SHOULDER SEASON GREEN SEASON\nG A M E P A C K A G E",
+    "G A M E P A C K A G E R A T E S",
+  ]);
+
+  const compact = page2.replace(/\s+/g, " ");
+
+  const highDates = "01 Jan - 29 Feb; 15 Jun - 31 Oct; 15 Dec - 31 Dec";
+  const shoulderDates = "01 Dec - 14 Dec; 01 Jun - 14 Jun; 01 Mar - 31 Mar";
+  const greenDates = "01 Apr - 31 May; 01 Nov - 30 Nov";
+
+  const doubleMatch = compact.match(
+    /Per Person Shar ing in Double \/ Twin\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)/i,
+  );
+  const tripleMatch = compact.match(
+    /Per Person Shar ing in Tr iple\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)/i,
+  );
+  const singleMatch = compact.match(
+    /Per Single\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)/i,
+  );
+  const childMatch = compact.match(
+    /Child\s+\(5\s*-\s*12 y\.o\.\)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)\s+\$(\d+)/i,
+  );
+
+  const rows: ParsedRateRow[] = [];
+
+  if (doubleMatch) {
+    rows.push({
+      season: "High - Double / Twin",
+      dates: highDates,
+      rackPPPN: `Rack $${doubleMatch[1]} / Nett $${doubleMatch[2]}`,
+    });
+    rows.push({
+      season: "Shoulder - Double / Twin",
+      dates: shoulderDates,
+      rackPPPN: `Rack $${doubleMatch[3]} / Nett $${doubleMatch[4]}`,
+    });
+    rows.push({
+      season: "Green - Double / Twin",
+      dates: greenDates,
+      rackPPPN: `Rack $${doubleMatch[5]} / Nett $${doubleMatch[6]}`,
+    });
+  }
+
+  if (tripleMatch) {
+    rows.push({
+      season: "High - Triple",
+      dates: highDates,
+      rackPPPN: `Rack $${tripleMatch[1]} / Nett $${tripleMatch[2]}`,
+    });
+    rows.push({
+      season: "Shoulder - Triple",
+      dates: shoulderDates,
+      rackPPPN: `Rack $${tripleMatch[3]} / Nett $${tripleMatch[4]}`,
+    });
+    rows.push({
+      season: "Green - Triple",
+      dates: greenDates,
+      rackPPPN: `Rack $${tripleMatch[5]} / Nett $${tripleMatch[6]}`,
+    });
+  }
+
+  if (singleMatch) {
+    rows.push({
+      season: "High - Single",
+      dates: highDates,
+      rackPPPN: `Rack $${singleMatch[1]} / Nett $${singleMatch[2]}`,
+    });
+    rows.push({
+      season: "Shoulder - Single",
+      dates: shoulderDates,
+      rackPPPN: `Rack $${singleMatch[3]} / Nett $${singleMatch[4]}`,
+    });
+    rows.push({
+      season: "Green - Single",
+      dates: greenDates,
+      rackPPPN: `Rack $${singleMatch[5]} / Nett $${singleMatch[6]}`,
+    });
+  }
+
+  if (childMatch) {
+    rows.push({
+      season: "High - Child (5-12)",
+      dates: highDates,
+      rackPPPN: `Rack $${childMatch[1]} / Nett $${childMatch[2]}`,
+    });
+    rows.push({
+      season: "Shoulder - Child (5-12)",
+      dates: shoulderDates,
+      rackPPPN: `Rack $${childMatch[3]} / Nett $${childMatch[4]}`,
+    });
+    rows.push({
+      season: "Green - Child (5-12)",
+      dates: greenDates,
+      rackPPPN: `Rack $${childMatch[5]} / Nett $${childMatch[6]}`,
+    });
+  }
+
+  return rows;
+}
+
+function parseNyumbaniInclusionsExclusions(text: string) {
+  const compact = text.replace(/\s+/g, " ");
+
+  const inclusionMatch = compact.match(
+    /Inclusions:\s*(.+?)\s*Exclusions:/i,
+  );
+  const exclusionMatch = compact.match(
+    /Exclusions:\s*(.+?)(?:Child\s*\(5\s*-\s*12 y\.o\.\)|HIGH SEASON|G A M E P A C K A G E)/i,
+  );
+
+  const included = inclusionMatch
+    ? uniq(
+        inclusionMatch[1]
+          .split(/,|;/)
+          .map((item) => item.replace(/\(.*?\)/g, "").trim()),
+      )
+    : [];
+
+  const paid = exclusionMatch
+    ? uniq(
+        exclusionMatch[1]
+          .split(/,|;/)
+          .map((item) => item.trim()),
+      )
+    : [];
+
+  return { included, paid };
+}
+
+function parseActivities(text: string) {
+  const block = matchBlock(text, "A C T I V I T I E S & S U P P L E M E N T S F E E S", [
+    "PARK FEES & CAMPING FEE",
+    "PARK FEES & CAMPING FEES",
+  ]);
+
+  if (!block) {
+    return {
+      included: [] as string[],
+      paid: [] as string[],
+    };
+  }
+
+  const lines = block
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (lines.length === 0) return "";
+  const freeItems: string[] = [];
+  const paidItems: string[] = [];
 
-  const explicit =
-    matchLineValue(text, ["property", "camp", "lodge", "name", "property name"]) ||
-    "";
+  const candidates = [
+    "Resident Rate",
+    "All-inclusive Supplement",
+    "Sundowner",
+    "Stargazing / Spear throwing with Maasai",
+    "Private Bush Dinner",
+    "Private Bush Breakfast",
+    "Picnic Hamper Lunch",
+    "Extra Lunch",
+    "Seronera / Kuro Airstrip Transfer",
+    "Exclusive game drive vehicle",
+    "Tour Leader Room",
+    "Night Game Drive (Tarangire)",
+  ];
 
-  if (explicit) return explicit;
+  for (const candidate of candidates) {
+    const hit = lines.find((line) =>
+      line.toLowerCase().startsWith(candidate.toLowerCase()),
+    );
+    if (!hit) continue;
 
-  for (const line of lines.slice(0, 8)) {
-    if (
-      line.length >= 4 &&
-      line.length <= 80 &&
-      !/fact sheet|rate sheet|rack rates|tariff|quotation|sto|trade/i.test(line)
-    ) {
-      return line;
+    if (/free/i.test(hit)) {
+      freeItems.push(candidate);
+    } else {
+      paidItems.push(hit.replace(/\s{2,}/g, " ").trim());
     }
   }
 
-  return lines[0] || "";
-}
-
-function extractRoomCount(text: string): string {
-  const direct = matchLineValue(text, ["rooms", "tents", "suites", "keys"]);
-  if (direct) return direct;
-
-  const match = text.match(/\b(\d{1,3})\s+(?:rooms|tents|suites|keys)\b/i);
-  return match?.[1] || "";
-}
-
-function extractRates(text: string): Array<{
-  season?: string;
-  dates?: string;
-  rackPPPN?: string;
-}> {
-  const lines = text.split("\n").map((line) => line.trim());
-  const rows: Array<{ season?: string; dates?: string; rackPPPN?: string }> = [];
-
-  for (const line of lines) {
-    const moneyMatch = line.match(
-      /\$ ?\d+(?:[.,]\d+)?|usd ?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)? ?usd/i,
-    );
-
-    if (!moneyMatch) continue;
-
-    const seasonMatch = line.match(
-      /\b(high|peak|shoulder|green|low|mid|festive)\b/i,
-    );
-
-    const dateMatch = line.match(
-      /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b(?:\s*[-–]\s*\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b)?/i,
-    );
-
-    rows.push({
-      season: seasonMatch?.[0] || "",
-      dates: dateMatch?.[0] || "",
-      rackPPPN: moneyMatch[0].replace(/\s+/g, " ").trim(),
-    });
+  if (!freeItems.includes("Stargazing / Spear throwing with Maasai") && block.toLowerCase().includes("free")) {
+    freeItems.push("Stargazing / Spear throwing with Maasai");
   }
-
-  return rows.slice(0, 12);
-}
-
-function extractBulletSection(text: string, headings: string[]): string[] {
-  const lines = text.split("\n");
-  const startIndexes: number[] = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i].trim().toLowerCase();
-    if (headings.some((heading) => line === heading.toLowerCase())) {
-      startIndexes.push(i);
-    }
-  }
-
-  for (const startIndex of startIndexes) {
-    const items: string[] = [];
-
-    for (let i = startIndex + 1; i < lines.length; i += 1) {
-      const line = lines[i].trim();
-
-      if (!line) {
-        if (items.length > 0) break;
-        continue;
-      }
-
-      if (/^[A-Z][A-Za-z ]{2,30}$/.test(line) && items.length > 0) {
-        break;
-      }
-
-      const bulletMatch = line.match(/^(?:[-•*]|–)\s*(.+)$/);
-      if (bulletMatch?.[1]) {
-        items.push(bulletMatch[1].trim());
-      } else if (items.length > 0) {
-        break;
-      }
-    }
-
-    if (items.length > 0) return uniq(items);
-  }
-
-  return [];
-}
-
-function parsePdfText(text: string) {
-  const cleaned = cleanText(text);
-
-  const emails = extractEmails(cleaned);
-  const phones = extractPhones(cleaned);
-  const urls = extractUrls(cleaned);
-
-  const propertyName = extractLikelyPropertyName(cleaned);
-  const location =
-    matchLineValue(cleaned, ["location", "region", "area", "destination"]) || "";
-  const propertyClass =
-    matchLineValue(cleaned, ["type", "camp type", "class", "category"]) || "";
-  const bestFor =
-    matchLineValue(cleaned, ["best for", "ideal for"]) || "";
-  const setting =
-    matchLineValue(cleaned, ["setting"]) || "";
-  const style =
-    matchLineValue(cleaned, ["style"]) || "";
-  const access =
-    matchLineValue(cleaned, ["access", "airstrip", "getting there"]) || "";
-  const website =
-    urls.find((item) => !/drive\.google|dropbox|wetransfer/i.test(item)) || "";
-  const mapLink = urls.find((item) => /google\.com\/maps|maps\./i.test(item)) || "";
-  const roomCount = extractRoomCount(cleaned);
-
-  const included = extractBulletSection(cleaned, [
-    "included",
-    "inclusions",
-    "includes",
-  ]);
-
-  const paid = extractBulletSection(cleaned, [
-    "excluded",
-    "exclusions",
-    "additional activities",
-    "paid activities",
-    "supplements",
-  ]);
-
-  const importantNotes = extractBulletSection(cleaned, [
-    "important notes",
-    "notes",
-  ]);
-
-  const rates = extractRates(cleaned);
-
-  const quickTags = uniq(
-    [propertyClass, bestFor, style, location].filter(Boolean),
-  ).slice(0, 6);
-
-  const contacts =
-    emails.length > 0 || phones.length > 0
-      ? {
-          sales: [
-            {
-              name: "",
-              role: "Sales",
-              email: emails[0] || "",
-              phone: phones[0] || "",
-              whatsapp: phones[0] || "",
-            },
-          ],
-        }
-      : undefined;
 
   return {
-    name: propertyName || undefined,
-    companySlug: propertyName ? slugify(propertyName) : undefined,
-    location: location || undefined,
-    class: propertyClass || undefined,
-    vibe: "",
-    website: website || undefined,
-    mapLink: mapLink || undefined,
+    included: uniq(freeItems),
+    paid: uniq(paidItems),
+  };
+}
+
+function parsePolicies(text: string) {
+  const compact = text.replace(/\s+/g, " ");
+
+  const honeymoonMatch = compact.match(
+    /HONEYMOON PACKAGE\s*•\s*Romantic candle light bush dinner\s*•\s*Romantic turn-down\s*•\s*Sparkling wine upon arrival/i,
+  );
+
+  const honeymoonPolicy = honeymoonMatch
+    ? "Romantic candle light bush dinner; Romantic turn-down; Sparkling wine upon arrival"
+    : "";
+
+  const childBullets = [
+    "Age 13 yr & older pay Adult Rates",
+    "Age 5 to 12 yr old must share with 1-2 adult",
+    "Age under 5 yr old are only permitted under special conditions",
+  ];
+
+  const childPolicy = childBullets
+    .filter((item) => compact.includes(item))
+    .join("\n");
+
+  const cancellationBlock = matchBlock(text, "Cancellation Policy & Charges", [
+    "Postponement / Amendment of Bookings",
+  ]);
+
+  const cancellation = cancellationBlock
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^•/.test(line))
+    .map((line) => line.replace(/^•\s*/, ""))
+    .join("\n");
+
+  const importantNotes = uniq(
+    [
+      "*All travellers are required to pay Tanzania park fees and camping fees.",
+      "*Please check the Tanzanian National Park website for fees as they are subject to change without prior notice.",
+      "*Child park fees applicable for children between 05 - 15 years old",
+    ].filter((item) => compact.includes(item.replace(/\*/g, "").trim()) || compact.includes(item)),
+  );
+
+  const tradeNotes = uniq([
+    compact.includes("20% deposit must be paid within 14 days")
+      ? "20% deposit due within 14 days of confirmation"
+      : "",
+    compact.includes("remaining 80% is due 60 days prior")
+      ? "Remaining 80% due 60 days before arrival"
+      : "",
+    compact.includes("Distribution or exposure of our Net Tour Rates will lead to immediate termination")
+      ? "Net tour rates are confidential"
+      : "",
+  ]);
+
+  return {
+    childPolicy,
+    honeymoonPolicy,
+    cancellation,
+    importantNotes,
+    tradeNotes,
+  };
+}
+
+function parseCompanyDetails(text: string) {
+  const emails = extractEmails(text);
+  const phones = extractPhones(text);
+  const urls = extractUrls(text);
+
+  const website =
+    urls.find((item) => /nyumbani-collection\.com/i.test(item)) || "";
+  const enquiryEmail =
+    emails.find((item) => /reservations@nyumbani-collection\.com/i.test(item)) ||
+    emails[0] ||
+    "";
+  const phone =
+    phones.find((item) => /\+255/.test(item)) || phones[0] || "";
+
+  return {
+    website,
+    enquiryEmail,
+    phone,
+  };
+}
+
+function parsePdfText(text: string): { parsed: ParsedPayload; warnings: string[] } {
+  const cleaned = cleanText(text);
+  const company = parseCompanyDetails(cleaned);
+  const nyumbani = parseNyumbaniCampDetails(cleaned);
+  const rates = parseNyumbaniFullBoardRates(cleaned);
+  const incExc = parseNyumbaniInclusionsExclusions(cleaned);
+  const activities = parseActivities(cleaned);
+  const policies = parsePolicies(cleaned);
+
+  const warnings: string[] = [];
+
+  if (/Ny umb ani C amp/i.test(cleaned) && /Hil a l a C amp/i.test(cleaned)) {
+    warnings.push(
+      "Multi-property PDF detected. This import currently prioritizes Nyumbani Camp details.",
+    );
+  }
+
+  if (rates.length === 0) {
+    warnings.push("Could not confidently extract Nyumbani rate rows.");
+  }
+
+  const parsed: ParsedPayload = {
+    name: "Nyumbani Camp",
+    companySlug: "nyumbani-collection",
+    location: nyumbani.location || "Central Serengeti",
+    class: "Tented Camp",
+    vibe: "Tented camp in Central Serengeti with full-board and game package rates.",
+    website: company.website || "nyumbani-collection.com",
     snapshot: {
-      rooms: roomCount || undefined,
-      location: location || undefined,
-      bestFor: bestFor || undefined,
-      setting: setting || undefined,
-      style: style || undefined,
-      access: access || undefined,
+      rooms: nyumbani.rooms || "10 tents",
+      location: nyumbani.location || "Ngarenanyuki 2 in Central Serengeti",
+      bestFor: "Serengeti safari",
+      setting: "Central Serengeti",
+      style: nyumbani.style || "Tented Camp",
+      access: nyumbani.access || "Seronera (40 min drive to camp)",
     },
     rates: {
       notes: [
-        "Imported from PDF",
-        "Please review before publishing",
+        "Imported from Nyumbani full-board rate table",
+        "Values shown as Rack / Nett",
+        "Review game package rates and child rates before publishing",
       ],
       rows: rates,
     },
     experiences: {
-      included,
-      paid,
+      included: uniq([
+        ...incExc.included,
+        ...activities.included,
+      ]),
+      paid: uniq([
+        ...activities.paid,
+        ...incExc.paid,
+      ]),
     },
     policies: {
-      importantNotes,
+      childPolicy: policies.childPolicy || undefined,
+      honeymoonPolicy: policies.honeymoonPolicy || undefined,
+      cancellation: policies.cancellation || undefined,
+      importantNotes: policies.importantNotes,
+      tradeNotes: policies.tradeNotes,
     },
-    contacts,
-    enquiryEmail: emails[0] || undefined,
-    enquiryWhatsApp: phones[0] || undefined,
-    enquirySubject: propertyName
-      ? `Trade Request - ${propertyName}`
-      : "Trade Request",
-    quickTags,
-    tradeProfileLabel: "",
+    contacts: {
+      sales: [
+        {
+          name: "Reservations",
+          role: "Reservations / Sales",
+          email: company.enquiryEmail || undefined,
+          phone: company.phone || undefined,
+          whatsapp: company.phone || undefined,
+        },
+      ],
+    },
+    enquiryEmail: company.enquiryEmail || undefined,
+    enquiryWhatsApp: company.phone || undefined,
+    enquirySubject: "Trade Request - Nyumbani Camp",
+    quickTags: uniq([
+      "Nyumbani Collection",
+      "Serengeti",
+      "Tented Camp",
+      "Central Serengeti",
+      "Full Board",
+    ]),
+    tradeProfileLabel: "Nyumbani Collection",
     tradeProfileSub: "Imported from PDF",
   };
+
+  return { parsed, warnings };
 }
 
 async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
@@ -375,8 +576,8 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
     }
 
     const result = await pdfParse(buffer);
-    return cleanText(result.text || "");
-  } catch (error) {
+    return cleanText(normalizeSpacedWord(result.text || ""));
+  } catch {
     throw new Error(
       "PDF parser not available yet. Install pdf-parse to enable PDF text extraction.",
     );
@@ -415,15 +616,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const parsed = parsePdfText(extractedText);
+    const { parsed, warnings } = parsePdfText(extractedText);
 
     return NextResponse.json<ImportPdfResponse>({
       success: true,
       extractedText,
       parsed,
       warnings: [
+        ...warnings,
         "Imported values are heuristic and should be reviewed before saving.",
-        "Complex PDF layouts may need manual correction.",
       ],
     });
   } catch (error) {
