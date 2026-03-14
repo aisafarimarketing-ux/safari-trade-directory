@@ -28,31 +28,10 @@ type ApiListingRecord = {
   tripadvisorRating: number | null;
   design?: {
     preset?: string;
-    theme?: Partial<ThemeState> | null;
+    theme?: Record<string, unknown> | null;
   } | null;
   data?: Record<string, unknown> | null;
 };
-
-type DownloadItem = {
-  label: string;
-  url: string;
-  type?: string | null;
-};
-
-type ContactItem = {
-  name?: string | null;
-  role?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  whatsapp?: string | null;
-};
-
-type GalleryImage = {
-  src: string;
-  label: string;
-};
-
-type SimpleStyle = Record<string, string | number | undefined>;
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#0A0A0A",
@@ -90,45 +69,16 @@ function getStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function getDownloadItems(value: unknown): DownloadItem[] {
-  if (!Array.isArray(value)) return [];
+function getTheme(listing: ApiListingRecord): ThemeState {
+  const raw = getRecord(listing.design?.theme);
 
-  return value
-    .map((item) => {
-      const row = getRecord(item);
-      const label = getString(row.label || row.title);
-      const url = getString(row.url);
-
-      if (!label || !url) return null;
-
-      return {
-        label,
-        url,
-        type: getString(row.type) || null,
-      };
-    })
-    .filter((item): item is DownloadItem => item !== null);
-}
-
-function getContactList(value: unknown): ContactItem[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => {
-      const row = getRecord(item);
-      return {
-        name: getString(row.name) || null,
-        role: getString(row.role) || null,
-        email: getString(row.email) || null,
-        phone: getString(row.phone) || null,
-        whatsapp: getString(row.whatsapp) || null,
-      };
-    })
-    .filter((item) => {
-      return Boolean(
-        item.name || item.role || item.email || item.phone || item.whatsapp,
-      );
-    });
+  return {
+    pageBg: getString(raw.pageBg) || DEFAULT_THEME.pageBg,
+    blockBg: getString(raw.blockBg) || DEFAULT_THEME.blockBg,
+    accent: getString(raw.accent) || DEFAULT_THEME.accent,
+    highlight: getString(raw.highlight) || DEFAULT_THEME.highlight,
+    borderColor: getString(raw.borderColor) || DEFAULT_THEME.borderColor,
+  };
 }
 
 function isValidPropertyProfile(item: ApiListingRecord, slug: string): boolean {
@@ -175,18 +125,6 @@ async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> 
   }
 }
 
-function getTheme(listing: ApiListingRecord): ThemeState {
-  const theme = getRecord(listing.design?.theme);
-
-  return {
-    pageBg: getString(theme.pageBg) || DEFAULT_THEME.pageBg,
-    blockBg: getString(theme.blockBg) || DEFAULT_THEME.blockBg,
-    accent: getString(theme.accent) || DEFAULT_THEME.accent,
-    highlight: getString(theme.highlight) || DEFAULT_THEME.highlight,
-    borderColor: getString(theme.borderColor) || DEFAULT_THEME.borderColor,
-  };
-}
-
 function getData(listing: ApiListingRecord): Record<string, unknown> {
   return getRecord(listing.data);
 }
@@ -211,51 +149,9 @@ function getPolicies(listing: ApiListingRecord): Record<string, unknown> {
   return getRecord(data.policies);
 }
 
-function getDownloads(listing: ApiListingRecord): DownloadItem[] {
+function getContacts(listing: ApiListingRecord): Record<string, unknown> {
   const data = getData(listing);
-  return getDownloadItems(data.downloads || data.downloadables);
-}
-
-function getContacts(listing: ApiListingRecord) {
-  const data = getData(listing);
-  const contacts = getRecord(data.contacts);
-
-  const reservations = getContactList(contacts.reservations);
-  const sales = getContactList(contacts.sales);
-  const marketing = getContactList(contacts.marketing);
-
-  const legacyContact =
-    getString(data.contactName) ||
-    getString(data.contactTitle) ||
-    getString(data.contactEmail) ||
-    getString(data.contactPhone) ||
-    getString(data.contactWebsite);
-
-  if (reservations.length || sales.length || marketing.length) {
-    return { reservations, sales, marketing };
-  }
-
-  if (legacyContact) {
-    return {
-      reservations: [],
-      sales: [
-        {
-          name: getString(data.contactName) || null,
-          role: getString(data.contactTitle) || null,
-          email: getString(data.contactEmail) || null,
-          phone: getString(data.contactPhone) || null,
-          whatsapp: null,
-        },
-      ],
-      marketing: [],
-    };
-  }
-
-  return {
-    reservations: [],
-    sales: [],
-    marketing: [],
-  };
+  return getRecord(data.contacts);
 }
 
 function getLocation(listing: ApiListingRecord): string {
@@ -295,27 +191,12 @@ function getLogoImage(listing: ApiListingRecord): string {
   return getString(data.logoImage);
 }
 
-function getHeroImage(listing: ApiListingRecord): string {
-  const data = getData(listing);
-
-  const coverImage = getString(data.coverImage);
-  if (coverImage) return coverImage;
-
-  const heroImage = getString(data.heroImage);
-  if (heroImage) return heroImage;
-
-  const gallery = getGalleryImages(listing);
-  if (gallery.length > 0) return gallery[0].src;
-
-  return "";
-}
-
-function getGalleryImages(listing: ApiListingRecord): GalleryImage[] {
+function getGalleryImages(listing: ApiListingRecord): Array<{ src: string; label: string }> {
   const data = getData(listing);
   const gallery = data.gallery;
 
   if (Array.isArray(gallery)) {
-    const images: GalleryImage[] = [];
+    const images: Array<{ src: string; label: string }> = [];
 
     for (const group of gallery) {
       const groupRecord = getRecord(group);
@@ -343,23 +224,20 @@ function getGalleryImages(listing: ApiListingRecord): GalleryImage[] {
 
   const groups = [
     {
-      key: "family",
       label: getString(roomTypeLabels.family) || "Family setup",
       items: roomPhotos.family,
     },
     {
-      key: "double",
       label: getString(roomTypeLabels.double) || "Double setup",
       items: roomPhotos.double,
     },
     {
-      key: "single",
       label: getString(roomTypeLabels.single) || "Single setup",
       items: roomPhotos.single,
     },
   ];
 
-  const fallbackImages: GalleryImage[] = [];
+  const images: Array<{ src: string; label: string }> = [];
 
   for (const group of groups) {
     if (!Array.isArray(group.items)) continue;
@@ -367,7 +245,7 @@ function getGalleryImages(listing: ApiListingRecord): GalleryImage[] {
     group.items.forEach((item, index) => {
       const src = getString(item);
       if (src) {
-        fallbackImages.push({
+        images.push({
           src,
           label: `${group.label} ${index + 1}`,
         });
@@ -375,49 +253,60 @@ function getGalleryImages(listing: ApiListingRecord): GalleryImage[] {
     });
   }
 
-  return fallbackImages;
+  return images;
+}
+
+function getHeroImage(listing: ApiListingRecord): string {
+  const data = getData(listing);
+
+  const cover = getString(data.coverImage);
+  if (cover) return cover;
+
+  const hero = getString(data.heroImage);
+  if (hero) return hero;
+
+  const images = getGalleryImages(listing);
+  if (images.length > 0) return images[0].src;
+
+  return "";
 }
 
 function getQuickSnapshot(listing: ApiListingRecord) {
   const data = getData(listing);
   const snapshot = getSnapshot(listing);
 
-  const rooms =
-    getString(snapshot.rooms) ||
-    (getNumber(data.rooms) !== null ? String(getNumber(data.rooms)) : "");
-
-  const bestFor = getString(snapshot.bestFor) || getClassLabel(listing);
-  const style = getString(snapshot.style) || getVibe(listing);
-  const access = getString(snapshot.access);
-  const setting = getString(snapshot.setting);
+  const roomsValue = getString(snapshot.rooms);
+  const legacyRooms = getNumber(data.rooms);
 
   return {
-    rooms,
-    bestFor,
-    style,
-    access,
-    setting,
+    rooms: roomsValue || (legacyRooms !== null ? String(legacyRooms) : ""),
+    bestFor: getString(snapshot.bestFor) || getClassLabel(listing),
+    setting: getString(snapshot.setting),
+    style: getString(snapshot.style) || getVibe(listing),
+    access: getString(snapshot.access),
   };
 }
 
-function getRateRows(listing: ApiListingRecord) {
+function getRateRows(listing: ApiListingRecord): Array<{
+  season: string;
+  dates: string;
+  rackPPPN: string;
+}> {
   const rates = getRates(listing);
   const rows = rates.rows;
 
-  if (Array.isArray(rows)) {
-    return rows
-      .map((item) => {
-        const row = getRecord(item);
-        return {
-          season: getString(row.season),
-          dates: getString(row.dates),
-          rackPPPN: getString(row.rackPPPN || row.rackRate),
-        };
-      })
-      .filter((row) => row.season || row.dates || row.rackPPPN);
-  }
+  if (!Array.isArray(rows)) return [];
 
-  return [];
+  return rows
+    .map((item) => {
+      const row = getRecord(item);
+      return {
+        season: getString(row.season),
+        dates: getString(row.dates),
+        rackPPPN: getString(row.rackPPPN || row.rackRate),
+      };
+    })
+    .filter((row) => row.season || row.dates || row.rackPPPN);
 }
 
 function getRateNotes(listing: ApiListingRecord): string[] {
@@ -447,9 +336,11 @@ function getPaidExperiences(listing: ApiListingRecord): string[] {
   return getStringArray(data.paidActivities);
 }
 
-function getPoliciesList(listing: ApiListingRecord): Array<{ label: string; value: string }> {
+function getPolicyRows(listing: ApiListingRecord): Array<{ label: string; value: string }> {
   const policies = getPolicies(listing);
   const data = getData(listing);
+
+  const rows: Array<{ label: string; value: string }> = [];
 
   const childPolicy = getString(policies.childPolicy);
   const honeymoonPolicy = getString(policies.honeymoonPolicy);
@@ -457,8 +348,6 @@ function getPoliciesList(listing: ApiListingRecord): Array<{ label: string; valu
   const importantNotes = getStringArray(policies.importantNotes);
   const tradeNotes = getStringArray(policies.tradeNotes);
   const legacyTerms = getString(data.terms);
-
-  const rows: Array<{ label: string; value: string }> = [];
 
   if (childPolicy) rows.push({ label: "Child policy", value: childPolicy });
   if (honeymoonPolicy) rows.push({ label: "Honeymoon policy", value: honeymoonPolicy });
@@ -479,37 +368,103 @@ function getPoliciesList(listing: ApiListingRecord): Array<{ label: string; valu
   return rows;
 }
 
-function getTradeContacts(listing: ApiListingRecord) {
+function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: string }> {
+  const data = getData(listing);
+  const source = data.downloads || data.downloadables;
+
+  if (!Array.isArray(source)) return [];
+
+  return source
+    .map((item) => {
+      const row = getRecord(item);
+      const label = getString(row.label || row.title);
+      const url = getString(row.url);
+
+      if (!label || !url) return null;
+
+      return { label, url };
+    })
+    .filter((item): item is { label: string; url: string } => item !== null);
+}
+
+function getContactGroups(listing: ApiListingRecord): Array<{
+  title: string;
+  items: Array<{
+    name: string;
+    role: string;
+    email: string;
+    phone: string;
+    whatsapp: string;
+  }>;
+}> {
   const contacts = getContacts(listing);
 
-  return [
-    {
-      title: "Reservations",
-      items: contacts.reservations,
-    },
-    {
-      title: "Sales",
-      items: contacts.sales,
-    },
-    {
-      title: "Marketing",
-      items: contacts.marketing,
-    },
+  const normalizeList = (value: unknown) => {
+    if (!Array.isArray(value)) return [];
+
+    return value
+      .map((item) => {
+        const row = getRecord(item);
+        return {
+          name: getString(row.name),
+          role: getString(row.role),
+          email: getString(row.email),
+          phone: getString(row.phone),
+          whatsapp: getString(row.whatsapp),
+        };
+      })
+      .filter((item) => {
+        return Boolean(
+          item.name || item.role || item.email || item.phone || item.whatsapp,
+        );
+      });
+  };
+
+  const reservations = normalizeList(contacts.reservations);
+  const sales = normalizeList(contacts.sales);
+  const marketing = normalizeList(contacts.marketing);
+
+  const groups = [
+    { title: "Reservations", items: reservations },
+    { title: "Sales", items: sales },
+    { title: "Marketing", items: marketing },
   ].filter((group) => group.items.length > 0);
+
+  if (groups.length > 0) return groups;
+
+  const data = getData(listing);
+  const legacyName = getString(data.contactName);
+  const legacyRole = getString(data.contactTitle);
+  const legacyEmail = getString(data.contactEmail);
+  const legacyPhone = getString(data.contactPhone);
+
+  if (legacyName || legacyRole || legacyEmail || legacyPhone) {
+    return [
+      {
+        title: "Sales",
+        items: [
+          {
+            name: legacyName,
+            role: legacyRole,
+            email: legacyEmail,
+            phone: legacyPhone,
+            whatsapp: "",
+          },
+        ],
+      },
+    ];
+  }
+
+  return [];
 }
 
 function getTradeActions(listing: ApiListingRecord) {
   const data = getData(listing);
 
-  const enquiryEmail = getString(data.enquiryEmail);
-  const enquiryWhatsApp = getString(data.enquiryWhatsApp);
-  const enquirySubject =
-    getString(data.enquirySubject) || "Trade Request";
-
   return {
-    enquiryEmail,
-    enquiryWhatsApp,
-    enquirySubject,
+    enquiryEmail: getString(data.enquiryEmail),
+    enquiryWhatsApp: getString(data.enquiryWhatsApp),
+    enquirySubject: getString(data.enquirySubject) || "Trade Request",
   };
 }
 
@@ -520,29 +475,6 @@ function getTripadvisorData(listing: ApiListingRecord) {
     rating: getNumber(data.taRating) ?? listing.tripadvisorRating,
     link: getString(data.taLink),
     logoUrl: getString(data.taLogoUrl),
-  };
-}
-
-function panelStyle(theme: ThemeState): SimpleStyle {
-  return {
-    backgroundColor: theme.blockBg,
-    borderColor: theme.borderColor,
-    color: theme.accent,
-  };
-}
-
-function softStyle(theme: ThemeState): SimpleStyle {
-  return {
-    borderColor: theme.borderColor,
-    backgroundColor: theme.blockBg,
-    color: theme.accent,
-  };
-}
-
-function primaryButtonStyle(theme: ThemeState): SimpleStyle {
-  return {
-    backgroundColor: theme.highlight,
-    color: "#ffffff",
   };
 }
 
@@ -585,39 +517,31 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   }
 
   const theme = getTheme(listing);
-  const data = getData(listing);
   const location = getLocation(listing);
   const propertyClass = getClassLabel(listing);
   const vibe = getVibe(listing);
   const website = getWebsite(listing);
   const logoImage = getLogoImage(listing);
   const heroImage = getHeroImage(listing);
-  const galleryImages = getGalleryImages(listing);
   const snapshot = getQuickSnapshot(listing);
+  const galleryImages = getGalleryImages(listing);
   const rateRows = getRateRows(listing);
   const rateNotes = getRateNotes(listing);
   const includedExperiences = getIncludedExperiences(listing);
   const paidExperiences = getPaidExperiences(listing);
-  const policies = getPoliciesList(listing);
+  const policyRows = getPolicyRows(listing);
   const downloads = getDownloads(listing);
-  const contactGroups = getTradeContacts(listing);
+  const contactGroups = getContactGroups(listing);
   const tradeActions = getTradeActions(listing);
   const tripadvisor = getTripadvisorData(listing);
 
-  const pageStyle: SimpleStyle = {
-    backgroundColor: theme.pageBg,
-    color: theme.accent,
-  };
-
-  const tags = [
-    location,
-    propertyClass,
-    snapshot.bestFor,
-    snapshot.style,
-  ].filter(Boolean);
+  const tags = [location, propertyClass, snapshot.bestFor, snapshot.style].filter(Boolean);
 
   return (
-    <main className="min-h-screen" style={pageStyle}>
+    <main
+      className="min-h-screen"
+      style={{ backgroundColor: theme.pageBg, color: theme.accent }}
+    >
       <section className="border-b" style={{ borderColor: theme.borderColor }}>
         <div className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:py-14">
           <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
@@ -637,7 +561,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 {listing.design?.preset ? (
                   <span
                     className="text-[11px] font-semibold uppercase tracking-[0.22em]"
-                    style={{ color: theme.accent, opacity: 0.5 }}
+                    style={{ opacity: 0.5 }}
                   >
                     {listing.design.preset}
                   </span>
@@ -648,7 +572,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 {logoImage ? (
                   <div
                     className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[22px] border"
-                    style={softStyle(theme)}
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: theme.blockBg,
+                    }}
                   >
                     <img
                       src={logoImage}
@@ -662,10 +589,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
                     {listing.name}
                   </h1>
-                  <p
-                    className="mt-3 max-w-3xl text-base leading-8 md:text-lg"
-                    style={{ color: theme.accent, opacity: 0.75 }}
-                  >
+                  <p className="mt-3 max-w-3xl text-base leading-8 md:text-lg" style={{ opacity: 0.75 }}>
                     {vibe}
                   </p>
                 </div>
@@ -678,26 +602,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <QuickFact
-                  label="Rooms"
-                  value={snapshot.rooms || "—"}
-                  theme={theme}
-                />
-                <QuickFact
-                  label="Best For"
-                  value={snapshot.bestFor || "—"}
-                  theme={theme}
-                />
-                <QuickFact
-                  label="Setting"
-                  value={snapshot.setting || "—"}
-                  theme={theme}
-                />
-                <QuickFact
-                  label="Access"
-                  value={snapshot.access || "—"}
-                  theme={theme}
-                />
+                <QuickFact label="Rooms" value={snapshot.rooms || "—"} theme={theme} />
+                <QuickFact label="Best For" value={snapshot.bestFor || "—"} theme={theme} />
+                <QuickFact label="Setting" value={snapshot.setting || "—"} theme={theme} />
+                <QuickFact label="Access" value={snapshot.access || "—"} theme={theme} />
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -707,7 +615,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-2xl px-5 py-3 text-sm font-semibold"
-                    style={primaryButtonStyle(theme)}
+                    style={{ backgroundColor: theme.highlight, color: "#ffffff" }}
                   >
                     Request Trade Pack
                   </a>
@@ -719,7 +627,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       tradeActions.enquirySubject,
                     )}`}
                     className="rounded-2xl border px-5 py-3 text-sm font-semibold"
-                    style={softStyle(theme)}
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: theme.blockBg,
+                      color: theme.accent,
+                    }}
                   >
                     Request Quote
                   </a>
@@ -731,7 +643,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-2xl border px-5 py-3 text-sm font-semibold"
-                    style={softStyle(theme)}
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: theme.blockBg,
+                      color: theme.accent,
+                    }}
                   >
                     WhatsApp
                   </a>
@@ -742,7 +658,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             <div className="space-y-5">
               <div
                 className="overflow-hidden rounded-[34px] border"
-                style={panelStyle(theme)}
+                style={{
+                  borderColor: theme.borderColor,
+                  backgroundColor: theme.blockBg,
+                }}
               >
                 <div className="relative aspect-[4/3] overflow-hidden">
                   {heroImage ? (
@@ -764,7 +683,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       target="_blank"
                       rel="noreferrer"
                       className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={softStyle(theme)}
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                        color: theme.accent,
+                      }}
                     >
                       Website
                     </a>
@@ -776,7 +699,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       target="_blank"
                       rel="noreferrer"
                       className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={softStyle(theme)}
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                        color: theme.accent,
+                      }}
                     >
                       Open Map
                     </a>
@@ -807,7 +734,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     <div
                       key={`${image.src}-${image.label}`}
                       className="overflow-hidden rounded-[22px] border"
-                      style={softStyle(theme)}
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                      }}
                     >
                       <img
                         src={image.src}
@@ -822,8 +752,17 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
             {rateRows.length > 0 ? (
               <SectionCard title="Rates" theme={theme}>
-                <div className="overflow-hidden rounded-[22px] border" style={softStyle(theme)}>
-                  <div className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ borderColor: theme.borderColor, opacity: 0.6 }}>
+                <div
+                  className="overflow-hidden rounded-[22px] border"
+                  style={{
+                    borderColor: theme.borderColor,
+                    backgroundColor: theme.blockBg,
+                  }}
+                >
+                  <div
+                    className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em]"
+                    style={{ borderColor: theme.borderColor, opacity: 0.6 }}
+                  >
                     <span>Season</span>
                     <span>Dates</span>
                     <span>Rack PPPN</span>
@@ -841,7 +780,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       <span>{row.dates || "—"}</span>
                       <span>{row.rackPPPN || "—"}</span>
                     </div>
-                  })}
+                  ))}
                 </div>
 
                 {rateNotes.length > 0 ? (
@@ -858,10 +797,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               <SectionCard title="Experiences" theme={theme}>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div>
-                    <p
-                      className="text-xs font-semibold uppercase tracking-[0.18em]"
-                      style={{ color: theme.accent, opacity: 0.5 }}
-                    >
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ opacity: 0.5 }}>
                       Included
                     </p>
                     <div className="mt-3">
@@ -870,10 +806,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   </div>
 
                   <div>
-                    <p
-                      className="text-xs font-semibold uppercase tracking-[0.18em]"
-                      style={{ color: theme.accent, opacity: 0.5 }}
-                    >
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ opacity: 0.5 }}>
                       Paid
                     </p>
                     <div className="mt-3">
@@ -884,19 +817,20 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               </SectionCard>
             ) : null}
 
-            {policies.length > 0 ? (
+            {policyRows.length > 0 ? (
               <SectionCard title="Policies" theme={theme}>
                 <div className="space-y-3">
-                  {policies.map((row, index) => (
+                  {policyRows.map((row, index) => (
                     <div
                       key={`${row.label}-${index}`}
                       className="rounded-2xl border px-4 py-3"
-                      style={softStyle(theme)}
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                        color: theme.accent,
+                      }}
                     >
-                      <p
-                        className="text-[11px] uppercase tracking-[0.18em]"
-                        style={{ color: theme.accent, opacity: 0.45 }}
-                      >
+                      <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.45 }}>
                         {row.label}
                       </p>
                       <p className="mt-2 text-sm leading-7">{row.value}</p>
@@ -918,7 +852,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       target="_blank"
                       rel="noreferrer"
                       className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={softStyle(theme)}
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: theme.blockBg,
+                        color: theme.accent,
+                      }}
                     >
                       {item.label}
                     </a>
@@ -932,10 +870,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 <div className="space-y-6">
                   {contactGroups.map((group) => (
                     <div key={group.title}>
-                      <p
-                        className="text-[11px] uppercase tracking-[0.18em]"
-                        style={{ color: theme.accent, opacity: 0.45 }}
-                      >
+                      <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.45 }}>
                         {group.title}
                       </p>
 
@@ -944,7 +879,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                           <div
                             key={`${group.title}-${index}`}
                             className="rounded-2xl border px-4 py-3"
-                            style={softStyle(theme)}
+                            style={{
+                              borderColor: theme.borderColor,
+                              backgroundColor: theme.blockBg,
+                              color: theme.accent,
+                            }}
                           >
                             {item.name ? (
                               <p className="text-sm font-semibold">{item.name}</p>
@@ -955,10 +894,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                               </p>
                             ) : null}
                             {item.email ? (
-                              <a
-                                href={`mailto:${item.email}`}
-                                className="mt-3 block text-sm underline"
-                              >
+                              <a href={`mailto:${item.email}`} className="mt-3 block text-sm underline">
                                 {item.email}
                               </a>
                             ) : null}
@@ -1005,7 +941,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 {tripadvisor.rating !== null ? (
                   <div
                     className="mt-3 rounded-2xl border px-4 py-3 text-sm font-semibold"
-                    style={softStyle(theme)}
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: theme.blockBg,
+                      color: theme.accent,
+                    }}
                   >
                     Rating {tripadvisor.rating.toFixed(1)}
                   </div>
@@ -1017,7 +957,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     target="_blank"
                     rel="noreferrer"
                     className="mt-3 block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                    style={softStyle(theme)}
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: theme.blockBg,
+                      color: theme.accent,
+                    }}
                   >
                     Open Tripadvisor
                   </a>
@@ -1031,61 +975,40 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   );
 }
 
-function Pill({
-  text,
-  theme,
-}: {
-  text: string;
-  theme: ThemeState;
-}) {
+function Pill(props: { text: string; theme: ThemeState }) {
   return (
     <span
       className="rounded-full border px-3 py-1.5 text-sm"
       style={{
-        borderColor: theme.borderColor,
-        backgroundColor: theme.blockBg,
-        color: theme.accent,
+        borderColor: props.theme.borderColor,
+        backgroundColor: props.theme.blockBg,
+        color: props.theme.accent,
       }}
     >
-      {text}
+      {props.text}
     </span>
   );
 }
 
-function QuickFact({
-  label,
-  value,
-  theme,
-}: {
-  label: string;
-  value: string;
-  theme: ThemeState;
-}) {
+function QuickFact(props: { label: string; value: string; theme: ThemeState }) {
   return (
     <div
       className="rounded-[24px] border p-4"
       style={{
-        borderColor: theme.borderColor,
-        backgroundColor: theme.blockBg,
-        color: theme.accent,
+        borderColor: props.theme.borderColor,
+        backgroundColor: props.theme.blockBg,
+        color: props.theme.accent,
       }}
     >
-      <p
-        className="text-[11px] uppercase tracking-[0.18em]"
-        style={{ color: theme.accent, opacity: 0.45 }}
-      >
-        {label}
+      <p className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.45 }}>
+        {props.label}
       </p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+      <p className="mt-2 text-2xl font-semibold">{props.value}</p>
     </div>
   );
 }
 
-function SectionCard({
-  title,
-  theme,
-  children,
-}: {
+function SectionCard(props: {
   title: string;
   theme: ThemeState;
   children: React.ReactNode;
@@ -1094,27 +1017,20 @@ function SectionCard({
     <div
       className="rounded-[30px] border p-6 md:p-8"
       style={{
-        borderColor: theme.borderColor,
-        backgroundColor: theme.blockBg,
-        color: theme.accent,
+        borderColor: props.theme.borderColor,
+        backgroundColor: props.theme.blockBg,
+        color: props.theme.accent,
       }}
     >
-      <p
-        className="text-sm uppercase tracking-[0.2em]"
-        style={{ color: theme.accent, opacity: 0.45 }}
-      >
-        {title}
+      <p className="text-sm uppercase tracking-[0.2em]" style={{ opacity: 0.45 }}>
+        {props.title}
       </p>
-      <div className="mt-5">{children}</div>
+      <div className="mt-5">{props.children}</div>
     </div>
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-  theme,
-}: {
+function SummaryRow(props: {
   label: string;
   value: string;
   theme: ThemeState;
@@ -1123,38 +1039,32 @@ function SummaryRow({
     <div
       className="flex items-center justify-between gap-4 rounded-2xl border px-4 py-3"
       style={{
-        borderColor: theme.borderColor,
-        backgroundColor: theme.blockBg,
-        color: theme.accent,
+        borderColor: props.theme.borderColor,
+        backgroundColor: props.theme.blockBg,
+        color: props.theme.accent,
       }}
     >
-      <span style={{ opacity: 0.5 }}>{label}</span>
-      <span className="text-right font-semibold">{value}</span>
+      <span style={{ opacity: 0.5 }}>{props.label}</span>
+      <span className="text-right font-semibold">{props.value}</span>
     </div>
   );
 }
 
-function TagList({
-  items,
-  theme,
-}: {
-  items: string[];
-  theme: ThemeState;
-}) {
-  if (items.length === 0) {
-    return <span style={{ color: theme.accent, opacity: 0.55 }}>None listed</span>;
+function TagList(props: { items: string[]; theme: ThemeState }) {
+  if (props.items.length === 0) {
+    return <span style={{ opacity: 0.55 }}>None listed</span>;
   }
 
   return (
     <div className="flex flex-wrap gap-2">
-      {items.map((item) => (
+      {props.items.map((item) => (
         <span
           key={item}
           className="rounded-full border px-3 py-1.5 text-xs"
           style={{
-            borderColor: theme.borderColor,
-            backgroundColor: theme.blockBg,
-            color: theme.accent,
+            borderColor: props.theme.borderColor,
+            backgroundColor: props.theme.blockBg,
+            color: props.theme.accent,
           }}
         >
           {item}
