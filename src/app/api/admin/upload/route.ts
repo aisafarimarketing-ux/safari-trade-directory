@@ -15,6 +15,8 @@ type UploadResponse = {
   error?: string;
 };
 
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+
 function ensureUploadDir() {
   const uploadDir = path.join(process.cwd(), "public", "uploads");
 
@@ -26,10 +28,46 @@ function ensureUploadDir() {
 }
 
 function sanitizeFileName(name: string) {
-  return name
+  const cleaned = name
     .toLowerCase()
+    .trim()
     .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9.\-]/g, "");
+    .replace(/[^a-z0-9.\-_]/g, "");
+
+  return cleaned || `file-${Date.now()}`;
+}
+
+function getSafeExtension(fileName: string, mimeType: string) {
+  const fromName = path.extname(fileName).toLowerCase();
+
+  if (fromName) return fromName;
+
+  if (mimeType === "image/jpeg") return ".jpg";
+  if (mimeType === "image/png") return ".png";
+  if (mimeType === "image/webp") return ".webp";
+  if (mimeType === "image/gif") return ".gif";
+  if (mimeType === "application/pdf") return ".pdf";
+  if (mimeType === "application/msword") return ".doc";
+  if (
+    mimeType ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return ".docx";
+  }
+
+  return "";
+}
+
+function isAllowedMimeType(mimeType: string) {
+  return [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ].includes(mimeType);
 }
 
 export async function POST(req: Request) {
@@ -37,47 +75,76 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file");
 
-    if (!file || !(file instanceof File)) {
+    if (!file || typeof file === "string") {
       return NextResponse.json<UploadResponse>(
         { success: false, error: "No file uploaded." },
         { status: 400 },
       );
     }
 
+    if (file.size <= 0) {
+      return NextResponse.json<UploadResponse>(
+        { success: false, error: "Uploaded file is empty." },
+        { status: 400 },
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json<UploadResponse>(
+        {
+          success: false,
+          error: "File is too large. Maximum size is 25MB.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!isAllowedMimeType(file.type)) {
+      return NextResponse.json<UploadResponse>(
+        {
+          success: false,
+          error: `Unsupported file type: ${file.type || "unknown"}.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const uploadDir = ensureUploadDir();
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    const originalName = sanitizeFileName(file.name);
-    const extension = path.extname(originalName) || "";
-    const base = path.basename(originalName, extension);
+    const sanitizedOriginalName = sanitizeFileName(file.name || "upload");
+    const originalExtension = path.extname(sanitizedOriginalName);
+    const safeExtension = getSafeExtension(sanitizedOriginalName, file.type);
+    const extension = originalExtension || safeExtension;
+    const baseName = path.basename(
+      sanitizedOriginalName,
+      originalExtension || safeExtension,
+    );
 
-    const uniqueName =
-      base +
-      "-" +
-      Date.now().toString() +
-      extension;
-
+    const uniqueName = `${baseName || "file"}-${Date.now()}${extension}`;
     const filePath = path.join(uploadDir, uniqueName);
 
     fs.writeFileSync(filePath, buffer);
 
-    const publicUrl = `/uploads/${uniqueName}`;
-
     return NextResponse.json<UploadResponse>({
       success: true,
       file: {
-        url: publicUrl,
+        url: `/uploads/${uniqueName}`,
         fileName: uniqueName,
         mimeType: file.type,
         size: file.size,
       },
     });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown upload error";
+
     return NextResponse.json<UploadResponse>(
       {
         success: false,
-        error: "Upload failed.",
+        error: `Upload failed: ${message}`,
       },
       { status: 500 },
     );
