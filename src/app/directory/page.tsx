@@ -7,7 +7,7 @@ type ApiListingRecord = {
   slug: string;
   name: string;
   companySlug: string | null;
-  status: ListingStatus;
+  status: ListingStatus | string | null;
   location: string | null;
   class: string | null;
   vibe: string | null;
@@ -57,14 +57,17 @@ function getPrimaryImage(listing: ApiListingRecord): string {
   const heroImage = toText(data.heroImage);
   if (heroImage) return heroImage;
 
+  const images = getStringArray(data.images);
+  if (images.length > 0) return images[0];
+
   const gallery = data.gallery;
   if (Array.isArray(gallery)) {
     for (const group of gallery) {
       const groupRecord = getRecord(group);
-      const images = groupRecord.images;
+      const groupImages = groupRecord.images;
 
-      if (Array.isArray(images)) {
-        for (const image of images) {
+      if (Array.isArray(groupImages)) {
+        for (const image of groupImages) {
           const value = toText(image);
           if (value) return value;
         }
@@ -84,7 +87,13 @@ function getQuickTags(listing: ApiListingRecord): string[] {
   }
 
   const snapshot = getRecord(data.snapshot);
-  const fallback = [listing.class, listing.vibe, toText(snapshot.bestFor)]
+  const fallback = [
+    listing.class,
+    listing.vibe,
+    toText(snapshot.bestFor),
+    toText(snapshot.class),
+    toText(snapshot.vibe),
+  ]
     .filter((value) => typeof value === "string" && value.trim())
     .map((value) => String(value).trim());
 
@@ -102,7 +111,11 @@ function getLowestRackRate(listing: ApiListingRecord): string {
 
   for (const row of rows) {
     const rowRecord = getRecord(row);
-    const raw = toText(rowRecord.rackPPPN);
+    const raw =
+      toText(rowRecord.rackPPPN) ||
+      toText(rowRecord.rack) ||
+      toText(rowRecord.rate) ||
+      toText(rowRecord.price);
 
     if (!raw) continue;
 
@@ -117,9 +130,32 @@ function getLowestRackRate(listing: ApiListingRecord): string {
   return `$${Math.min(...values)}`;
 }
 
+function normalizeListingsResponse(json: unknown): ApiListingRecord[] {
+  if (Array.isArray(json)) {
+    return json as ApiListingRecord[];
+  }
+
+  const root = getRecord(json);
+
+  if (Array.isArray(root.listings)) {
+    return root.listings as ApiListingRecord[];
+  }
+
+  if (Array.isArray(root.data)) {
+    return root.data as ApiListingRecord[];
+  }
+
+  return [];
+}
+
 function isPropertyListing(listing: ApiListingRecord): boolean {
-  if (listing.status !== "published") return false;
-  if (!toText(listing.slug)) return false;
+  const slug = toText(listing.slug);
+  if (!slug) return false;
+
+  const status = toText(listing.status).toLowerCase();
+
+  if (status === "archived") return false;
+
   return true;
 }
 
@@ -130,7 +166,9 @@ export default async function DirectoryPage() {
   try {
     const headerStore = headers();
     const host = headerStore.get("host");
-    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+    const forwardedProto = headerStore.get("x-forwarded-proto");
+    const protocol =
+      forwardedProto || (process.env.NODE_ENV === "development" ? "http" : "https");
 
     if (!host) {
       throw new Error("Missing host header");
@@ -145,12 +183,7 @@ export default async function DirectoryPage() {
     }
 
     const json = await response.json();
-    const root = getRecord(json);
-    const rawListings = root.listings;
-
-    if (Array.isArray(rawListings)) {
-      listings = rawListings as ApiListingRecord[];
-    }
+    listings = normalizeListingsResponse(json);
   } catch {
     loadError = true;
   }
@@ -183,7 +216,7 @@ export default async function DirectoryPage() {
 
         {!loadError && visibleListings.length === 0 ? (
           <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-8 text-white/65">
-            No published property listings available yet.
+            No property listings available yet.
           </div>
         ) : null}
 
@@ -198,6 +231,7 @@ export default async function DirectoryPage() {
               listing.location ||
               toText(snapshot.location) ||
               toText(data.locationLabel) ||
+              toText(data.location) ||
               "Location not set";
 
             const vibe =
@@ -211,10 +245,14 @@ export default async function DirectoryPage() {
               data.rating !== undefined ? data.rating : listing.tripadvisorRating,
             );
             const reviewCount = toNumber(data.reviewCount);
-            const propertyClass = listing.class || toText(data.class);
-            const rooms = toText(snapshot.rooms);
-            const bestFor = toText(snapshot.bestFor);
-            const access = toText(snapshot.access);
+            const propertyClass =
+              listing.class || toText(data.class) || toText(snapshot.class);
+            const rooms =
+              toText(snapshot.rooms) ||
+              toText(data.rooms) ||
+              toText(data.roomCount);
+            const bestFor = toText(snapshot.bestFor) || toText(data.bestFor);
+            const access = toText(snapshot.access) || toText(data.access);
             const rackFrom = getLowestRackRate(listing);
             const quickTags = getQuickTags(listing);
 
@@ -232,6 +270,8 @@ export default async function DirectoryPage() {
 
             const tradeProfileLabel = toText(data.tradeProfileLabel);
             const tradeProfileSub = toText(data.tradeProfileSub);
+
+            const statusLabel = toText(listing.status).toLowerCase();
 
             return (
               <div
@@ -260,11 +300,19 @@ export default async function DirectoryPage() {
                       Property
                     </span>
 
-                    {listing.design?.preset ? (
-                      <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
-                        {listing.design.preset}
-                      </span>
-                    ) : null}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {listing.design?.preset ? (
+                        <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
+                          {listing.design.preset}
+                        </span>
+                      ) : null}
+
+                      {statusLabel ? (
+                        <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs uppercase text-white/75 backdrop-blur">
+                          {statusLabel}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
@@ -283,7 +331,7 @@ export default async function DirectoryPage() {
                 </div>
 
                 <div className="p-6">
-                  {(tradeProfileLabel || tradeProfileSub) ? (
+                  {tradeProfileLabel || tradeProfileSub ? (
                     <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
                       {[tradeProfileLabel, tradeProfileSub].filter(Boolean).join(" · ")}
                     </p>
@@ -293,6 +341,13 @@ export default async function DirectoryPage() {
 
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/55">
                     <span>{location}</span>
+
+                    {propertyClass ? (
+                      <>
+                        <span className="text-white/25">•</span>
+                        <span>{propertyClass}</span>
+                      </>
+                    ) : null}
 
                     {typeof rating === "number" ? (
                       <>
@@ -322,7 +377,7 @@ export default async function DirectoryPage() {
                     </div>
                   ) : null}
 
-                  {(rooms || bestFor || access || rackFrom) ? (
+                  {rooms || bestFor || access || rackFrom ? (
                     <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-white/75">
                       {rooms ? (
                         <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
