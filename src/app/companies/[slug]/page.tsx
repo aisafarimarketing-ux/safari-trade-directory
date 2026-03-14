@@ -32,11 +32,12 @@ type ApiListing = {
     rating?: number | string;
     reviewCount?: number | string;
     vibe?: string;
+    class?: string;
   };
 };
 
 async function getApiListings(): Promise<ApiListing[]> {
-  const headersList = headers();
+  const headersList = await headers();
   const host = headersList.get("host");
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
@@ -106,14 +107,15 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
 
   const companyListings: ApiListing[] = apiListings.filter(
     (listing) =>
-      listing.companySlug === company.slug && listing.status !== "archived",
+      listing.companySlug === company.slug && listing.status === "published",
   );
 
   const showcaseListings = companyListings.slice(0, 5);
   const leadListing = showcaseListings[0];
   const supportListings = showcaseListings.slice(1, 5);
 
-  const leadImage = leadListing?.data?.coverImage || "";
+  const leadImage =
+    leadListing?.data?.coverImage || leadListing?.data?.logoImage || "";
 
   const supportImages: Array<{ src: string; alt: string; href: string }> =
     supportListings.map((listing) => ({
@@ -134,7 +136,9 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
     new Set(
       companyListings
         .map((listing) =>
-          String(listing.locationLabel || listing.data?.locationLabel || "").trim(),
+          String(
+            listing.locationLabel || listing.data?.locationLabel || "",
+          ).trim(),
         )
         .filter((value) => value.length > 0),
     ),
@@ -143,7 +147,9 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
   const listingTypes: string[] = Array.from(
     new Set(
       companyListings
-        .map((listing) => String(listing.class || "").trim())
+        .map((listing) =>
+          String(listing.class || listing.data?.class || "").trim(),
+        )
         .filter((value) => value.length > 0),
     ),
   ).slice(0, 3);
@@ -151,7 +157,9 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
   const bestForTags: string[] = Array.from(
     new Set(
       companyListings
-        .map((listing) => String(listing.vibe || listing.data?.vibe || "").trim())
+        .map((listing) =>
+          String(listing.vibe || listing.data?.vibe || "").trim(),
+        )
         .filter((value) => value.length > 0),
     ),
   ).slice(0, 4);
@@ -301,30 +309,59 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
               <div className="rounded-[34px] border border-white/10 bg-[#d7dde4] p-3 text-neutral-950 shadow-2xl">
                 <div className="grid gap-3 md:grid-cols-[92px_1fr] lg:grid-cols-[104px_1fr]">
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
-                    {supportImages.map((image, index) => (
-                      <a
-                        key={`${image.alt}-${index}`}
-                        href={image.href}
-                        className="block overflow-hidden rounded-[10px] border border-black/10 bg-black/10"
-                      >
-                        {image.src ? (
-                          <img
-                            src={image.src}
-                            alt={image.alt}
-                            className="aspect-square h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="aspect-square h-full w-full bg-black/10" />
-                        )}
-                      </a>
-                    ))}
+                    {supportImages.map((image, index) =>
+                      image.href === "#" ? (
+                        <div
+                          key={`${image.alt}-${index}`}
+                          className="block overflow-hidden rounded-[10px] border border-black/10 bg-black/10"
+                        >
+                          {image.src ? (
+                            <img
+                              src={image.src}
+                              alt={image.alt}
+                              className="aspect-square h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="aspect-square h-full w-full bg-black/10" />
+                          )}
+                        </div>
+                      ) : (
+                        <a
+                          key={`${image.alt}-${index}`}
+                          href={image.href}
+                          className="block overflow-hidden rounded-[10px] border border-black/10 bg-black/10"
+                        >
+                          {image.src ? (
+                            <img
+                              src={image.src}
+                              alt={image.alt}
+                              className="aspect-square h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="aspect-square h-full w-full bg-black/10" />
+                          )}
+                        </a>
+                      ),
+                    )}
                   </div>
 
                   <div className="overflow-hidden rounded-[10px] border border-black/10 bg-black/10">
-                    {leadImage ? (
+                    {leadListing ? (
+                      <a href={`/profiles/${leadListing.slug}`} className="block">
+                        {leadImage ? (
+                          <img
+                            src={leadImage}
+                            alt={leadListing.name || company.name}
+                            className="aspect-[4/4.6] h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="aspect-[4/4.6] h-full w-full bg-black/10" />
+                        )}
+                      </a>
+                    ) : leadImage ? (
                       <img
                         src={leadImage}
-                        alt={leadListing?.name || company.name}
+                        alt={company.name}
                         className="aspect-[4/4.6] h-full w-full object-cover"
                       />
                     ) : (
@@ -438,9 +475,13 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
               const coverImage = listing.data?.coverImage || "";
               const logoImage = listing.data?.logoImage || "";
               const location =
-                listing.locationLabel || listing.data?.locationLabel || "Location not set";
+                listing.locationLabel ||
+                listing.data?.locationLabel ||
+                "Location not set";
               const vibe = listing.vibe || listing.data?.vibe || "";
               const website = listing.website || listing.data?.website || "";
+              const propertyClass =
+                listing.class || listing.data?.class || "property";
               const rating = toNumber(
                 listing.data?.rating ?? listing.tripadvisorRating,
               );
@@ -484,7 +525,7 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
 
                     <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-4">
                       <span className="rounded-full border border-amber-300/20 bg-black/35 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-amber-100 backdrop-blur">
-                        {listing.class || "property"}
+                        {propertyClass}
                       </span>
                     </div>
 
@@ -507,9 +548,9 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
                     {(listing.data?.tradeProfileLabel ||
                       listing.data?.tradeProfileSub) && (
                       <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                        [listing.data?.tradeProfileLabel, listing.data?.tradeProfileSub]
+                        {[listing.data?.tradeProfileLabel, listing.data?.tradeProfileSub]
                           .filter(Boolean)
-                          .join(" · ")
+                          .join(" · ")}
                       </p>
                     )}
 
@@ -536,9 +577,9 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
                     </p>
 
                     <div className="mt-5 flex flex-wrap gap-2">
-                      {vibe ? (
+                      {propertyClass ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
-                          Signature vibe
+                          {propertyClass}
                         </span>
                       ) : null}
                       {website ? (
