@@ -2,95 +2,6 @@ import { headers } from "next/headers";
 
 type ListingStatus = "draft" | "published" | "archived";
 
-type GalleryGroup = {
-  label: string;
-  images: string[];
-};
-
-type RateRow = {
-  season: string;
-  dates: string;
-  rackPPPN: string;
-};
-
-type ContactItem = {
-  name?: string | null;
-  role?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  whatsapp?: string | null;
-};
-
-type ListingData = {
-  overview?: string | null;
-  snapshot?: {
-    rooms?: string | null;
-    location?: string | null;
-    bestFor?: string | null;
-    setting?: string | null;
-    style?: string | null;
-    access?: string | null;
-  };
-  gallery?: GalleryGroup[];
-  rates?: {
-    currency?: string | null;
-    notes?: string[];
-    rows?: RateRow[];
-  };
-  experiences?: {
-    included?: string[];
-    paid?: string[];
-  };
-  policies?: {
-    childPolicy?: string | null;
-    honeymoonPolicy?: string | null;
-    cancellation?: string | null;
-    importantNotes?: string[];
-    tradeNotes?: string[];
-  };
-  downloads?: {
-    label: string;
-    url: string;
-    type?: string | null;
-  }[];
-  contacts?: {
-    reservations?: ContactItem[];
-    sales?: ContactItem[];
-    marketing?: ContactItem[];
-  };
-  offers?: string[];
-  sustainability?: string | null;
-
-  // legacy fields still tolerated
-  class?: string;
-  vibe?: string;
-  tradeProfileLabel?: string;
-  tradeProfileSub?: string;
-  locationLabel?: string;
-  logoImage?: string;
-  coverImage?: string;
-  heroImage?: string;
-  website?: string;
-  facebookUrl?: string;
-  instagramUrl?: string;
-  tiktokUrl?: string;
-  youtubeUrl?: string;
-  rating?: number | string;
-  reviewCount?: number | string;
-  quickTags?: string[];
-};
-
-type ListingDesign = {
-  preset?: "safari-dossier" | "modern-trade-deck" | "editorial-luxury";
-  theme?: {
-    pageBg?: string;
-    blockBg?: string;
-    accent?: string;
-    highlight?: string;
-    borderColor?: string;
-  } | null;
-};
-
 type ApiListingRecord = {
   id: string;
   slug: string;
@@ -103,9 +14,15 @@ type ApiListingRecord = {
   website: string | null;
   mapLink: string | null;
   tripadvisorRating: number | null;
-  design?: ListingDesign;
-  data?: ListingData;
+  design?: {
+    preset?: string;
+  } | null;
+  data?: Record<string, unknown> | null;
 };
+
+function toText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 function toNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -116,23 +33,40 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function toText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+function getRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function getStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === "string")
+    .map((item) => String(item).trim())
+    .filter(Boolean);
 }
 
 function getPrimaryImage(listing: ApiListingRecord): string {
-  const data = listing.data;
+  const data = getRecord(listing.data);
 
-  if (toText(data?.coverImage)) return toText(data?.coverImage);
-  if (toText(data?.heroImage)) return toText(data?.heroImage);
+  const coverImage = toText(data.coverImage);
+  if (coverImage) return coverImage;
 
-  if (Array.isArray(data?.gallery)) {
-    for (const group of data.gallery) {
-      if (!Array.isArray(group.images)) continue;
+  const heroImage = toText(data.heroImage);
+  if (heroImage) return heroImage;
 
-      for (const image of group.images) {
-        if (typeof image === "string" && image.trim()) {
-          return image.trim();
+  const gallery = data.gallery;
+  if (Array.isArray(gallery)) {
+    for (const group of gallery) {
+      const groupRecord = getRecord(group);
+      const images = groupRecord.images;
+
+      if (Array.isArray(images)) {
+        for (const image of images) {
+          const value = toText(image);
+          if (value) return value;
         }
       }
     }
@@ -142,45 +76,45 @@ function getPrimaryImage(listing: ApiListingRecord): string {
 }
 
 function getQuickTags(listing: ApiListingRecord): string[] {
-  if (Array.isArray(listing.data?.quickTags)) {
-    return Array.from(
-      new Set(
-        listing.data.quickTags
-          .filter((tag): tag is string => typeof tag === "string")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-      ),
-    ).slice(0, 4);
+  const data = getRecord(listing.data);
+  const quickTags = getStringArray(data.quickTags);
+
+  if (quickTags.length > 0) {
+    return Array.from(new Set(quickTags)).slice(0, 4);
   }
 
-  return Array.from(
-    new Set(
-      [listing.class, listing.vibe, listing.data?.snapshot?.bestFor]
-        .filter((value): value is string => typeof value === "string" && value.trim())
-        .map((value) => value.trim()),
-    ),
-  ).slice(0, 4);
+  const snapshot = getRecord(data.snapshot);
+  const fallback = [listing.class, listing.vibe, toText(snapshot.bestFor)]
+    .filter((value) => typeof value === "string" && value.trim())
+    .map((value) => String(value).trim());
+
+  return Array.from(new Set(fallback)).slice(0, 4);
 }
 
 function getLowestRackRate(listing: ApiListingRecord): string {
-  const rows = listing.data?.rates?.rows;
+  const data = getRecord(listing.data);
+  const rates = getRecord(data.rates);
+  const rows = rates.rows;
 
-  if (!Array.isArray(rows) || rows.length === 0) return "";
+  if (!Array.isArray(rows)) return "";
 
-  const numericValues: number[] = [];
+  const values: number[] = [];
 
   for (const row of rows) {
-    if (!row || typeof row.rackPPPN !== "string") continue;
+    const rowRecord = getRecord(row);
+    const raw = toText(rowRecord.rackPPPN);
 
-    const numeric = Number(row.rackPPPN.replace(/[^0-9.]/g, ""));
+    if (!raw) continue;
+
+    const numeric = Number(raw.replace(/[^0-9.]/g, ""));
     if (Number.isFinite(numeric)) {
-      numericValues.push(numeric);
+      values.push(numeric);
     }
   }
 
-  if (numericValues.length === 0) return "";
+  if (values.length === 0) return "";
 
-  return `$${Math.min(...numericValues)}`;
+  return `$${Math.min(...values)}`;
 }
 
 function isPropertyListing(listing: ApiListingRecord): boolean {
@@ -210,15 +144,12 @@ export default async function DirectoryPage() {
       throw new Error("Failed to load listings");
     }
 
-    const json: unknown = await response.json();
+    const json = await response.json();
+    const root = getRecord(json);
+    const rawListings = root.listings;
 
-    if (
-      typeof json === "object" &&
-      json !== null &&
-      "listings" in json &&
-      Array.isArray((json as { listings?: unknown }).listings)
-    ) {
-      listings = (json as { listings: ApiListingRecord[] }).listings;
+    if (Array.isArray(rawListings)) {
+      listings = rawListings as ApiListingRecord[];
     }
   } catch {
     loadError = true;
@@ -258,42 +189,49 @@ export default async function DirectoryPage() {
 
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {visibleListings.map((listing) => {
-            const data = listing.data ?? {};
+            const data = getRecord(listing.data);
+            const snapshot = getRecord(data.snapshot);
+
             const coverImage = getPrimaryImage(listing);
             const logoImage = toText(data.logoImage);
             const location =
               listing.location ||
-              data.snapshot?.location ||
-              data.locationLabel ||
+              toText(snapshot.location) ||
+              toText(data.locationLabel) ||
               "Location not set";
+
             const vibe =
               listing.vibe ||
-              data.vibe ||
-              data.overview ||
+              toText(data.vibe) ||
+              toText(data.overview) ||
               "Trade-ready safari property profile.";
-            const website = listing.website || data.website || "";
-            const rating = toNumber(data.rating ?? listing.tripadvisorRating);
+
+            const website = listing.website || toText(data.website);
+            const rating = toNumber(
+              data.rating !== undefined ? data.rating : listing.tripadvisorRating,
+            );
             const reviewCount = toNumber(data.reviewCount);
-            const propertyClass = listing.class || data.class || "";
-            const rooms = toText(data.snapshot?.rooms);
-            const bestFor = toText(data.snapshot?.bestFor);
-            const access = toText(data.snapshot?.access);
+            const propertyClass = listing.class || toText(data.class);
+            const rooms = toText(snapshot.rooms);
+            const bestFor = toText(snapshot.bestFor);
+            const access = toText(snapshot.access);
             const rackFrom = getLowestRackRate(listing);
             const quickTags = getQuickTags(listing);
 
-            const socialLinks = {
-              facebookUrl: toText(data.facebookUrl),
-              instagramUrl: toText(data.instagramUrl),
-              tiktokUrl: toText(data.tiktokUrl),
-              youtubeUrl: toText(data.youtubeUrl),
-            };
+            const instagramUrl = toText(data.instagramUrl);
+            const facebookUrl = toText(data.facebookUrl);
+            const tiktokUrl = toText(data.tiktokUrl);
+            const youtubeUrl = toText(data.youtubeUrl);
 
             const hasLinks =
               Boolean(website) ||
-              Boolean(socialLinks.facebookUrl) ||
-              Boolean(socialLinks.instagramUrl) ||
-              Boolean(socialLinks.tiktokUrl) ||
-              Boolean(socialLinks.youtubeUrl);
+              Boolean(instagramUrl) ||
+              Boolean(facebookUrl) ||
+              Boolean(tiktokUrl) ||
+              Boolean(youtubeUrl);
+
+            const tradeProfileLabel = toText(data.tradeProfileLabel);
+            const tradeProfileSub = toText(data.tradeProfileSub);
 
             return (
               <div
@@ -345,13 +283,11 @@ export default async function DirectoryPage() {
                 </div>
 
                 <div className="p-6">
-                  {(data.tradeProfileLabel || data.tradeProfileSub) && (
+                  {(tradeProfileLabel || tradeProfileSub) ? (
                     <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                      {[data.tradeProfileLabel, data.tradeProfileSub]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {[tradeProfileLabel, tradeProfileSub].filter(Boolean).join(" · ")}
                     </p>
-                  )}
+                  ) : null}
 
                   <h2 className="text-2xl font-semibold">{listing.name}</h2>
 
@@ -363,9 +299,7 @@ export default async function DirectoryPage() {
                         <span className="text-white/25">•</span>
                         <span>
                           {rating.toFixed(1)}
-                          {typeof reviewCount === "number"
-                            ? ` (${reviewCount})`
-                            : ""}
+                          {typeof reviewCount === "number" ? ` (${reviewCount})` : ""}
                         </span>
                       </>
                     ) : null}
@@ -388,7 +322,7 @@ export default async function DirectoryPage() {
                     </div>
                   ) : null}
 
-                  {(rooms || bestFor || access || rackFrom) && (
+                  {(rooms || bestFor || access || rackFrom) ? (
                     <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-white/75">
                       {rooms ? (
                         <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
@@ -435,22 +369,22 @@ export default async function DirectoryPage() {
                           Website
                         </span>
                       ) : null}
-                      {socialLinks.instagramUrl ? (
+                      {instagramUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           Instagram
                         </span>
                       ) : null}
-                      {socialLinks.facebookUrl ? (
+                      {facebookUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           Facebook
                         </span>
                       ) : null}
-                      {socialLinks.tiktokUrl ? (
+                      {tiktokUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           TikTok
                         </span>
                       ) : null}
-                      {socialLinks.youtubeUrl ? (
+                      {youtubeUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           YouTube
                         </span>
