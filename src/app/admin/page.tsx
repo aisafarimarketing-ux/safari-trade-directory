@@ -220,7 +220,7 @@ type PdfImportResponse = {
   error?: string;
 };
 
-const STORAGE_KEY = "safaritrade-admin-v3";
+const STORAGE_KEY = "safaritrade-admin-v4";
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e8e1d8",
@@ -279,6 +279,29 @@ function textToLines(value: string): string[] {
 
 function linesToText(value: unknown): string {
   return getStringArray(value).join("\n");
+}
+
+async function parseResponseSafely<T = unknown>(response: Response): Promise<{
+  json: T | null;
+  text: string;
+}> {
+  const text = await response.text();
+
+  if (!text) {
+    return { json: null, text: "" };
+  }
+
+  try {
+    return {
+      json: JSON.parse(text) as T,
+      text,
+    };
+  } catch {
+    return {
+      json: null,
+      text,
+    };
+  }
 }
 
 function makeContact(): ContactItem {
@@ -344,7 +367,12 @@ function makeEmptyListing(): ListingEditorState {
       style: "",
       access: "",
     },
-    gallery: [makeGalleryGroup("Gallery")],
+    gallery: [
+      makeGalleryGroup("Gallery 1"),
+      makeGalleryGroup("Gallery 2"),
+      makeGalleryGroup("Gallery 3"),
+      makeGalleryGroup("Gallery 4"),
+    ],
     rates: {
       currency: "",
       notesText: "Rates per person sharing\nFull board\nPark fees excluded",
@@ -391,20 +419,33 @@ function normalizeTheme(value: unknown): ThemeState {
 }
 
 function normalizeGallery(value: unknown): GalleryGroup[] {
-  if (!Array.isArray(value)) return [makeGalleryGroup("Gallery")];
+  if (!Array.isArray(value)) {
+    return [
+      makeGalleryGroup("Gallery 1"),
+      makeGalleryGroup("Gallery 2"),
+      makeGalleryGroup("Gallery 3"),
+      makeGalleryGroup("Gallery 4"),
+    ];
+  }
 
   const rows = value
-    .map((item) => {
+    .map((item, index) => {
       const row = getRecord(item);
       return {
         id: uid(),
-        label: getString(row.label) || "Gallery",
+        label: getString(row.label) || `Gallery ${index + 1}`,
         images: getStringArray(row.images),
       };
     })
     .filter((item) => item.label || item.images.length > 0);
 
-  return rows.length > 0 ? rows : [makeGalleryGroup("Gallery")];
+  if (rows.length >= 4) return rows;
+
+  const padded = [...rows];
+  while (padded.length < 4) {
+    padded.push(makeGalleryGroup(`Gallery ${padded.length + 1}`));
+  }
+  return padded;
 }
 
 function normalizeRates(value: unknown) {
@@ -486,8 +527,12 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
   const gallery = normalizeGallery(data.gallery);
   const flatImages = getStringArray(data.images);
 
-  if (flatImages.length > 0 && gallery.length === 1 && gallery[0].images.length === 0) {
-    gallery[0].images = flatImages;
+  if (flatImages.length > 0) {
+    for (let i = 0; i < flatImages.length && i < gallery.length; i += 1) {
+      if (gallery[i] && gallery[i].images.length === 0) {
+        gallery[i].images = [flatImages[i]];
+      }
+    }
   }
 
   const logoImage = getString(data.logoImage);
@@ -583,7 +628,9 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
           ? normalizeContactList(contacts.marketing)
           : [makeContact()],
     },
-    offersText: getString(data.offersText || data.offerText || data.offerHeadline),
+    offersText: getString(
+      data.offersText || data.offerText || data.offerHeadline,
+    ),
     sustainability: getString(data.sustainability),
     enquiryEmail:
       getString(data.enquiryEmail) ||
@@ -604,7 +651,9 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
 
 function toApiPayload(listing: ListingEditorState) {
   const normalizedSlug = listing.slug.trim() || slugify(listing.name);
-  const flatImages = listing.gallery.flatMap((group) => group.images).filter(Boolean);
+  const flatImages = listing.gallery
+    .flatMap((group) => group.images)
+    .filter(Boolean);
 
   return {
     slug: normalizedSlug,
@@ -872,10 +921,11 @@ function Section(props: {
 
 function Field(props: {
   label: string;
+  id?: string;
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
+    <label className="block" id={props.id}>
       <div className="mb-1 text-xs font-semibold text-white/55">
         {props.label}
       </div>
@@ -928,14 +978,14 @@ function EditorUploadZone(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className={`group relative w-full overflow-hidden rounded-[16px] border border-dashed text-left transition hover:opacity-95 ${props.className || ""}`}
+      className={`group relative w-full overflow-hidden rounded-[12px] border border-dashed text-left transition hover:opacity-95 ${props.className || ""}`}
       style={{
-        borderColor: "rgba(106,82,55,0.28)",
-        backgroundColor: "rgba(255,255,255,0.34)",
+        borderColor: "rgba(106,82,55,0.24)",
+        backgroundColor: "rgba(255,255,255,0.28)",
       }}
     >
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(106,82,55,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(106,82,55,0.03)_1px,transparent_1px)] bg-[size:28px_28px]" />
-      <div className="absolute left-4 top-4 z-10 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6a5237] backdrop-blur">
+      <div className="absolute left-4 top-4 z-10 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6a5237]">
         Click to upload
       </div>
       <div className="absolute bottom-4 left-4 right-4 z-10">
@@ -969,15 +1019,20 @@ export default function AdminPage() {
         const response = await fetch("/api/admin/listings", {
           cache: "no-store",
         });
+
         if (response.ok) {
-          const json = await response.json();
+          const { json } = await parseResponseSafely<{
+            listings?: ApiListingRecord[];
+          } | ApiListingRecord[]>(response);
+
           const rawListings = Array.isArray(json)
             ? json
-            : Array.isArray(json.listings)
+            : Array.isArray(json?.listings)
               ? json.listings
               : [];
+
           if (rawListings.length > 0) {
-            const next = (rawListings as ApiListingRecord[]).map(fromApiListing);
+            const next = rawListings.map(fromApiListing);
             setListings(next);
             setSelectedIndex(0);
             setSaveState(`Loaded ${next.length} listing(s) from API`);
@@ -1043,7 +1098,7 @@ export default function AdminPage() {
 
   function addGalleryGroup() {
     updateListing({
-      gallery: [...selected.gallery, makeGalleryGroup("Gallery")],
+      gallery: [...selected.gallery, makeGalleryGroup(`Gallery ${selected.gallery.length + 1}`)],
     });
   }
 
@@ -1056,7 +1111,7 @@ export default function AdminPage() {
   function removeGalleryGroup(index: number) {
     const next = selected.gallery.filter((_, i) => i !== index);
     updateListing({
-      gallery: next.length > 0 ? next : [makeGalleryGroup("Gallery")],
+      gallery: next.length > 0 ? next : [makeGalleryGroup("Gallery 1")],
     });
   }
 
@@ -1154,10 +1209,18 @@ export default function AdminPage() {
       body: form,
     });
 
-    const json = (await response.json()) as UploadApiResponse;
+    const { json, text } = await parseResponseSafely<UploadApiResponse>(response);
 
-    if (!response.ok || !json.success || !json.file) {
-      throw new Error(json.error || "Upload failed");
+    if (!response.ok) {
+      throw new Error(
+        json?.error ||
+          text ||
+          `Upload failed with status ${response.status}`,
+      );
+    }
+
+    if (!json?.success || !json.file) {
+      throw new Error(json?.error || "Upload failed");
     }
 
     return json.file;
@@ -1273,10 +1336,10 @@ export default function AdminPage() {
         body: form,
       });
 
-      const json = (await response.json()) as PdfImportResponse;
+      const { json, text } = await parseResponseSafely<PdfImportResponse>(response);
 
-      if (!response.ok || !json.success) {
-        throw new Error(json.error || "PDF import failed");
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.error || text || "PDF import failed");
       }
 
       const merged = mergeImportedListing(selected, json.parsed);
@@ -1333,13 +1396,20 @@ export default function AdminPage() {
         body: JSON.stringify(payload),
       });
 
-      const json = await response.json();
+      const { json, text } = await parseResponseSafely<{
+        listing?: ApiListingRecord;
+        error?: string;
+      }>(response);
 
       if (!response.ok) {
-        throw new Error(json?.error || "Save failed");
+        throw new Error(json?.error || text || "Save failed");
       }
 
-      const normalized = fromApiListing(json.listing as ApiListingRecord);
+      if (!json?.listing) {
+        throw new Error("Save succeeded but no listing was returned");
+      }
+
+      const normalized = fromApiListing(json.listing);
       setListings((prev) => {
         const next = [...prev];
         next[selectedIndex] = normalized;
@@ -1353,7 +1423,6 @@ export default function AdminPage() {
   }
 
   const previewTheme = selected.theme;
-  const previewTags = textToLines(selected.quickTagsText);
   const previewRateRows = selected.rates.rows.filter(
     (row) => row.season || row.dates || row.rackPPPN,
   );
@@ -1364,15 +1433,6 @@ export default function AdminPage() {
   const previewReservations = selected.contacts.reservations.filter(
     (item) => item.name || item.role || item.email || item.phone || item.whatsapp,
   );
-
-  const heroGallery = selected.gallery.flatMap((group) =>
-    group.images.map((src, index) => ({
-      src,
-      label: `${group.label} ${index + 1}`,
-    })),
-  );
-
-  const heroGalleryFour = heroGallery.slice(0, 4);
 
   const overviewText =
     selected.overview.trim() ||
@@ -1468,8 +1528,12 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="text-xs text-white/40">{uploadState}</div>
-            <div className="text-xs text-white/55">{saveState}</div>
+            <div className="max-w-[280px] truncate text-xs text-white/40">
+              {uploadState}
+            </div>
+            <div className="max-w-[220px] truncate text-xs text-white/55">
+              {saveState}
+            </div>
             <button
               onClick={saveActiveListing}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white"
@@ -1514,6 +1578,30 @@ export default function AdminPage() {
                     {item.name || `Listing ${index + 1}`}
                   </button>
                 ))}
+              </div>
+            </Section>
+
+            <Section title="Preview shortcuts">
+              <div className="space-y-2">
+                <SmallButton onClick={() => setIsPreview(true)}>
+                  <Eye size={14} />
+                  Open dossier preview
+                </SmallButton>
+
+                <SmallButton onClick={() => logoFileRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload logo
+                </SmallButton>
+
+                <SmallButton onClick={() => coverFileRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload hero
+                </SmallButton>
+
+                <SmallButton onClick={() => downloadFileRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload downloadable
+                </SmallButton>
               </div>
             </Section>
 
@@ -1587,30 +1675,6 @@ export default function AdminPage() {
                     }
                   />
                 </Field>
-              </div>
-            </Section>
-
-            <Section title="Preview shortcuts">
-              <div className="space-y-2">
-                <SmallButton onClick={() => setIsPreview(true)}>
-                  <Eye size={14} />
-                  Open dossier preview
-                </SmallButton>
-
-                <SmallButton onClick={() => logoFileRef.current?.click()}>
-                  <Upload size={14} />
-                  Upload logo
-                </SmallButton>
-
-                <SmallButton onClick={() => coverFileRef.current?.click()}>
-                  <Upload size={14} />
-                  Upload hero
-                </SmallButton>
-
-                <SmallButton onClick={() => downloadFileRef.current?.click()}>
-                  <Upload size={14} />
-                  Upload downloadable
-                </SmallButton>
               </div>
             </Section>
           </aside>
@@ -1830,7 +1894,7 @@ export default function AdminPage() {
             </Section>
 
             <Section title="Offer strip">
-              <Field label="Promo text shown below hero">
+              <Field label="Promo text shown below hero" id="offers-field">
                 <TextInput
                   value={selected.offersText}
                   onChange={(e) => updateListing({ offersText: e.target.value })}
@@ -2263,9 +2327,9 @@ export default function AdminPage() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto max-w-[1240px] px-4 py-6 md:px-6 md:py-8">
+        <div className="mx-auto max-w-[1220px] px-4 py-6 md:px-6 md:py-8">
           <div
-            className="overflow-hidden rounded-[22px] border shadow-[0_22px_60px_rgba(78,56,28,0.08)]"
+            className="overflow-hidden rounded-[18px] border shadow-[0_22px_60px_rgba(78,56,28,0.08)]"
             style={{
               borderColor: previewTheme.borderColor,
               backgroundColor: previewTheme.blockBg,
@@ -2294,7 +2358,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={() => logoFileRef.current?.click()}
-                    className="rounded-full border px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.24em]"
+                    className="rounded-full border px-5 py-2 text-[12px] font-semibold uppercase tracking-[0.24em]"
                     style={{
                       borderColor: previewTheme.borderColor,
                       backgroundColor: "rgba(255,255,255,0.42)",
@@ -2308,7 +2372,7 @@ export default function AdminPage() {
 
             <section className="px-4 pb-5 pt-4 md:px-8 md:pt-6">
               <div
-                className="overflow-hidden rounded-[18px] border"
+                className="overflow-hidden rounded-[16px] border"
                 style={{ borderColor: previewTheme.borderColor }}
               >
                 <div className="relative">
@@ -2385,8 +2449,9 @@ export default function AdminPage() {
 
                 <div className="px-4 py-4 md:px-6">
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {selected.gallery.map((group, groupIndex) => {
+                    {selected.gallery.slice(0, 4).map((group, groupIndex) => {
                       const image = group.images[0];
+
                       return (
                         <React.Fragment key={group.id}>
                           <input
@@ -2399,49 +2464,38 @@ export default function AdminPage() {
                             className="hidden"
                             onChange={(e) => handleGalleryUpload(e, groupIndex)}
                           />
-                          {groupIndex < 4 ? (
-                            image ? (
-                              <button
-                                type="button"
-                                onClick={() => galleryFileRefs.current[group.id]?.click()}
-                                className="overflow-hidden rounded-[10px] border text-left"
-                                style={{ borderColor: previewTheme.borderColor }}
-                                title="Upload more images to this gallery slot"
-                              >
-                                <img
-                                  src={image}
-                                  alt={group.label}
-                                  className="aspect-[4/2.3] w-full object-cover"
-                                />
-                              </button>
-                            ) : (
-                              <EditorUploadZone
-                                title={group.label || `Gallery ${groupIndex + 1}`}
-                                subtitle="Upload gallery image"
-                                onClick={() => galleryFileRefs.current[group.id]?.click()}
-                                className="aspect-[4/2.3]"
+                          {image ? (
+                            <button
+                              type="button"
+                              onClick={() => galleryFileRefs.current[group.id]?.click()}
+                              className="overflow-hidden rounded-[10px] border text-left"
+                              style={{ borderColor: previewTheme.borderColor }}
+                              title="Replace gallery image"
+                            >
+                              <img
+                                src={image}
+                                alt={group.label}
+                                className="aspect-[4/2.25] w-full object-cover"
                               />
-                            )
-                          ) : null}
+                            </button>
+                          ) : (
+                            <EditorUploadZone
+                              title={group.label || `Gallery ${groupIndex + 1}`}
+                              subtitle="Upload gallery image"
+                              onClick={() => galleryFileRefs.current[group.id]?.click()}
+                              className="aspect-[4/2.25]"
+                            />
+                          )}
                         </React.Fragment>
                       );
                     })}
-
-                    {selected.gallery.length < 4
-                      ? Array.from({ length: 4 - selected.gallery.length }).map((_, i) => (
-                          <EditorUploadZone
-                            key={`empty-gallery-${i}`}
-                            title={`Gallery ${selected.gallery.length + i + 1}`}
-                            subtitle="Add a gallery group first, then upload"
-                            onClick={addGalleryGroup}
-                            className="aspect-[4/2.3]"
-                          />
-                        ))
-                      : null}
                   </div>
                 </div>
 
-                <div className="border-t px-4 py-3 md:px-6" style={{ borderColor: previewTheme.borderColor }}>
+                <div
+                  className="border-t px-4 py-3 md:px-6"
+                  style={{ borderColor: previewTheme.borderColor }}
+                >
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
                     {factTabs.map((fact, index) => (
                       <div key={`${fact.label}-${index}`}>
@@ -2461,7 +2515,7 @@ export default function AdminPage() {
                             backgroundColor: "rgba(255,255,255,0.40)",
                           }}
                         >
-                          <div className="text-[28px] font-semibold leading-none md:text-[34px]">
+                          <div className="text-[24px] font-semibold leading-none md:text-[30px]">
                             {fact.value}
                           </div>
                           <div className="mt-2 text-sm" style={{ opacity: 0.72 }}>
@@ -2487,7 +2541,10 @@ export default function AdminPage() {
                   <h2 className="text-[30px] font-semibold leading-tight md:text-[40px]">
                     {selected.name}
                   </h2>
-                  <p className="mt-4 max-w-3xl text-base leading-8 md:text-[18px]" style={{ opacity: 0.76 }}>
+                  <p
+                    className="mt-4 max-w-3xl text-base leading-8 md:text-[18px]"
+                    style={{ opacity: 0.76 }}
+                  >
                     {overviewText}
                   </p>
                 </div>
@@ -2672,10 +2729,15 @@ export default function AdminPage() {
                       ) : null}
 
                       {textToLines(selected.experiences.paidText).length > 0 ? (
-                        <div className="mt-4 border-t pt-4" style={{ borderColor: previewTheme.borderColor }}>
+                        <div
+                          className="mt-4 border-t pt-4"
+                          style={{ borderColor: previewTheme.borderColor }}
+                        >
                           <div className="text-sm font-semibold">Supplements</div>
                           <div className="mt-2 text-sm" style={{ opacity: 0.75 }}>
-                            {textToLines(selected.experiences.paidText).slice(0, 4).join(" • ")}
+                            {textToLines(selected.experiences.paidText)
+                              .slice(0, 4)
+                              .join(" • ")}
                           </div>
                         </div>
                       ) : null}
@@ -2703,7 +2765,10 @@ export default function AdminPage() {
                             backgroundColor: "rgba(255,255,255,0.36)",
                           }}
                         >
-                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
+                          <div
+                            className="text-[11px] uppercase tracking-[0.18em]"
+                            style={{ opacity: 0.6 }}
+                          >
                             Included
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -2729,7 +2794,10 @@ export default function AdminPage() {
                             backgroundColor: "rgba(255,255,255,0.36)",
                           }}
                         >
-                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
+                          <div
+                            className="text-[11px] uppercase tracking-[0.18em]"
+                            style={{ opacity: 0.6 }}
+                          >
                             Paid
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -2791,7 +2859,10 @@ export default function AdminPage() {
                                 backgroundColor: "rgba(255,255,255,0.36)",
                               }}
                             >
-                              <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
+                              <div
+                                className="text-[11px] uppercase tracking-[0.18em]"
+                                style={{ opacity: 0.6 }}
+                              >
                                 {label}
                               </div>
                               <div className="mt-2 whitespace-pre-line text-sm leading-7 md:text-base">
@@ -2915,13 +2986,6 @@ export default function AdminPage() {
               </div>
             </section>
           </div>
-
-          <input
-            id="offers-field"
-            type="hidden"
-            value={selected.offersText}
-            readOnly
-          />
         </div>
       )}
     </div>
