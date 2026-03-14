@@ -1,48 +1,87 @@
 import { NextResponse } from "next/server";
 
+type ListingStatus = "draft" | "published" | "archived";
+
 type ThemeState = {
-  pageBg: string;
-  blockBg: string;
-  accent: string;
-  highlight: string;
-  borderColor: string;
+  pageBg?: string;
+  blockBg?: string;
+  accent?: string;
+  highlight?: string;
+  borderColor?: string;
 };
 
-type BlockColorState = {
-  header: string;
-  tripadvisor: string;
-  tradeDetails: string;
-  matrix: string;
-  inclusions: string;
-  exclusions: string;
-  experiences: string;
-  offers: string;
-  terms: string;
-  leadCapture: string;
-  contactCard: string;
-  downloadables: string;
-};
-
-type VisibleBlocksState = {
-  header: boolean;
-  tripadvisor: boolean;
-  tradeDetails: boolean;
-  matrix: boolean;
-  inclusions: boolean;
-  exclusions: boolean;
-  experiences: boolean;
-  offers: boolean;
-  terms: boolean;
-  leadCapture: boolean;
-  contactCard: boolean;
-  downloadables: boolean;
-  hero: boolean;
-};
+type ListingDesignPreset =
+  | "safari-dossier"
+  | "modern-trade-deck"
+  | "editorial-luxury";
 
 type ListingDesign = {
+  preset: ListingDesignPreset;
   theme: ThemeState | null;
-  blockColors: BlockColorState | null;
-  visibleBlocks: VisibleBlocksState | null;
+};
+
+type GalleryGroup = {
+  label: string;
+  images: string[];
+};
+
+type RateRow = {
+  season: string;
+  dates: string;
+  rackPPPN: string;
+};
+
+type ExperienceGroup = {
+  included: string[];
+  paid: string[];
+};
+
+type DownloadItem = {
+  label: string;
+  url: string;
+  type?: string | null;
+};
+
+type ContactItem = {
+  name?: string | null;
+  role?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+};
+
+type ListingData = {
+  overview?: string | null;
+  snapshot: {
+    rooms?: string | null;
+    location?: string | null;
+    bestFor?: string | null;
+    setting?: string | null;
+    style?: string | null;
+    access?: string | null;
+  };
+  gallery: GalleryGroup[];
+  rates: {
+    currency?: string | null;
+    notes: string[];
+    rows: RateRow[];
+  };
+  experiences: ExperienceGroup;
+  policies: {
+    childPolicy?: string | null;
+    honeymoonPolicy?: string | null;
+    cancellation?: string | null;
+    importantNotes: string[];
+    tradeNotes: string[];
+  };
+  downloads: DownloadItem[];
+  contacts: {
+    reservations: ContactItem[];
+    sales: ContactItem[];
+    marketing: ContactItem[];
+  };
+  offers: string[];
+  sustainability?: string | null;
 };
 
 type ListingRecord = {
@@ -50,14 +89,14 @@ type ListingRecord = {
   slug: string;
   name: string;
   companySlug: string | null;
-  status: "draft" | "published" | "archived";
-  locationLabel: string | null;
+  status: ListingStatus;
+  location: string | null;
   class: string | null;
   vibe: string | null;
   website: string | null;
   mapLink: string | null;
   tripadvisorRating: number | null;
-  data: unknown;
+  data: ListingData;
   design: ListingDesign;
   createdAt: string;
   updatedAt: string;
@@ -85,6 +124,26 @@ function slugify(input: string) {
     .replace(/^-|-$/g, "");
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function asTrimmedString(value: unknown): string | null {
+  return isString(value) && value.trim() ? value.trim() : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function toNumberOrNull(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
@@ -92,33 +151,6 @@ function toNumberOrNull(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function pickDesign(
-  body: Record<string, unknown>,
-  existing?: ListingRecord,
-): ListingDesign {
-  const theme = isObject(body.theme)
-    ? (body.theme as ThemeState)
-    : existing?.design.theme ?? null;
-
-  const blockColors = isObject(body.blockColors)
-    ? (body.blockColors as BlockColorState)
-    : existing?.design.blockColors ?? null;
-
-  const visibleBlocks = isObject(body.visibleBlocks)
-    ? (body.visibleBlocks as VisibleBlocksState)
-    : existing?.design.visibleBlocks ?? null;
-
-  return {
-    theme,
-    blockColors,
-    visibleBlocks,
-  };
 }
 
 function extractListingInput(body: Record<string, unknown>) {
@@ -136,6 +168,268 @@ function extractListingInput(body: Record<string, unknown>) {
   }
 
   return body;
+}
+
+function normalizeDesign(
+  body: Record<string, unknown>,
+  existing?: ListingRecord,
+): ListingDesign {
+  const presetValue = asTrimmedString(body.preset) ?? asTrimmedString(body.designPreset);
+
+  const preset: ListingDesignPreset =
+    presetValue === "modern-trade-deck" ||
+    presetValue === "editorial-luxury" ||
+    presetValue === "safari-dossier"
+      ? presetValue
+      : existing?.design.preset ?? "safari-dossier";
+
+  const theme = isObject(body.theme)
+    ? (body.theme as ThemeState)
+    : existing?.design.theme ?? null;
+
+  return {
+    preset,
+    theme,
+  };
+}
+
+function normalizeGallery(raw: unknown): GalleryGroup[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      if (!isObject(item)) return null;
+
+      const label = asTrimmedString(item.label) ?? "Gallery";
+      const images = Array.isArray(item.images)
+        ? item.images
+            .filter((img): img is string => typeof img === "string")
+            .map((img) => img.trim())
+            .filter(Boolean)
+        : [];
+
+      return { label, images };
+    })
+    .filter((item): item is GalleryGroup => Boolean(item));
+}
+
+function normalizeRates(raw: unknown): ListingData["rates"] {
+  if (!isObject(raw)) {
+    return {
+      currency: null,
+      notes: [],
+      rows: [],
+    };
+  }
+
+  const rows = Array.isArray(raw.rows)
+    ? raw.rows
+        .map((row) => {
+          if (!isObject(row)) return null;
+
+          return {
+            season: asTrimmedString(row.season) ?? "",
+            dates: asTrimmedString(row.dates) ?? "",
+            rackPPPN:
+              asTrimmedString(row.rackPPPN) ??
+              asTrimmedString(row.rackRate) ??
+              "",
+          };
+        })
+        .filter(
+          (row): row is RateRow =>
+            Boolean(row) && Boolean(row.season || row.dates || row.rackPPPN),
+        )
+    : [];
+
+  return {
+    currency: asTrimmedString(raw.currency),
+    notes: asStringArray(raw.notes),
+    rows,
+  };
+}
+
+function normalizeExperiences(raw: unknown): ExperienceGroup {
+  if (!isObject(raw)) {
+    return { included: [], paid: [] };
+  }
+
+  return {
+    included: asStringArray(raw.included),
+    paid: asStringArray(raw.paid),
+  };
+}
+
+function normalizePolicies(raw: unknown): ListingData["policies"] {
+  if (!isObject(raw)) {
+    return {
+      childPolicy: null,
+      honeymoonPolicy: null,
+      cancellation: null,
+      importantNotes: [],
+      tradeNotes: [],
+    };
+  }
+
+  return {
+    childPolicy: asTrimmedString(raw.childPolicy),
+    honeymoonPolicy: asTrimmedString(raw.honeymoonPolicy),
+    cancellation: asTrimmedString(raw.cancellation),
+    importantNotes: asStringArray(raw.importantNotes),
+    tradeNotes: asStringArray(raw.tradeNotes),
+  };
+}
+
+function normalizeDownloads(raw: unknown): DownloadItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      if (!isObject(item)) return null;
+
+      const label = asTrimmedString(item.label);
+      const url = asTrimmedString(item.url);
+
+      if (!label || !url) return null;
+
+      return {
+        label,
+        url,
+        type: asTrimmedString(item.type),
+      };
+    })
+    .filter((item): item is DownloadItem => Boolean(item));
+}
+
+function normalizeContactList(raw: unknown): ContactItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      if (!isObject(item)) return null;
+
+      return {
+        name: asTrimmedString(item.name),
+        role: asTrimmedString(item.role),
+        email: asTrimmedString(item.email),
+        phone: asTrimmedString(item.phone),
+        whatsapp: asTrimmedString(item.whatsapp),
+      };
+    })
+    .filter((item): item is ContactItem => Boolean(item));
+}
+
+function normalizeContacts(raw: unknown): ListingData["contacts"] {
+  if (!isObject(raw)) {
+    return {
+      reservations: [],
+      sales: [],
+      marketing: [],
+    };
+  }
+
+  return {
+    reservations: normalizeContactList(raw.reservations),
+    sales: normalizeContactList(raw.sales),
+    marketing: normalizeContactList(raw.marketing),
+  };
+}
+
+function normalizeData(
+  input: Record<string, unknown>,
+  existing?: ListingRecord,
+): ListingData {
+  const rawData = isObject(input.data) ? input.data : {};
+  const previous = existing?.data;
+
+  const snapshotSource = isObject(rawData.snapshot) ? rawData.snapshot : {};
+
+  return {
+    overview:
+      asTrimmedString(rawData.overview) ??
+      previous?.overview ??
+      null,
+
+    snapshot: {
+      rooms:
+        asTrimmedString(snapshotSource.rooms) ??
+        asTrimmedString(input.rooms) ??
+        previous?.snapshot.rooms ??
+        null,
+      location:
+        asTrimmedString(snapshotSource.location) ??
+        asTrimmedString(input.location) ??
+        asTrimmedString(input.locationLabel) ??
+        previous?.snapshot.location ??
+        null,
+      bestFor:
+        asTrimmedString(snapshotSource.bestFor) ??
+        previous?.snapshot.bestFor ??
+        null,
+      setting:
+        asTrimmedString(snapshotSource.setting) ??
+        previous?.snapshot.setting ??
+        null,
+      style:
+        asTrimmedString(snapshotSource.style) ??
+        previous?.snapshot.style ??
+        null,
+      access:
+        asTrimmedString(snapshotSource.access) ??
+        previous?.snapshot.access ??
+        null,
+    },
+
+    gallery:
+      normalizeGallery(rawData.gallery).length > 0
+        ? normalizeGallery(rawData.gallery)
+        : previous?.gallery ?? [],
+
+    rates:
+      isObject(rawData.rates)
+        ? normalizeRates(rawData.rates)
+        : previous?.rates ?? { currency: null, notes: [], rows: [] },
+
+    experiences:
+      isObject(rawData.experiences)
+        ? normalizeExperiences(rawData.experiences)
+        : previous?.experiences ?? { included: [], paid: [] },
+
+    policies:
+      isObject(rawData.policies)
+        ? normalizePolicies(rawData.policies)
+        : previous?.policies ?? {
+            childPolicy: null,
+            honeymoonPolicy: null,
+            cancellation: null,
+            importantNotes: [],
+            tradeNotes: [],
+          },
+
+    downloads:
+      Array.isArray(rawData.downloads)
+        ? normalizeDownloads(rawData.downloads)
+        : previous?.downloads ?? [],
+
+    contacts:
+      isObject(rawData.contacts)
+        ? normalizeContacts(rawData.contacts)
+        : previous?.contacts ?? {
+            reservations: [],
+            sales: [],
+            marketing: [],
+          },
+
+    offers:
+      Array.isArray(rawData.offers)
+        ? asStringArray(rawData.offers)
+        : previous?.offers ?? [],
+
+    sustainability:
+      asTrimmedString(rawData.sustainability) ??
+      previous?.sustainability ??
+      null,
+  };
 }
 
 export async function GET() {
@@ -170,8 +464,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const name =
-      typeof listingInput.name === "string" ? listingInput.name.trim() : "";
+    const name = asTrimmedString(listingInput.name) ?? "";
 
     if (!name) {
       return NextResponse.json(
@@ -180,16 +473,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const slugInput =
-      typeof listingInput.slug === "string" ? listingInput.slug.trim() : "";
-
+    const slugInput = asTrimmedString(listingInput.slug);
     const slug = slugInput || slugify(name);
-
-    const companySlug =
-      typeof listingInput.companySlug === "string" &&
-      listingInput.companySlug.trim()
-        ? listingInput.companySlug.trim()
-        : "";
 
     if (!slug) {
       return NextResponse.json(
@@ -198,11 +483,13 @@ export async function POST(req: Request) {
       );
     }
 
+    const companySlug = asTrimmedString(listingInput.companySlug);
+
     if (companySlug && slug === companySlug) {
       return NextResponse.json(
         {
           error:
-            "Property slug cannot be the same as the company slug. Use a property name like 'nyumbani-serengeti'.",
+            "Property slug cannot be the same as the company slug. Use a property slug like 'nyumbani-serengeti'.",
         },
         { status: 400 },
       );
@@ -211,43 +498,43 @@ export async function POST(req: Request) {
     const existing = listingsStore.get(slug);
     const now = new Date().toISOString();
 
+    const requestedStatus = asTrimmedString(listingInput.status);
+    const status: ListingStatus =
+      requestedStatus === "draft" ||
+      requestedStatus === "published" ||
+      requestedStatus === "archived"
+        ? requestedStatus
+        : existing?.status ?? "draft";
+
+    const location =
+      asTrimmedString(listingInput.location) ??
+      asTrimmedString(listingInput.locationLabel) ??
+      existing?.location ??
+      null;
+
     const record: ListingRecord = {
       id: existing?.id ?? crypto.randomUUID(),
       slug,
       name,
-      companySlug: companySlug || existing?.companySlug || "nyumbani-collection",
-      status:
-        listingInput.status === "published" ||
-        listingInput.status === "archived" ||
-        listingInput.status === "draft"
-          ? listingInput.status
-          : existing?.status ?? "published",
-      locationLabel:
-        typeof listingInput.locationLabel === "string" &&
-        listingInput.locationLabel.trim()
-          ? listingInput.locationLabel.trim()
-          : existing?.locationLabel ?? null,
-      class:
-        typeof listingInput.class === "string" && listingInput.class.trim()
-          ? listingInput.class.trim()
-          : existing?.class ?? null,
-      vibe:
-        typeof listingInput.vibe === "string" && listingInput.vibe.trim()
-          ? listingInput.vibe.trim()
-          : existing?.vibe ?? null,
+      companySlug: companySlug ?? existing?.companySlug ?? null,
+      status,
+      location,
+      class: asTrimmedString(listingInput.class) ?? existing?.class ?? null,
+      vibe: asTrimmedString(listingInput.vibe) ?? existing?.vibe ?? null,
       website:
-        typeof listingInput.website === "string" && listingInput.website.trim()
-          ? listingInput.website.trim()
-          : existing?.website ?? null,
+        asTrimmedString(listingInput.website) ?? existing?.website ?? null,
       mapLink:
-        typeof listingInput.mapLink === "string" && listingInput.mapLink.trim()
-          ? listingInput.mapLink.trim()
-          : existing?.mapLink ?? null,
-      tripadvisorRating: toNumberOrNull(
-        listingInput.taRating ?? listingInput.rating,
-      ),
-      data: listingInput,
-      design: pickDesign(rawBody, existing),
+        asTrimmedString(listingInput.mapLink) ?? existing?.mapLink ?? null,
+      tripadvisorRating: (() => {
+        const next = toNumberOrNull(
+          listingInput.tripadvisorRating ??
+            listingInput.taRating ??
+            listingInput.rating,
+        );
+        return next ?? existing?.tripadvisorRating ?? null;
+      })(),
+      data: normalizeData(listingInput, existing),
+      design: normalizeDesign(rawBody, existing),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
