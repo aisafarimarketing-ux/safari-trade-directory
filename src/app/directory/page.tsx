@@ -1,19 +1,91 @@
 import { headers } from "next/headers";
 
+type ListingStatus = "draft" | "published" | "archived";
+
+type GalleryGroup = {
+  label: string;
+  images: string[];
+};
+
+type RateRow = {
+  season: string;
+  dates: string;
+  rackPPPN: string;
+};
+
+type DownloadItem = {
+  label: string;
+  url: string;
+  type?: string | null;
+};
+
+type ContactItem = {
+  name?: string | null;
+  role?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+};
+
 type ApiListingRecord = {
   id: string;
   slug: string;
   name: string;
   companySlug: string | null;
-  status: "draft" | "published" | "archived";
-  locationLabel: string | null;
+  status: ListingStatus;
+  location: string | null;
   class: string | null;
   vibe: string | null;
   website: string | null;
   mapLink: string | null;
   tripadvisorRating: number | null;
-  data: {
-    name?: string;
+  design?: {
+    preset?: "safari-dossier" | "modern-trade-deck" | "editorial-luxury";
+    theme?: {
+      pageBg?: string;
+      blockBg?: string;
+      accent?: string;
+      highlight?: string;
+      borderColor?: string;
+    } | null;
+  };
+  data?: {
+    overview?: string | null;
+    snapshot?: {
+      rooms?: string | null;
+      location?: string | null;
+      bestFor?: string | null;
+      setting?: string | null;
+      style?: string | null;
+      access?: string | null;
+    };
+    gallery?: GalleryGroup[];
+    rates?: {
+      currency?: string | null;
+      notes?: string[];
+      rows?: RateRow[];
+    };
+    experiences?: {
+      included?: string[];
+      paid?: string[];
+    };
+    policies?: {
+      childPolicy?: string | null;
+      honeymoonPolicy?: string | null;
+      cancellation?: string | null;
+      importantNotes?: string[];
+      tradeNotes?: string[];
+    };
+    downloads?: DownloadItem[];
+    contacts?: {
+      reservations?: ContactItem[];
+      sales?: ContactItem[];
+      marketing?: ContactItem[];
+    };
+    offers?: string[];
+    sustainability?: string | null;
+
+    // Backward-compatible fields still tolerated by directory UI
     class?: string;
     vibe?: string;
     tradeProfileLabel?: string;
@@ -28,6 +100,8 @@ type ApiListingRecord = {
     youtubeUrl?: string;
     rating?: number | string;
     reviewCount?: number | string;
+    quickTags?: string[];
+    heroImage?: string;
   };
 };
 
@@ -40,12 +114,71 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function isPropertyListing(listing: ApiListingRecord): boolean {
-  const slug = (listing.slug || "").trim().toLowerCase();
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
+function getPrimaryImage(listing: ApiListingRecord): string {
+  const data = listing.data;
+  const gallery = data?.gallery;
+
+  if (asString(data?.coverImage)) return asString(data?.coverImage);
+  if (asString(data?.heroImage)) return asString(data?.heroImage);
+
+  if (Array.isArray(gallery)) {
+    for (const group of gallery) {
+      if (Array.isArray(group.images) && group.images.length > 0) {
+        const firstImage = group.images.find(
+          (image) => typeof image === "string" && image.trim(),
+        );
+        if (firstImage) return firstImage.trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+function getQuickTags(listing: ApiListingRecord): string[] {
+  const tags = listing.data?.quickTags;
+  if (Array.isArray(tags)) {
+    return tags
+      .filter((tag): tag is string => typeof tag === "string")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .slice(0, 4);
+  }
+
+  const fallback = [listing.class, listing.vibe, listing.data?.snapshot?.bestFor]
+    .filter((value): value is string => typeof value === "string" && value.trim())
+    .map((value) => value.trim());
+
+  return Array.from(new Set(fallback)).slice(0, 4);
+}
+
+function getLowestRackRate(listing: ApiListingRecord): string {
+  const rows = listing.data?.rates?.rows;
+  if (!Array.isArray(rows) || rows.length === 0) return "";
+
+  const values = rows
+    .map((row) => {
+      const raw = row?.rackPPPN;
+      if (typeof raw !== "string") return null;
+      const numeric = Number(raw.replace(/[^0-9.]/g, ""));
+      return Number.isFinite(numeric) ? numeric : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  if (values.length === 0) return "";
+
+  const min = Math.min(...values);
+  return `$${min}`;
+}
+
+function isPropertyListing(listing: ApiListingRecord): boolean {
+  const slug = asString(listing.slug);
   if (listing.status !== "published") return false;
   if (!slug) return false;
-
   return true;
 }
 
@@ -54,7 +187,7 @@ export default async function DirectoryPage() {
   let loadError = false;
 
   try {
-    const headersList = await headers();
+    const headersList = headers();
     const host = headersList.get("host");
     const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
@@ -89,8 +222,8 @@ export default async function DirectoryPage() {
             Trade Directory
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-white/65 md:text-lg">
-            Discover camps, tour operators, DMCs, and trade profiles across the
-            safari industry.
+            Discover safari properties through fast, mobile-friendly trade
+            dossiers built for tour operators and travel advisors.
           </p>
         </div>
       </section>
@@ -110,21 +243,30 @@ export default async function DirectoryPage() {
 
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {visibleListings.map((listing) => {
-            const data = listing.data || {};
-            const coverImage = data.coverImage || "";
-            const logoImage = data.logoImage || "";
+            const data = listing.data ?? {};
+            const coverImage = getPrimaryImage(listing);
+            const logoImage = asString(data.logoImage);
             const location =
-              listing.locationLabel || data.locationLabel || "Location not set";
-            const vibe = listing.vibe || data.vibe || "";
-            const website = listing.website || data.website || "";
+              listing.location ??
+              data.snapshot?.location ??
+              data.locationLabel ??
+              "Location not set";
+            const vibe = listing.vibe ?? data.vibe ?? data.overview ?? "";
+            const website = listing.website ?? data.website ?? "";
             const rating = toNumber(data.rating ?? listing.tripadvisorRating);
             const reviewCount = toNumber(data.reviewCount);
-            const propertyClass = listing.class || data.class || "";
+            const propertyClass = listing.class ?? data.class ?? "";
+            const rooms = asString(data.snapshot?.rooms);
+            const bestFor = asString(data.snapshot?.bestFor);
+            const access = asString(data.snapshot?.access);
+            const rackFrom = getLowestRackRate(listing);
+            const quickTags = getQuickTags(listing);
+
             const socialLinks = {
-              facebookUrl: data.facebookUrl || "",
-              instagramUrl: data.instagramUrl || "",
-              tiktokUrl: data.tiktokUrl || "",
-              youtubeUrl: data.youtubeUrl || "",
+              facebookUrl: asString(data.facebookUrl),
+              instagramUrl: asString(data.instagramUrl),
+              tiktokUrl: asString(data.tiktokUrl),
+              youtubeUrl: asString(data.youtubeUrl),
             };
 
             const hasLinks =
@@ -161,9 +303,11 @@ export default async function DirectoryPage() {
                       Property
                     </span>
 
-                    <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
-                      {listing.status}
-                    </span>
+                    {listing.design?.preset ? (
+                      <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs text-white/75 backdrop-blur">
+                        {listing.design.preset}
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="absolute bottom-5 left-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-lg backdrop-blur">
@@ -212,22 +356,66 @@ export default async function DirectoryPage() {
                     {vibe || "Trade-ready safari property profile."}
                   </p>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {propertyClass ? (
-                      <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
-                        {propertyClass}
-                      </span>
-                    ) : null}
+                  {quickTags.length > 0 ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {quickTags.map((tag) => (
+                        <span
+                          key={`${listing.id}-${tag}`}
+                          className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
 
-                    {website ? (
-                      <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-xs text-emerald-100">
-                        Website
-                      </span>
-                    ) : null}
-                  </div>
+                  {(rooms || bestFor || access || rackFrom) && (
+                    <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-white/75">
+                      {rooms ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                          <span className="block text-[10px] uppercase tracking-[0.18em] text-white/40">
+                            Rooms
+                          </span>
+                          <span className="mt-1 block">{rooms}</span>
+                        </div>
+                      ) : null}
+
+                      {bestFor ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                          <span className="block text-[10px] uppercase tracking-[0.18em] text-white/40">
+                            Best For
+                          </span>
+                          <span className="mt-1 block">{bestFor}</span>
+                        </div>
+                      ) : null}
+
+                      {access ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                          <span className="block text-[10px] uppercase tracking-[0.18em] text-white/40">
+                            Access
+                          </span>
+                          <span className="mt-1 block">{access}</span>
+                        </div>
+                      ) : null}
+
+                      {rackFrom ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                          <span className="block text-[10px] uppercase tracking-[0.18em] text-white/40">
+                            Rack From
+                          </span>
+                          <span className="mt-1 block">{rackFrom} PPPN</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   {hasLinks ? (
                     <div className="mt-5 flex flex-wrap gap-2">
+                      {website ? (
+                        <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-3 py-1 text-xs text-emerald-100">
+                          Website
+                        </span>
+                      ) : null}
                       {socialLinks.instagramUrl ? (
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                           Instagram
@@ -263,7 +451,7 @@ export default async function DirectoryPage() {
                       href="/compare"
                       className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
                     >
-                      Compare
+                      Add to Compare
                     </a>
                   </div>
                 </div>
