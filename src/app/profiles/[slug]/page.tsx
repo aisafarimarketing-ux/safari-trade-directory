@@ -13,6 +13,7 @@ type ThemeState = {
   accent: string;
   highlight: string;
   borderColor: string;
+  mutedText: string;
 };
 
 type ApiListingRecord = {
@@ -20,7 +21,7 @@ type ApiListingRecord = {
   slug: string;
   name: string;
   companySlug: string | null;
-  status: "draft" | "published" | "archived";
+  status: "draft" | "published" | "archived" | string | null;
   location: string | null;
   class: string | null;
   vibe: string | null;
@@ -35,11 +36,12 @@ type ApiListingRecord = {
 };
 
 const DEFAULT_THEME: ThemeState = {
-  pageBg: "#f3eee5",
-  blockBg: "#fbf7f1",
-  accent: "#4d3a24",
-  highlight: "#8e7650",
-  borderColor: "rgba(109, 86, 55, 0.16)",
+  pageBg: "#e9e1d8",
+  blockBg: "#f7f2eb",
+  accent: "#5f472f",
+  highlight: "#8e8260",
+  borderColor: "rgba(117, 93, 62, 0.16)",
+  mutedText: "rgba(95, 71, 47, 0.72)",
 };
 
 function getRecord(value: unknown): Record<string, unknown> {
@@ -70,6 +72,24 @@ function getStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function normalizeResponse(json: unknown): ApiListingRecord[] {
+  if (Array.isArray(json)) {
+    return json as ApiListingRecord[];
+  }
+
+  const root = getRecord(json);
+
+  if (Array.isArray(root.listings)) {
+    return root.listings as ApiListingRecord[];
+  }
+
+  if (Array.isArray(root.data)) {
+    return root.data as ApiListingRecord[];
+  }
+
+  return [];
+}
+
 function getTheme(listing: ApiListingRecord): ThemeState {
   const raw = getRecord(listing.design?.theme);
 
@@ -79,27 +99,27 @@ function getTheme(listing: ApiListingRecord): ThemeState {
     accent: getString(raw.accent) || DEFAULT_THEME.accent,
     highlight: getString(raw.highlight) || DEFAULT_THEME.highlight,
     borderColor: getString(raw.borderColor) || DEFAULT_THEME.borderColor,
+    mutedText: getString(raw.mutedText) || DEFAULT_THEME.mutedText,
   };
 }
 
 function isValidPropertyProfile(item: ApiListingRecord, slug: string): boolean {
+  const requestedSlug = slug.toLowerCase().trim();
   const listingSlug = getString(item.slug).toLowerCase();
-  const companySlug = getString(item.companySlug).toLowerCase();
-  const listingName = getString(item.name).toLowerCase();
+  const status = getString(item.status).toLowerCase();
 
-  if (item.status !== "published") return false;
   if (!listingSlug) return false;
-  if (listingSlug !== slug.toLowerCase()) return false;
-  if (companySlug && listingSlug === companySlug) return false;
-  if (companySlug && listingName === companySlug.replace(/-/g, " ")) return false;
+  if (status === "archived") return false;
 
-  return true;
+  return listingSlug === requestedSlug;
 }
 
 async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> {
   const headerStore = headers();
   const host = headerStore.get("host");
-  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  const forwardedProto = headerStore.get("x-forwarded-proto");
+  const protocol =
+    forwardedProto || (process.env.NODE_ENV === "development" ? "http" : "https");
 
   if (!host) return null;
 
@@ -111,15 +131,9 @@ async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> 
     if (!response.ok) return null;
 
     const json = await response.json();
-    const root = getRecord(json);
-    const listings = root.listings;
+    const listings = normalizeResponse(json);
 
-    if (!Array.isArray(listings)) return null;
-
-    const match = (listings as ApiListingRecord[]).find((item) =>
-      isValidPropertyProfile(item, slug),
-    );
-
+    const match = listings.find((item) => isValidPropertyProfile(item, slug));
     return match || null;
   } catch {
     return null;
@@ -163,26 +177,29 @@ function getLocation(listing: ApiListingRecord): string {
     listing.location ||
     getString(snapshot.location) ||
     getString(data.locationLabel) ||
+    getString(data.location) ||
     "Location not set"
   );
 }
 
 function getClassLabel(listing: ApiListingRecord): string {
   const data = getData(listing);
-  return listing.class || getString(data.class) || "Property";
+  return listing.class || getString(data.class) || getString(getSnapshot(listing).style) || "Property";
 }
 
 function getOverview(listing: ApiListingRecord): string {
   const data = getData(listing);
-  return getString(data.overview) || "";
+  return getString(data.overview) || getString(data.description) || "";
 }
 
 function getVibe(listing: ApiListingRecord): string {
   const data = getData(listing);
+
   return (
     listing.vibe ||
     getString(data.vibe) ||
     getString(data.overview) ||
+    getString(data.description) ||
     "Trade-ready safari property profile."
   );
 }
@@ -199,25 +216,51 @@ function getLogoImage(listing: ApiListingRecord): string {
 
 function getTradeProfileLabel(listing: ApiListingRecord): string {
   const data = getData(listing);
-  return getString(data.tradeProfileLabel);
+  return (
+    getString(data.tradeProfileLabel) ||
+    (listing.companySlug ? listing.companySlug.replace(/-/g, " ") : "")
+  );
 }
 
 function getTradeProfileSub(listing: ApiListingRecord): string {
   const data = getData(listing);
-  return getString(data.tradeProfileSub);
+  return getString(data.tradeProfileSub) || getString(data.importSource);
 }
 
 function getQuickTags(listing: ApiListingRecord): string[] {
   const data = getData(listing);
-  return getStringArray(data.quickTags);
+  const quickTags = getStringArray(data.quickTags);
+
+  if (quickTags.length > 0) {
+    return Array.from(new Set(quickTags)).slice(0, 6);
+  }
+
+  const snapshot = getSnapshot(listing);
+  return Array.from(
+    new Set(
+      [
+        getLocation(listing),
+        getClassLabel(listing),
+        getString(snapshot.bestFor),
+        getString(snapshot.setting),
+        getString(snapshot.style),
+      ].filter(Boolean),
+    ),
+  ).slice(0, 6);
 }
 
 function getGalleryImages(
   listing: ApiListingRecord,
 ): Array<{ src: string; label: string }> {
   const data = getData(listing);
-  const gallery = data.gallery;
+  const directImages = getStringArray(data.images);
 
+  const directResults = directImages.map((src, index) => ({
+    src,
+    label: `Gallery ${index + 1}`,
+  }));
+
+  const gallery = data.gallery;
   if (Array.isArray(gallery)) {
     const images: Array<{ src: string; label: string }> = [];
 
@@ -239,7 +282,11 @@ function getGalleryImages(
       });
     }
 
-    if (images.length > 0) return images;
+    if (images.length > 0) {
+      return Array.from(
+        new Map(images.map((item) => [item.src, item])).values(),
+      );
+    }
   }
 
   const roomPhotos = getRecord(data.roomPhotos);
@@ -260,7 +307,7 @@ function getGalleryImages(
     },
   ];
 
-  const images: Array<{ src: string; label: string }> = [];
+  const roomResults: Array<{ src: string; label: string }> = [];
 
   for (const group of groups) {
     if (!Array.isArray(group.items)) continue;
@@ -268,7 +315,7 @@ function getGalleryImages(
     group.items.forEach((item, index) => {
       const src = getString(item);
       if (src) {
-        images.push({
+        roomResults.push({
           src,
           label: `${group.label} ${index + 1}`,
         });
@@ -276,7 +323,9 @@ function getGalleryImages(
     });
   }
 
-  return images;
+  return Array.from(
+    new Map([...directResults, ...roomResults].map((item) => [item.src, item])).values(),
+  );
 }
 
 function getHeroImage(listing: ApiListingRecord): string {
@@ -303,7 +352,7 @@ function getQuickSnapshot(listing: ApiListingRecord) {
 
   return {
     rooms: roomsValue || (legacyRooms !== null ? String(legacyRooms) : ""),
-    bestFor: getString(snapshot.bestFor) || getClassLabel(listing),
+    bestFor: getString(snapshot.bestFor) || getString(data.bestFor),
     setting: getString(snapshot.setting),
     style: getString(snapshot.style),
     access: getString(snapshot.access),
@@ -328,7 +377,12 @@ function getRateRows(
       return {
         season: getString(row.season),
         dates: getString(row.dates),
-        rackPPPN: getString(row.rackPPPN || row.rackRate),
+        rackPPPN:
+          getString(row.rackPPPN) ||
+          getString(row.rackRate) ||
+          getString(row.rack) ||
+          getString(row.rate) ||
+          getString(row.price),
       };
     })
     .filter((row) => row.season || row.dates || row.rackPPPN);
@@ -373,6 +427,7 @@ function getPolicyRows(listing: ApiListingRecord): Array<{ label: string; value:
   const importantNotes = getStringArray(policies.importantNotes);
   const tradeNotes = getStringArray(policies.tradeNotes);
   const legacyTerms = getString(data.terms);
+  const rawPolicies = getStringArray(data.policies);
 
   if (childPolicy) rows.push({ label: "Child policy", value: childPolicy });
   if (honeymoonPolicy) rows.push({ label: "Honeymoon policy", value: honeymoonPolicy });
@@ -386,6 +441,10 @@ function getPolicyRows(listing: ApiListingRecord): Array<{ label: string; value:
     rows.push({ label: "Trade note", value: item });
   });
 
+  rawPolicies.forEach((item) => {
+    rows.push({ label: "Policy", value: item });
+  });
+
   if (legacyTerms && rows.length === 0) {
     rows.push({ label: "Terms", value: legacyTerms });
   }
@@ -397,19 +456,28 @@ function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: st
   const data = getData(listing);
   const source = data.downloads || data.downloadables;
 
-  if (!Array.isArray(source)) return [];
+  const results: Array<{ label: string; url: string }> = [];
 
-  return source
-    .map((item) => {
+  if (Array.isArray(source)) {
+    source.forEach((item, index) => {
       const row = getRecord(item);
-      const label = getString(row.label || row.title);
+      const label = getString(row.label || row.title || row.name) || `Download ${index + 1}`;
       const url = getString(row.url);
 
-      if (!label || !url) return null;
+      if (url) {
+        results.push({ label, url });
+      }
+    });
+  }
 
-      return { label, url };
-    })
-    .filter((item): item is { label: string; url: string } => item !== null);
+  const uploadedPdfUrl = getString(data.pdfUrl) || getString(data.sourcePdfUrl);
+  const uploadedPdfName = getString(data.pdfName) || getString(data.sourcePdfName) || "Property PDF";
+
+  if (uploadedPdfUrl) {
+    results.push({ label: uploadedPdfName, url: uploadedPdfUrl });
+  }
+
+  return Array.from(new Map(results.map((item) => [item.url, item])).values());
 }
 
 function getContactGroups(listing: ApiListingRecord): Array<{
@@ -458,22 +526,37 @@ function getContactGroups(listing: ApiListingRecord): Array<{
   if (groups.length > 0) return groups;
 
   const data = getData(listing);
-  const legacyName = getString(data.contactName);
-  const legacyRole = getString(data.contactTitle);
-  const legacyEmail = getString(data.contactEmail);
-  const legacyPhone = getString(data.contactPhone);
 
-  if (legacyName || legacyRole || legacyEmail || legacyPhone) {
+  const directEmail =
+    getString(data.contactEmail) ||
+    getString(data.email) ||
+    getString(data.reservationEmail) ||
+    getString(data.reservationsEmail);
+
+  const directPhone =
+    getString(data.contactPhone) ||
+    getString(data.phone) ||
+    getString(data.reservationPhone) ||
+    getString(data.reservationsPhone);
+
+  const directWhatsapp =
+    getString(data.contactWhatsapp) ||
+    getString(data.whatsapp);
+
+  const directName = getString(data.contactName);
+  const directRole = getString(data.contactTitle) || "Reservations / Sales";
+
+  if (directName || directRole || directEmail || directPhone || directWhatsapp) {
     return [
       {
-        title: "Sales",
+        title: "Reservations",
         items: [
           {
-            name: legacyName,
-            role: legacyRole,
-            email: legacyEmail,
-            phone: legacyPhone,
-            whatsapp: "",
+            name: directName || "Reservations",
+            role: directRole,
+            email: directEmail,
+            phone: directPhone,
+            whatsapp: directWhatsapp,
           },
         ],
       },
@@ -485,11 +568,25 @@ function getContactGroups(listing: ApiListingRecord): Array<{
 
 function getTradeActions(listing: ApiListingRecord) {
   const data = getData(listing);
+  const contactGroups = getContactGroups(listing);
+
+  const fallbackEmail =
+    getString(data.enquiryEmail) ||
+    getString(data.contactEmail) ||
+    getString(data.email) ||
+    contactGroups.flatMap((group) => group.items).find((item) => item.email)?.email ||
+    "";
+
+  const fallbackWhatsApp =
+    getString(data.enquiryWhatsApp) ||
+    getString(data.whatsapp) ||
+    contactGroups.flatMap((group) => group.items).find((item) => item.whatsapp)?.whatsapp ||
+    "";
 
   return {
-    enquiryEmail: getString(data.enquiryEmail),
-    enquiryWhatsApp: getString(data.enquiryWhatsApp),
-    enquirySubject: getString(data.enquirySubject) || "Trade Request",
+    enquiryEmail: fallbackEmail,
+    enquiryWhatsApp: fallbackWhatsApp,
+    enquirySubject: getString(data.enquirySubject) || `Trade Request: ${listing.name}`,
   };
 }
 
@@ -521,12 +618,13 @@ function getOverviewCopy(listing: ApiListingRecord): string {
 function getBestFacts(listing: ApiListingRecord) {
   const snapshot = getQuickSnapshot(listing);
   const location = getLocation(listing);
+  const classLabel = getClassLabel(listing);
 
   return [
     {
       label: "Rooms",
       value: snapshot.rooms || "—",
-      sub: snapshot.rooms ? "Luxury tents" : "Inventory pending",
+      sub: snapshot.rooms ? classLabel : "Inventory pending",
     },
     {
       label: "Location",
@@ -545,7 +643,7 @@ function getBestFacts(listing: ApiListingRecord) {
     },
     {
       label: "Style",
-      value: snapshot.style || getClassLabel(listing),
+      value: snapshot.style || classLabel,
       sub: "Property style",
     },
     {
@@ -601,12 +699,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const theme = getTheme(listing);
   const location = getLocation(listing);
   const propertyClass = getClassLabel(listing);
-  const vibe = getVibe(listing);
   const overviewCopy = getOverviewCopy(listing);
   const website = getWebsite(listing);
   const logoImage = getLogoImage(listing);
   const heroImage = getHeroImage(listing);
-  const snapshot = getQuickSnapshot(listing);
   const galleryImages = getGalleryImages(listing);
   const rateRows = getRateRows(listing);
   const rateNotes = getRateNotes(listing);
@@ -622,156 +718,169 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const subLabel = getTradeProfileSub(listing);
   const bestFacts = getBestFacts(listing);
   const supplements = getSupplementTags(listing);
+  const statusLabel = getString(listing.status).toLowerCase();
 
-  const headerTags = [label, location, propertyClass].filter(Boolean);
+  const heroGallery = galleryImages.length > 0 ? galleryImages.slice(0, 4) : [];
 
   return (
     <main
       className="min-h-screen"
       style={{ backgroundColor: theme.pageBg, color: theme.accent }}
     >
-      <div className="mx-auto max-w-[1220px] px-4 py-6 md:px-6 md:py-8">
+      <div className="mx-auto max-w-[1280px] px-4 py-5 md:px-6 md:py-8">
         <div
-          className="overflow-hidden rounded-[34px] border shadow-[0_12px_40px_rgba(61,44,22,0.08)]"
+          className="overflow-hidden rounded-[28px] border shadow-[0_20px_60px_rgba(70,48,22,0.10)]"
           style={{
             borderColor: theme.borderColor,
             backgroundColor: theme.blockBg,
-            color: theme.accent,
           }}
         >
-          <section className="relative">
-            <div className="border-b px-6 py-5 md:px-10" style={{ borderColor: theme.borderColor }}>
-              <div className="flex flex-col items-center justify-center gap-3 text-center">
-                {logoImage ? (
-                  <div className="h-14 w-20 overflow-hidden rounded-2xl">
-                    <img
-                      src={logoImage}
-                      alt={`${listing.name} logo`}
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className="text-[14px] font-semibold uppercase tracking-[0.34em]"
-                    style={{ color: theme.accent, opacity: 0.8 }}
-                  >
-                    {listing.companySlug?.replace(/-/g, " ") || "SafariTrade"}
-                  </div>
-                )}
-
-                <div>
-                  <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
-                    {listing.name}
-                  </h1>
-                  <p className="mt-3 text-sm md:text-lg" style={{ opacity: 0.72 }}>
-                    {headerTags.join(" · ")}
-                  </p>
-                  {subLabel ? (
-                    <p className="mt-2 text-xs uppercase tracking-[0.18em]" style={{ opacity: 0.52 }}>
-                      {subLabel}
-                    </p>
-                  ) : null}
+          <section className="border-b px-5 py-6 md:px-10 md:py-8" style={{ borderColor: theme.borderColor }}>
+            <div className="flex flex-col items-center justify-center text-center">
+              {logoImage ? (
+                <div className="mb-4 h-16 w-28 overflow-hidden rounded-xl">
+                  <img
+                    src={logoImage}
+                    alt={`${listing.name} logo`}
+                    className="h-full w-full object-contain"
+                  />
                 </div>
-              </div>
-            </div>
-
-            <div className="relative">
-              {heroImage ? (
-                <img
-                  src={heroImage}
-                  alt={`${listing.name} hero`}
-                  className="aspect-[16/8.2] w-full object-cover"
-                />
               ) : (
-                <div className="aspect-[16/8.2] w-full bg-[linear-gradient(135deg,#ddc9aa,#b2966d)]" />
+                <div
+                  className="mb-4 text-[13px] font-semibold uppercase tracking-[0.32em]"
+                  style={{ color: theme.accent, opacity: 0.8 }}
+                >
+                  {label || listing.companySlug?.replace(/-/g, " ") || "SafariTrade"}
+                </div>
               )}
 
-              <div className="absolute inset-0 bg-gradient-to-t from-[rgba(46,31,16,0.45)] via-[rgba(46,31,16,0.08)] to-transparent" />
+              <h1
+                className="text-4xl font-semibold tracking-tight md:text-6xl"
+                style={{ color: theme.accent }}
+              >
+                {listing.name}
+              </h1>
 
-              <div className="absolute inset-x-0 bottom-0 p-5 md:p-8">
-                <div className="mx-auto max-w-[950px] text-center text-white">
-                  <p className="text-3xl font-semibold drop-shadow-sm md:text-6xl">
-                    {listing.name}
-                  </p>
+              <p className="mt-3 text-sm md:text-xl" style={{ color: theme.mutedText }}>
+                {[label, location, propertyClass].filter(Boolean).join(" · ")}
+              </p>
 
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm md:text-xl">
-                    {[label || "SafariTrade", location, propertyClass]
-                      .filter(Boolean)
-                      .map((item) => (
-                        <span key={item} className="drop-shadow-sm">
-                          {item}
-                        </span>
-                      ))}
-                  </div>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {statusLabel ? (
+                  <span
+                    className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.16em]"
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.42)",
+                      color: theme.accent,
+                    }}
+                  >
+                    {statusLabel}
+                  </span>
+                ) : null}
 
-                  {tripadvisor.rating !== null ? (
-                    <div className="mt-4 flex items-center justify-center gap-2 text-sm font-medium uppercase tracking-[0.18em] md:text-base">
-                      <span>{"★".repeat(Math.max(1, Math.min(5, Math.round(tripadvisor.rating))))}</span>
-                      <span>Top trade-rated safari profile</span>
-                    </div>
-                  ) : null}
-                </div>
+                {subLabel ? (
+                  <span
+                    className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.16em]"
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.42)",
+                      color: theme.accent,
+                    }}
+                  >
+                    {subLabel}
+                  </span>
+                ) : null}
               </div>
             </div>
+          </section>
 
-            {downloads.length > 0 ? (
-              <div
-                className="border-y px-5 py-3 text-center text-sm font-medium md:px-8 md:text-xl"
-                style={{
-                  borderColor: theme.borderColor,
-                  backgroundColor: `${theme.highlight}22`,
-                  color: theme.accent,
-                }}
-              >
-                {downloads[0].label}
-              </div>
-            ) : null}
+          <section className="px-4 pb-5 pt-4 md:px-8 md:pb-6 md:pt-6">
+            <div className="overflow-hidden rounded-[24px] border" style={{ borderColor: theme.borderColor }}>
+              <div className="relative">
+                {heroImage ? (
+                  <img
+                    src={heroImage}
+                    alt={`${listing.name} hero`}
+                    className="aspect-[16/7.6] w-full object-cover"
+                  />
+                ) : (
+                  <div className="aspect-[16/7.6] w-full bg-[linear-gradient(135deg,#d8c2a0,#9b7d54)]" />
+                )}
 
-            {galleryImages.length > 0 ? (
-              <div className="px-5 py-4 md:px-8 md:py-5">
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  {galleryImages.slice(0, 4).map((image) => (
-                    <div
-                      key={`${image.src}-${image.label}`}
-                      className="overflow-hidden rounded-[16px] border"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: theme.pageBg,
-                      }}
-                    >
-                      <img
-                        src={image.src}
-                        alt={image.label}
-                        className="aspect-[4/3] h-full w-full object-cover"
-                      />
-                    </div>
-                  ))}
+                <div className="absolute inset-0 bg-gradient-to-t from-[rgba(60,41,22,0.52)] via-[rgba(60,41,22,0.08)] to-transparent" />
+
+                <div className="absolute inset-x-0 bottom-0 px-5 pb-6 pt-16 md:px-10 md:pb-8">
+                  <div className="text-center text-[#f8f3eb]">
+                    <h2 className="text-3xl font-semibold drop-shadow-sm md:text-6xl">
+                      {listing.name}
+                    </h2>
+
+                    <p className="mt-3 text-sm md:text-2xl">
+                      {[label, location, propertyClass].filter(Boolean).join(" · ")}
+                    </p>
+
+                    {tripadvisor.rating !== null ? (
+                      <div className="mt-4 flex items-center justify-center gap-3 text-xs font-medium uppercase tracking-[0.20em] md:text-base">
+                        <span>{"★".repeat(Math.max(1, Math.min(5, Math.round(tripadvisor.rating))))}</span>
+                        <span>Top trade-rated safari profile</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-            ) : null}
 
-            <div className="px-5 pb-5 md:px-8 md:pb-7">
-              <div
-                className="overflow-hidden rounded-[24px] border"
-                style={{
-                  borderColor: theme.borderColor,
-                  backgroundColor: "rgba(255,255,255,0.45)",
-                }}
-              >
-                <div className="grid grid-cols-2 md:grid-cols-6">
+              {downloads.length > 0 ? (
+                <div
+                  className="border-t px-5 py-3 text-center text-sm md:px-8 md:text-2xl"
+                  style={{
+                    borderColor: theme.borderColor,
+                    backgroundColor: `${theme.highlight}26`,
+                    color: theme.accent,
+                  }}
+                >
+                  {downloads[0].label}
+                </div>
+              ) : null}
+
+              {heroGallery.length > 0 ? (
+                <div className="px-4 py-4 md:px-6">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {heroGallery.map((image) => (
+                      <div
+                        key={`${image.src}-${image.label}`}
+                        className="overflow-hidden rounded-[12px] border"
+                        style={{ borderColor: theme.borderColor }}
+                      >
+                        <img
+                          src={image.src}
+                          alt={image.label}
+                          className="aspect-[4/2.3] w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="border-t px-4 py-4 md:px-6" style={{ borderColor: theme.borderColor }}>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
                   {bestFacts.map((fact, index) => (
                     <div
                       key={`${fact.label}-${index}`}
-                      className="border-b px-4 py-4 text-center md:border-b-0 md:border-r md:px-3 md:py-3"
+                      className="rounded-[12px] border px-4 py-3"
                       style={{
                         borderColor: theme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.42)",
                       }}
                     >
-                      <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.56 }}>
+                      <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: theme.mutedText }}>
                         {fact.label}
                       </div>
-                      <div className="mt-2 text-lg font-semibold md:text-2xl">{fact.value}</div>
-                      <div className="mt-1 text-xs md:text-sm" style={{ opacity: 0.7 }}>
+                      <div className="mt-2 text-lg font-semibold md:text-2xl">
+                        {fact.value}
+                      </div>
+                      <div className="mt-1 text-xs md:text-sm" style={{ color: theme.mutedText }}>
                         {fact.sub}
                       </div>
                     </div>
@@ -781,15 +890,14 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             </div>
           </section>
 
-          <section className="px-5 pb-4 md:px-8">
-            <div className="grid gap-5 md:grid-cols-[1fr_390px]">
-              <div className="pt-2">
-                <h2 className="text-3xl font-semibold tracking-tight md:text-5xl">
-                  {listing.name}
-                </h2>
-                <p className="mt-4 max-w-3xl text-base leading-8 md:text-xl" style={{ opacity: 0.78 }}>
+          <section className="px-4 pb-4 md:px-8">
+            <div className="grid gap-5 lg:grid-cols-[1.15fr_430px]">
+              <div className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7" style={{ borderColor: theme.borderColor }}>
+                <h3 className="text-3xl font-semibold md:text-5xl">{listing.name}</h3>
+                <p className="mt-4 max-w-3xl text-base leading-8 md:text-xl" style={{ color: theme.mutedText }}>
                   {overviewCopy}
                 </p>
+
                 {quickTags.length > 0 ? (
                   <div className="mt-5 flex flex-wrap gap-2">
                     {quickTags.map((tag) => (
@@ -800,10 +908,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               </div>
 
               <div
-                className="rounded-[24px] border p-4"
+                className="rounded-[22px] border p-4 md:p-5"
                 style={{
                   borderColor: theme.borderColor,
-                  backgroundColor: "rgba(255,255,255,0.42)",
+                  backgroundColor: "rgba(255,255,255,0.32)",
                 }}
               >
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -841,31 +949,44 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     <SecondaryButton theme={theme}>Request Quote</SecondaryButton>
                   )}
 
-                  <SecondaryButton theme={theme}>Share with Client</SecondaryButton>
+                  {website ? (
+                    <SecondaryAction href={website} theme={theme}>
+                      Visit Website
+                    </SecondaryAction>
+                  ) : tradeActions.enquiryWhatsApp ? (
+                    <SecondaryAction
+                      href={formatWhatsappLink(tradeActions.enquiryWhatsApp)}
+                      theme={theme}
+                    >
+                      WhatsApp
+                    </SecondaryAction>
+                  ) : (
+                    <SecondaryButton theme={theme}>Share with Client</SecondaryButton>
+                  )}
                 </div>
               </div>
             </div>
           </section>
 
-          <div className="px-5 pb-2 pt-4 md:px-8">
+          <div className="px-4 pb-2 pt-3 md:px-8">
             <DossierTabs theme={theme} />
           </div>
 
-          <section className="px-5 pb-8 md:px-8">
+          <section className="px-4 pb-8 md:px-8 md:pb-10">
             <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
               <div className="space-y-8">
                 {rateRows.length > 0 ? (
                   <DossierCard title="PUBLIC RACK RATES" accent="2026" theme={theme}>
                     <div
-                      className="overflow-hidden rounded-[18px] border"
+                      className="overflow-hidden rounded-[16px] border"
                       style={{
                         borderColor: theme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.45)",
+                        backgroundColor: "rgba(255,255,255,0.42)",
                       }}
                     >
                       <div
                         className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] md:grid-cols-[1.2fr_1.5fr_1fr]"
-                        style={{ borderColor: theme.borderColor, opacity: 0.65 }}
+                        style={{ borderColor: theme.borderColor, color: theme.mutedText }}
                       >
                         <span>Season</span>
                         <span>Dates</span>
@@ -898,7 +1019,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
                     {supplements.length > 0 ? (
                       <div className="mt-5 border-t pt-4" style={{ borderColor: theme.borderColor }}>
-                        <div className="text-sm font-semibold uppercase tracking-[0.16em]" style={{ opacity: 0.55 }}>
+                        <div
+                          className="text-sm font-semibold uppercase tracking-[0.16em]"
+                          style={{ color: theme.mutedText }}
+                        >
                           Supplements
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -926,13 +1050,13 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       {policyRows.map((row, index) => (
                         <div
                           key={`${row.label}-${index}`}
-                          className="rounded-[18px] border px-4 py-4"
+                          className="rounded-[16px] border px-4 py-4"
                           style={{
                             borderColor: theme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.45)",
+                            backgroundColor: "rgba(255,255,255,0.42)",
                           }}
                         >
-                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.52 }}>
+                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: theme.mutedText }}>
                             {row.label}
                           </div>
                           <div className="mt-2 whitespace-pre-line text-sm leading-7 md:text-base">
@@ -955,10 +1079,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                           href={item.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="block rounded-[18px] border px-4 py-3 text-sm font-medium md:text-base"
+                          className="block rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
                           style={{
                             borderColor: theme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.45)",
+                            backgroundColor: "rgba(255,255,255,0.42)",
                             color: theme.accent,
                           }}
                         >
@@ -971,10 +1095,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
                 {contactGroups.length > 0 ? (
                   <DossierCard title="CONTACT" theme={theme}>
-                    <div className="space-y-6">
+                    <div className="space-y-5">
                       {contactGroups.map((group) => (
                         <div key={group.title}>
-                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.52 }}>
+                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: theme.mutedText }}>
                             {group.title}
                           </div>
 
@@ -982,17 +1106,17 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                             {group.items.map((item, index) => (
                               <div
                                 key={`${group.title}-${index}`}
-                                className="rounded-[18px] border px-4 py-4"
+                                className="rounded-[16px] border px-4 py-4"
                                 style={{
                                   borderColor: theme.borderColor,
-                                  backgroundColor: "rgba(255,255,255,0.45)",
+                                  backgroundColor: "rgba(255,255,255,0.42)",
                                 }}
                               >
                                 {item.name ? (
                                   <div className="text-base font-semibold md:text-lg">{item.name}</div>
                                 ) : null}
                                 {item.role ? (
-                                  <div className="mt-1 text-sm md:text-base" style={{ opacity: 0.74 }}>
+                                  <div className="mt-1 text-sm md:text-base" style={{ color: theme.mutedText }}>
                                     {item.role}
                                   </div>
                                 ) : null}
@@ -1030,7 +1154,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   <DossierCard title="TRIPADVISOR" theme={theme}>
                     {tripadvisor.logoUrl ? (
                       <div
-                        className="overflow-hidden rounded-[18px] border px-4 py-3"
+                        className="overflow-hidden rounded-[16px] border px-4 py-3"
                         style={{
                           borderColor: theme.borderColor,
                           backgroundColor: "#ffffff",
@@ -1046,10 +1170,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
                     {tripadvisor.rating !== null ? (
                       <div
-                        className="mt-3 rounded-[18px] border px-4 py-3 text-sm font-medium md:text-base"
+                        className="mt-3 rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
                         style={{
                           borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.45)",
+                          backgroundColor: "rgba(255,255,255,0.42)",
                         }}
                       >
                         Rating {tripadvisor.rating.toFixed(1)}
@@ -1061,10 +1185,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                         href={tripadvisor.link}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-3 block rounded-[18px] border px-4 py-3 text-sm font-medium md:text-base"
+                        className="mt-3 block rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
                         style={{
                           borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.45)",
+                          backgroundColor: "rgba(255,255,255,0.42)",
                           color: theme.accent,
                         }}
                       >
@@ -1102,7 +1226,7 @@ function DossierTabs(props: { theme: ThemeState }) {
             style={{
               borderColor: props.theme.borderColor,
               backgroundColor:
-                index === 0 ? `${props.theme.highlight}22` : "rgba(255,255,255,0.38)",
+                index === 0 ? `${props.theme.highlight}22` : "rgba(255,255,255,0.36)",
               color: props.theme.accent,
             }}
           >
@@ -1119,7 +1243,7 @@ function DossierTabs(props: { theme: ThemeState }) {
             style={{
               borderColor: props.theme.borderColor,
               backgroundColor:
-                index === 0 ? `${props.theme.highlight}22` : "rgba(255,255,255,0.38)",
+                index === 0 ? `${props.theme.highlight}22` : "rgba(255,255,255,0.36)",
               color: props.theme.accent,
             }}
           >
@@ -1139,10 +1263,10 @@ function DossierCard(props: {
 }) {
   return (
     <section
-      className="rounded-[28px] border p-5 md:p-7"
+      className="rounded-[22px] border p-5 md:p-6"
       style={{
         borderColor: props.theme.borderColor,
-        backgroundColor: "rgba(255,255,255,0.32)",
+        backgroundColor: "rgba(255,255,255,0.24)",
         color: props.theme.accent,
       }}
     >
@@ -1171,20 +1295,20 @@ function ExperienceCard(props: {
 }) {
   return (
     <div
-      className="rounded-[20px] border p-4"
+      className="rounded-[16px] border p-4"
       style={{
         borderColor: props.theme.borderColor,
-        backgroundColor: "rgba(255,255,255,0.45)",
+        backgroundColor: "rgba(255,255,255,0.42)",
       }}
     >
-      <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.54 }}>
+      <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: props.theme.mutedText }}>
         {props.title}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {props.items.length > 0 ? (
           props.items.map((item) => <SoftTag key={item} text={item} theme={props.theme} />)
         ) : (
-          <span style={{ opacity: 0.55 }}>None listed</span>
+          <span style={{ color: props.theme.mutedText }}>None listed</span>
         )}
       </div>
     </div>
@@ -1197,7 +1321,7 @@ function SoftTag(props: { text: string; theme: ThemeState }) {
       className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
       style={{
         borderColor: props.theme.borderColor,
-        backgroundColor: "rgba(255,255,255,0.48)",
+        backgroundColor: "rgba(255,255,255,0.46)",
         color: props.theme.accent,
       }}
     >
@@ -1211,14 +1335,16 @@ function PrimaryAction(props: {
   theme: ThemeState;
   children: ReactNode;
 }) {
+  const external = /^https?:\/\//i.test(props.href);
+
   return (
     <a
       href={props.href}
-      target="_blank"
-      rel="noreferrer"
-      className="block rounded-[16px] px-4 py-3 text-center text-sm font-medium md:text-base"
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+      className="block rounded-[14px] px-4 py-3 text-center text-sm font-medium md:text-base"
       style={{
-        backgroundColor: `${props.theme.highlight}cc`,
+        backgroundColor: `${props.theme.highlight}dd`,
         color: "#fffdf8",
       }}
     >
@@ -1232,13 +1358,17 @@ function SecondaryAction(props: {
   theme: ThemeState;
   children: ReactNode;
 }) {
+  const external = /^https?:\/\//i.test(props.href);
+
   return (
     <a
       href={props.href}
-      className="block rounded-[16px] border px-4 py-3 text-center text-sm font-medium md:text-base"
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+      className="block rounded-[14px] border px-4 py-3 text-center text-sm font-medium md:text-base"
       style={{
         borderColor: props.theme.borderColor,
-        backgroundColor: "rgba(255,255,255,0.45)",
+        backgroundColor: "rgba(255,255,255,0.42)",
         color: props.theme.accent,
       }}
     >
@@ -1250,9 +1380,9 @@ function SecondaryAction(props: {
 function PrimaryButton(props: { theme: ThemeState; children: ReactNode }) {
   return (
     <div
-      className="rounded-[16px] px-4 py-3 text-center text-sm font-medium md:text-base"
+      className="rounded-[14px] px-4 py-3 text-center text-sm font-medium md:text-base"
       style={{
-        backgroundColor: `${props.theme.highlight}cc`,
+        backgroundColor: `${props.theme.highlight}dd`,
         color: "#fffdf8",
       }}
     >
@@ -1264,10 +1394,10 @@ function PrimaryButton(props: { theme: ThemeState; children: ReactNode }) {
 function SecondaryButton(props: { theme: ThemeState; children: ReactNode }) {
   return (
     <div
-      className="rounded-[16px] border px-4 py-3 text-center text-sm font-medium md:text-base"
+      className="rounded-[14px] border px-4 py-3 text-center text-sm font-medium md:text-base"
       style={{
         borderColor: props.theme.borderColor,
-        backgroundColor: "rgba(255,255,255,0.45)",
+        backgroundColor: "rgba(255,255,255,0.42)",
         color: props.theme.accent,
       }}
     >
