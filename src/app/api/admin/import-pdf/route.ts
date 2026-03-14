@@ -68,6 +68,8 @@ type ImportPdfResponse = {
   error?: string;
 };
 
+const MAX_PDF_SIZE_BYTES = 25 * 1024 * 1024;
+
 function cleanText(value: string): string {
   return value
     .replace(/\r/g, "\n")
@@ -75,18 +77,6 @@ function cleanText(value: string): string {
     .replace(/[ ]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 function uniq(values: string[]): string[] {
@@ -376,7 +366,10 @@ function parseActivities(text: string) {
     }
   }
 
-  if (!freeItems.includes("Stargazing / Spear throwing with Maasai") && block.toLowerCase().includes("free")) {
+  if (
+    !freeItems.includes("Stargazing / Spear throwing with Maasai") &&
+    block.toLowerCase().includes("free")
+  ) {
     freeItems.push("Stargazing / Spear throwing with Maasai");
   }
 
@@ -423,7 +416,10 @@ function parsePolicies(text: string) {
       "*All travellers are required to pay Tanzania park fees and camping fees.",
       "*Please check the Tanzanian National Park website for fees as they are subject to change without prior notice.",
       "*Child park fees applicable for children between 05 - 15 years old",
-    ].filter((item) => compact.includes(item.replace(/\*/g, "").trim()) || compact.includes(item)),
+    ].filter(
+      (item) =>
+        compact.includes(item.replace(/\*/g, "").trim()) || compact.includes(item),
+    ),
   );
 
   const tradeNotes = uniq([
@@ -433,7 +429,9 @@ function parsePolicies(text: string) {
     compact.includes("remaining 80% is due 60 days prior")
       ? "Remaining 80% due 60 days before arrival"
       : "",
-    compact.includes("Distribution or exposure of our Net Tour Rates will lead to immediate termination")
+    compact.includes(
+      "Distribution or exposure of our Net Tour Rates will lead to immediate termination",
+    )
       ? "Net tour rates are confidential"
       : "",
   ]);
@@ -513,14 +511,8 @@ function parsePdfText(text: string): { parsed: ParsedPayload; warnings: string[]
       rows: rates,
     },
     experiences: {
-      included: uniq([
-        ...incExc.included,
-        ...activities.included,
-      ]),
-      paid: uniq([
-        ...activities.paid,
-        ...incExc.paid,
-      ]),
+      included: uniq([...incExc.included, ...activities.included]),
+      paid: uniq([...activities.paid, ...incExc.paid]),
     },
     policies: {
       childPolicy: policies.childPolicy || undefined,
@@ -577,9 +569,12 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
 
     const result = await pdfParse(buffer);
     return cleanText(normalizeSpacedWord(result.text || ""));
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown PDF parse error";
+
     throw new Error(
-      "PDF parser not available yet. Install pdf-parse to enable PDF text extraction.",
+      `PDF parser failed: ${message}. Ensure pdf-parse is installed in production.`,
     );
   }
 }
@@ -589,7 +584,7 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file");
 
-    if (!file || !(file instanceof File)) {
+    if (!file || typeof file === "string") {
       return NextResponse.json<ImportPdfResponse>(
         { success: false, error: "No PDF uploaded." },
         { status: 400 },
@@ -599,6 +594,23 @@ export async function POST(req: Request) {
     if (file.type !== "application/pdf") {
       return NextResponse.json<ImportPdfResponse>(
         { success: false, error: "Only PDF files are supported." },
+        { status: 400 },
+      );
+    }
+
+    if (file.size <= 0) {
+      return NextResponse.json<ImportPdfResponse>(
+        { success: false, error: "Uploaded PDF is empty." },
+        { status: 400 },
+      );
+    }
+
+    if (file.size > MAX_PDF_SIZE_BYTES) {
+      return NextResponse.json<ImportPdfResponse>(
+        {
+          success: false,
+          error: "PDF is too large. Maximum size is 25MB.",
+        },
         { status: 400 },
       );
     }
