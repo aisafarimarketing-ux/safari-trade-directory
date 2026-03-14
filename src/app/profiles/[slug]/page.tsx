@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
 
 type ProfilePageProps = {
-  params: Promise<{
+  params: {
     slug: string;
-  }>;
+  };
 };
 
 type ThemeState = {
@@ -14,122 +14,45 @@ type ThemeState = {
   borderColor: string;
 };
 
-type BlockColorState = {
-  header: string;
-  tripadvisor: string;
-  tradeDetails: string;
-  matrix: string;
-  inclusions: string;
-  exclusions: string;
-  experiences: string;
-  offers: string;
-  terms: string;
-  leadCapture: string;
-  contactCard: string;
-  downloadables: string;
-};
-
-type VisibleBlocksState = {
-  header: boolean;
-  tripadvisor: boolean;
-  tradeDetails: boolean;
-  matrix: boolean;
-  inclusions: boolean;
-  exclusions: boolean;
-  experiences: boolean;
-  offers: boolean;
-  terms: boolean;
-  leadCapture: boolean;
-  contactCard: boolean;
-  downloadables: boolean;
-  hero: boolean;
-};
-
-type Downloadable = {
-  id: string;
-  title: string;
-  type: "file" | "link";
-  url: string;
-  mime?: string;
-  fileName?: string;
-};
-
 type ApiListingRecord = {
   id: string;
   slug: string;
   name: string;
   companySlug: string | null;
   status: "draft" | "published" | "archived";
-  locationLabel: string | null;
+  location: string | null;
   class: string | null;
   vibe: string | null;
   website: string | null;
   mapLink: string | null;
   tripadvisorRating: number | null;
   design?: {
-    theme?: ThemeState | null;
-    blockColors?: BlockColorState | null;
-    visibleBlocks?: VisibleBlocksState | null;
-  };
-  data: {
-    name?: string;
-    class?: string;
-    vibe?: string;
-    tradeProfileLabel?: string;
-    tradeProfileSub?: string;
-    locationLabel?: string;
-    mapLink?: string;
-    website?: string;
-    logoImage?: string;
-    coverImage?: string;
-    rating?: number | string;
-    reviewCount?: number | string;
-    rooms?: number | string;
-    family?: number | string;
-    double?: number | string;
-    single?: number | string;
-    facebookUrl?: string;
-    instagramUrl?: string;
-    tiktokUrl?: string;
-    youtubeUrl?: string;
-    roomTypeLabels?: {
-      family?: string;
-      double?: string;
-      single?: string;
-    };
-    roomPhotos?: {
-      family?: string[];
-      double?: string[];
-      single?: string[];
-    };
-    inclusions?: string[];
-    exclusions?: string[];
-    freeActivities?: string[];
-    paidActivities?: string[];
-    offersText?: string;
-    terms?: string;
-    downloadables?: Downloadable[];
-    contactName?: string;
-    contactTitle?: string;
-    contactCompany?: string;
-    contactEmail?: string;
-    contactPhone?: string;
-    contactWebsite?: string;
-    leadHeadline?: string;
-    leadSubcopy?: string;
-    leadBullet1?: string;
-    leadBullet2?: string;
-    leadBullet3?: string;
-    leadCta?: string;
-    leadDisclaimer?: string;
-    enquiryEmail?: string;
-    enquiryWhatsApp?: string;
-    enquirySubject?: string;
-    taLogoUrl?: string;
-    taLink?: string;
-    taRating?: number | string;
-  };
+    preset?: string;
+    theme?: Partial<ThemeState> | null;
+  } | null;
+  data?: Record<string, unknown> | null;
 };
+
+type DownloadItem = {
+  label: string;
+  url: string;
+  type?: string | null;
+};
+
+type ContactItem = {
+  name?: string | null;
+  role?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+};
+
+type GalleryImage = {
+  src: string;
+  label: string;
+};
+
+type SimpleStyle = Record<string, string | number | undefined>;
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#0A0A0A",
@@ -139,38 +62,18 @@ const DEFAULT_THEME: ThemeState = {
   borderColor: "rgba(255,255,255,0.10)",
 };
 
-const DEFAULT_BLOCK_COLORS: BlockColorState = {
-  header: "#111111",
-  tripadvisor: "#111111",
-  tradeDetails: "#111111",
-  matrix: "#111111",
-  inclusions: "#111111",
-  exclusions: "#111111",
-  experiences: "#111111",
-  offers: "#1A1408",
-  terms: "#111111",
-  leadCapture: "#111111",
-  contactCard: "#111111",
-  downloadables: "#111111",
-};
+function getRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
 
-const DEFAULT_VISIBLE_BLOCKS: VisibleBlocksState = {
-  header: true,
-  tripadvisor: true,
-  tradeDetails: true,
-  matrix: true,
-  inclusions: true,
-  exclusions: true,
-  experiences: true,
-  offers: true,
-  terms: true,
-  leadCapture: true,
-  contactCard: true,
-  downloadables: true,
-  hero: true,
-};
+function getString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
-function toNumber(value: unknown): number | null {
+function getNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
     const parsed = Number(value);
@@ -179,46 +82,472 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
+function getStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === "string")
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+}
+
+function getDownloadItems(value: unknown): DownloadItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      const row = getRecord(item);
+      const label = getString(row.label || row.title);
+      const url = getString(row.url);
+
+      if (!label || !url) return null;
+
+      return {
+        label,
+        url,
+        type: getString(row.type) || null,
+      };
+    })
+    .filter((item): item is DownloadItem => item !== null);
+}
+
+function getContactList(value: unknown): ContactItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      const row = getRecord(item);
+      return {
+        name: getString(row.name) || null,
+        role: getString(row.role) || null,
+        email: getString(row.email) || null,
+        phone: getString(row.phone) || null,
+        whatsapp: getString(row.whatsapp) || null,
+      };
+    })
+    .filter((item) => {
+      return Boolean(
+        item.name || item.role || item.email || item.phone || item.whatsapp,
+      );
+    });
+}
+
 function isValidPropertyProfile(item: ApiListingRecord, slug: string): boolean {
-  const data = item.data || {};
-  const effectiveName = (item.name || data.name || "").trim().toLowerCase();
-  const companySlug = (item.companySlug || "").trim().toLowerCase();
-  const listingSlug = (item.slug || "").trim().toLowerCase();
+  const listingSlug = getString(item.slug).toLowerCase();
+  const companySlug = getString(item.companySlug).toLowerCase();
+  const listingName = getString(item.name).toLowerCase();
 
   if (item.status !== "published") return false;
-  if (listingSlug !== slug.toLowerCase()) return false;
   if (!listingSlug) return false;
-
+  if (listingSlug !== slug.toLowerCase()) return false;
   if (companySlug && listingSlug === companySlug) return false;
-  if (companySlug && effectiveName === companySlug.replace(/-/g, " ")) return false;
+  if (companySlug && listingName === companySlug.replace(/-/g, " ")) return false;
 
   return true;
 }
 
 async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> {
-  const headersList = await headers();
-  const host = headersList.get("host");
+  const headerStore = headers();
+  const host = headerStore.get("host");
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
   if (!host) return null;
 
-  const res = await fetch(`${protocol}://${host}/api/admin/listings`, {
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(`${protocol}://${host}/api/admin/listings`, {
+      cache: "no-store",
+    });
 
-  if (!res.ok) return null;
+    if (!response.ok) return null;
 
-  const json = await res.json();
-  const listings = Array.isArray(json.listings) ? json.listings : [];
+    const json = await response.json();
+    const root = getRecord(json);
+    const listings = root.listings;
+
+    if (!Array.isArray(listings)) return null;
+
+    const match = (listings as ApiListingRecord[]).find((item) =>
+      isValidPropertyProfile(item, slug),
+    );
+
+    return match || null;
+  } catch {
+    return null;
+  }
+}
+
+function getTheme(listing: ApiListingRecord): ThemeState {
+  const theme = getRecord(listing.design?.theme);
+
+  return {
+    pageBg: getString(theme.pageBg) || DEFAULT_THEME.pageBg,
+    blockBg: getString(theme.blockBg) || DEFAULT_THEME.blockBg,
+    accent: getString(theme.accent) || DEFAULT_THEME.accent,
+    highlight: getString(theme.highlight) || DEFAULT_THEME.highlight,
+    borderColor: getString(theme.borderColor) || DEFAULT_THEME.borderColor,
+  };
+}
+
+function getData(listing: ApiListingRecord): Record<string, unknown> {
+  return getRecord(listing.data);
+}
+
+function getSnapshot(listing: ApiListingRecord): Record<string, unknown> {
+  const data = getData(listing);
+  return getRecord(data.snapshot);
+}
+
+function getRates(listing: ApiListingRecord): Record<string, unknown> {
+  const data = getData(listing);
+  return getRecord(data.rates);
+}
+
+function getExperiences(listing: ApiListingRecord): Record<string, unknown> {
+  const data = getData(listing);
+  return getRecord(data.experiences);
+}
+
+function getPolicies(listing: ApiListingRecord): Record<string, unknown> {
+  const data = getData(listing);
+  return getRecord(data.policies);
+}
+
+function getDownloads(listing: ApiListingRecord): DownloadItem[] {
+  const data = getData(listing);
+  return getDownloadItems(data.downloads || data.downloadables);
+}
+
+function getContacts(listing: ApiListingRecord) {
+  const data = getData(listing);
+  const contacts = getRecord(data.contacts);
+
+  const reservations = getContactList(contacts.reservations);
+  const sales = getContactList(contacts.sales);
+  const marketing = getContactList(contacts.marketing);
+
+  const legacyContact =
+    getString(data.contactName) ||
+    getString(data.contactTitle) ||
+    getString(data.contactEmail) ||
+    getString(data.contactPhone) ||
+    getString(data.contactWebsite);
+
+  if (reservations.length || sales.length || marketing.length) {
+    return { reservations, sales, marketing };
+  }
+
+  if (legacyContact) {
+    return {
+      reservations: [],
+      sales: [
+        {
+          name: getString(data.contactName) || null,
+          role: getString(data.contactTitle) || null,
+          email: getString(data.contactEmail) || null,
+          phone: getString(data.contactPhone) || null,
+          whatsapp: null,
+        },
+      ],
+      marketing: [],
+    };
+  }
+
+  return {
+    reservations: [],
+    sales: [],
+    marketing: [],
+  };
+}
+
+function getLocation(listing: ApiListingRecord): string {
+  const data = getData(listing);
+  const snapshot = getSnapshot(listing);
 
   return (
-    listings.find((item: ApiListingRecord) => isValidPropertyProfile(item, slug)) ||
-    null
+    listing.location ||
+    getString(snapshot.location) ||
+    getString(data.locationLabel) ||
+    "Location not set"
   );
 }
 
+function getClassLabel(listing: ApiListingRecord): string {
+  const data = getData(listing);
+  return listing.class || getString(data.class) || "Property";
+}
+
+function getVibe(listing: ApiListingRecord): string {
+  const data = getData(listing);
+  return (
+    listing.vibe ||
+    getString(data.vibe) ||
+    getString(data.overview) ||
+    "Trade-ready safari property profile."
+  );
+}
+
+function getWebsite(listing: ApiListingRecord): string {
+  const data = getData(listing);
+  return listing.website || getString(data.website);
+}
+
+function getLogoImage(listing: ApiListingRecord): string {
+  const data = getData(listing);
+  return getString(data.logoImage);
+}
+
+function getHeroImage(listing: ApiListingRecord): string {
+  const data = getData(listing);
+
+  const coverImage = getString(data.coverImage);
+  if (coverImage) return coverImage;
+
+  const heroImage = getString(data.heroImage);
+  if (heroImage) return heroImage;
+
+  const gallery = getGalleryImages(listing);
+  if (gallery.length > 0) return gallery[0].src;
+
+  return "";
+}
+
+function getGalleryImages(listing: ApiListingRecord): GalleryImage[] {
+  const data = getData(listing);
+  const gallery = data.gallery;
+
+  if (Array.isArray(gallery)) {
+    const images: GalleryImage[] = [];
+
+    for (const group of gallery) {
+      const groupRecord = getRecord(group);
+      const label = getString(groupRecord.label) || "Gallery";
+      const items = groupRecord.images;
+
+      if (!Array.isArray(items)) continue;
+
+      items.forEach((item, index) => {
+        const src = getString(item);
+        if (src) {
+          images.push({
+            src,
+            label: `${label} ${index + 1}`,
+          });
+        }
+      });
+    }
+
+    if (images.length > 0) return images;
+  }
+
+  const roomPhotos = getRecord(data.roomPhotos);
+  const roomTypeLabels = getRecord(data.roomTypeLabels);
+
+  const groups = [
+    {
+      key: "family",
+      label: getString(roomTypeLabels.family) || "Family setup",
+      items: roomPhotos.family,
+    },
+    {
+      key: "double",
+      label: getString(roomTypeLabels.double) || "Double setup",
+      items: roomPhotos.double,
+    },
+    {
+      key: "single",
+      label: getString(roomTypeLabels.single) || "Single setup",
+      items: roomPhotos.single,
+    },
+  ];
+
+  const fallbackImages: GalleryImage[] = [];
+
+  for (const group of groups) {
+    if (!Array.isArray(group.items)) continue;
+
+    group.items.forEach((item, index) => {
+      const src = getString(item);
+      if (src) {
+        fallbackImages.push({
+          src,
+          label: `${group.label} ${index + 1}`,
+        });
+      }
+    });
+  }
+
+  return fallbackImages;
+}
+
+function getQuickSnapshot(listing: ApiListingRecord) {
+  const data = getData(listing);
+  const snapshot = getSnapshot(listing);
+
+  const rooms =
+    getString(snapshot.rooms) ||
+    (getNumber(data.rooms) !== null ? String(getNumber(data.rooms)) : "");
+
+  const bestFor = getString(snapshot.bestFor) || getClassLabel(listing);
+  const style = getString(snapshot.style) || getVibe(listing);
+  const access = getString(snapshot.access);
+  const setting = getString(snapshot.setting);
+
+  return {
+    rooms,
+    bestFor,
+    style,
+    access,
+    setting,
+  };
+}
+
+function getRateRows(listing: ApiListingRecord) {
+  const rates = getRates(listing);
+  const rows = rates.rows;
+
+  if (Array.isArray(rows)) {
+    return rows
+      .map((item) => {
+        const row = getRecord(item);
+        return {
+          season: getString(row.season),
+          dates: getString(row.dates),
+          rackPPPN: getString(row.rackPPPN || row.rackRate),
+        };
+      })
+      .filter((row) => row.season || row.dates || row.rackPPPN);
+  }
+
+  return [];
+}
+
+function getRateNotes(listing: ApiListingRecord): string[] {
+  const rates = getRates(listing);
+  const notes = getStringArray(rates.notes);
+
+  if (notes.length > 0) return notes;
+
+  return ["Rates per person sharing", "Full board", "Park fees excluded"];
+}
+
+function getIncludedExperiences(listing: ApiListingRecord): string[] {
+  const experiences = getExperiences(listing);
+  const included = getStringArray(experiences.included);
+  if (included.length > 0) return included;
+
+  const data = getData(listing);
+  return getStringArray(data.freeActivities);
+}
+
+function getPaidExperiences(listing: ApiListingRecord): string[] {
+  const experiences = getExperiences(listing);
+  const paid = getStringArray(experiences.paid);
+  if (paid.length > 0) return paid;
+
+  const data = getData(listing);
+  return getStringArray(data.paidActivities);
+}
+
+function getPoliciesList(listing: ApiListingRecord): Array<{ label: string; value: string }> {
+  const policies = getPolicies(listing);
+  const data = getData(listing);
+
+  const childPolicy = getString(policies.childPolicy);
+  const honeymoonPolicy = getString(policies.honeymoonPolicy);
+  const cancellation = getString(policies.cancellation);
+  const importantNotes = getStringArray(policies.importantNotes);
+  const tradeNotes = getStringArray(policies.tradeNotes);
+  const legacyTerms = getString(data.terms);
+
+  const rows: Array<{ label: string; value: string }> = [];
+
+  if (childPolicy) rows.push({ label: "Child policy", value: childPolicy });
+  if (honeymoonPolicy) rows.push({ label: "Honeymoon policy", value: honeymoonPolicy });
+  if (cancellation) rows.push({ label: "Cancellation", value: cancellation });
+
+  importantNotes.forEach((item) => {
+    rows.push({ label: "Important note", value: item });
+  });
+
+  tradeNotes.forEach((item) => {
+    rows.push({ label: "Trade note", value: item });
+  });
+
+  if (legacyTerms && rows.length === 0) {
+    rows.push({ label: "Terms", value: legacyTerms });
+  }
+
+  return rows;
+}
+
+function getTradeContacts(listing: ApiListingRecord) {
+  const contacts = getContacts(listing);
+
+  return [
+    {
+      title: "Reservations",
+      items: contacts.reservations,
+    },
+    {
+      title: "Sales",
+      items: contacts.sales,
+    },
+    {
+      title: "Marketing",
+      items: contacts.marketing,
+    },
+  ].filter((group) => group.items.length > 0);
+}
+
+function getTradeActions(listing: ApiListingRecord) {
+  const data = getData(listing);
+
+  const enquiryEmail = getString(data.enquiryEmail);
+  const enquiryWhatsApp = getString(data.enquiryWhatsApp);
+  const enquirySubject =
+    getString(data.enquirySubject) || "Trade Request";
+
+  return {
+    enquiryEmail,
+    enquiryWhatsApp,
+    enquirySubject,
+  };
+}
+
+function getTripadvisorData(listing: ApiListingRecord) {
+  const data = getData(listing);
+
+  return {
+    rating: getNumber(data.taRating) ?? listing.tripadvisorRating,
+    link: getString(data.taLink),
+    logoUrl: getString(data.taLogoUrl),
+  };
+}
+
+function panelStyle(theme: ThemeState): SimpleStyle {
+  return {
+    backgroundColor: theme.blockBg,
+    borderColor: theme.borderColor,
+    color: theme.accent,
+  };
+}
+
+function softStyle(theme: ThemeState): SimpleStyle {
+  return {
+    borderColor: theme.borderColor,
+    backgroundColor: theme.blockBg,
+    color: theme.accent,
+  };
+}
+
+function primaryButtonStyle(theme: ThemeState): SimpleStyle {
+  return {
+    backgroundColor: theme.highlight,
+    color: "#ffffff",
+  };
+}
+
 export default async function ProfilePage({ params }: ProfilePageProps) {
-  const { slug } = await params;
+  const slug = params.slug;
   const listing = await getListingBySlug(slug);
 
   if (!listing) {
@@ -232,8 +561,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             Profile not found
           </h1>
           <p className="mt-4 max-w-2xl text-white/65">
-            This trade profile does not exist yet or the link is no longer
-            active.
+            This trade profile does not exist yet or the link is no longer active.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -256,459 +584,230 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     );
   }
 
-  const data = listing.data || {};
-  const theme = {
-    ...DEFAULT_THEME,
-    ...(listing.design?.theme || {}),
-  };
-  const blockColors = {
-    ...DEFAULT_BLOCK_COLORS,
-    ...(listing.design?.blockColors || {}),
-  };
-  const visibleBlocks = {
-    ...DEFAULT_VISIBLE_BLOCKS,
-    ...(listing.design?.visibleBlocks || {}),
-  };
+  const theme = getTheme(listing);
+  const data = getData(listing);
+  const location = getLocation(listing);
+  const propertyClass = getClassLabel(listing);
+  const vibe = getVibe(listing);
+  const website = getWebsite(listing);
+  const logoImage = getLogoImage(listing);
+  const heroImage = getHeroImage(listing);
+  const galleryImages = getGalleryImages(listing);
+  const snapshot = getQuickSnapshot(listing);
+  const rateRows = getRateRows(listing);
+  const rateNotes = getRateNotes(listing);
+  const includedExperiences = getIncludedExperiences(listing);
+  const paidExperiences = getPaidExperiences(listing);
+  const policies = getPoliciesList(listing);
+  const downloads = getDownloads(listing);
+  const contactGroups = getTradeContacts(listing);
+  const tradeActions = getTradeActions(listing);
+  const tripadvisor = getTripadvisorData(listing);
 
-  const location =
-    listing.locationLabel || data.locationLabel || "Location not set";
-  const vibe = listing.vibe || data.vibe || "";
-  const website = listing.website || data.website || "";
-  const rating = toNumber(data.rating);
-  const reviewCount = toNumber(data.reviewCount);
-  const rooms = toNumber(data.rooms);
-  const family = toNumber(data.family);
-  const doubleRooms = toNumber(data.double);
-  const singleRooms = toNumber(data.single);
-  const taRating = toNumber(data.taRating ?? listing.tripadvisorRating);
-
-  const socialLinks = {
-    facebookUrl: data.facebookUrl || "",
-    instagramUrl: data.instagramUrl || "",
-    tiktokUrl: data.tiktokUrl || "",
-    youtubeUrl: data.youtubeUrl || "",
-  };
-
-  const downloadables = Array.isArray(data.downloadables)
-    ? data.downloadables
-    : [];
-
-  const contactCard =
-    data.contactName ||
-    data.contactTitle ||
-    data.contactCompany ||
-    data.contactEmail ||
-    data.contactPhone ||
-    data.contactWebsite
-      ? {
-          contactName: data.contactName || "",
-          contactTitle: data.contactTitle || "",
-          contactCompany: data.contactCompany || "",
-          contactEmail: data.contactEmail || "",
-          contactPhone: data.contactPhone || "",
-          contactWebsite: data.contactWebsite || "",
-        }
-      : null;
-
-  const leadCapture =
-    data.leadHeadline ||
-    data.leadSubcopy ||
-    data.leadBullet1 ||
-    data.leadBullet2 ||
-    data.leadBullet3 ||
-    data.leadCta ||
-    data.leadDisclaimer ||
-    data.enquiryEmail ||
-    data.enquiryWhatsApp
-      ? {
-          headline: data.leadHeadline || "Trade Enquiries",
-          subcopy: data.leadSubcopy || "",
-          bullet1: data.leadBullet1 || "",
-          bullet2: data.leadBullet2 || "",
-          bullet3: data.leadBullet3 || "",
-          cta: data.leadCta || "Request Trade Pack",
-          disclaimer: data.leadDisclaimer || "",
-          enquiryEmail: data.enquiryEmail || "",
-          enquiryWhatsApp: data.enquiryWhatsApp || "",
-          enquirySubject: data.enquirySubject || "",
-        }
-      : null;
-
-  const roomPhotoGroups = [
-    {
-      key: "family",
-      label: data.roomTypeLabels?.family || "Family setup",
-      items: data.roomPhotos?.family || [],
-    },
-    {
-      key: "double",
-      label: data.roomTypeLabels?.double || "Double setup",
-      items: data.roomPhotos?.double || [],
-    },
-    {
-      key: "single",
-      label: data.roomTypeLabels?.single || "Single setup",
-      items: data.roomPhotos?.single || [],
-    },
-  ].filter((group) => group.items.length > 0);
-
-  const galleryImages = roomPhotoGroups.flatMap((group) =>
-    group.items.map((src, index) => ({
-      src,
-      label: `${group.label} ${index + 1}`,
-    })),
-  );
-
-  const topInclusions = Array.isArray(data.inclusions)
-    ? data.inclusions.slice(0, 4)
-    : [];
-  const topIncludedActivities = Array.isArray(data.freeActivities)
-    ? data.freeActivities.slice(0, 4)
-    : [];
-  const topPaidActivities = Array.isArray(data.paidActivities)
-    ? data.paidActivities.slice(0, 4)
-    : [];
-
-  const pageStyle: React.CSSProperties = {
+  const pageStyle: SimpleStyle = {
     backgroundColor: theme.pageBg,
     color: theme.accent,
   };
 
-  const panelStyle = (bg: string): React.CSSProperties => ({
-    backgroundColor: bg || theme.blockBg,
-    borderColor: theme.borderColor,
-    color: theme.accent,
-  });
-
-  const pillStyle: React.CSSProperties = {
-    borderColor: theme.borderColor,
-    backgroundColor: theme.blockBg,
-    color: theme.accent,
-  };
-
-  const primaryButtonStyle: React.CSSProperties = {
-    backgroundColor: theme.highlight,
-    color: "#ffffff",
-  };
-
-  const secondaryButtonStyle: React.CSSProperties = {
-    borderColor: theme.borderColor,
-    backgroundColor: theme.blockBg,
-    color: theme.accent,
-  };
-
-  const titleStyle: React.CSSProperties = {
-    color: theme.accent,
-    opacity: 0.48,
-  };
-
-  const bodyStyle: React.CSSProperties = {
-    color: theme.accent,
-    opacity: 0.75,
-  };
-
-  const heroImage = data.coverImage || galleryImages[0]?.src || "";
+  const tags = [
+    location,
+    propertyClass,
+    snapshot.bestFor,
+    snapshot.style,
+  ].filter(Boolean);
 
   return (
     <main className="min-h-screen" style={pageStyle}>
-      {visibleBlocks.hero && (
-        <section
-          className="border-b"
-          style={{
-            borderColor: theme.borderColor,
-            backgroundColor: blockColors.header || theme.blockBg,
-          }}
-        >
-          <div className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:py-14">
-            <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-3">
+      <section className="border-b" style={{ borderColor: theme.borderColor }}>
+        <div className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:py-14">
+          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className="rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em]"
+                  style={{
+                    borderColor: theme.highlight,
+                    backgroundColor: `${theme.highlight}22`,
+                    color: theme.accent,
+                  }}
+                >
+                  Property
+                </span>
+
+                {listing.design?.preset ? (
                   <span
-                    className="rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em]"
-                    style={{
-                      borderColor: theme.highlight,
-                      backgroundColor: `${theme.highlight}22`,
-                      color: theme.accent,
-                    }}
+                    className="text-[11px] font-semibold uppercase tracking-[0.22em]"
+                    style={{ color: theme.accent, opacity: 0.5 }}
                   >
-                    Property
+                    {listing.design.preset}
                   </span>
-
-                  {(data.tradeProfileLabel || data.tradeProfileSub) && (
-                    <span
-                      className="text-[11px] font-semibold uppercase tracking-[0.22em]"
-                      style={titleStyle}
-                    >
-                      {[data.tradeProfileLabel, data.tradeProfileSub]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-start gap-4">
-                  {data.logoImage ? (
-                    <div
-                      className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[22px] border"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: theme.blockBg,
-                      }}
-                    >
-                      <img
-                        src={data.logoImage}
-                        alt={`${listing.name} logo`}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                  ) : null}
-
-                  <div className="min-w-0">
-                    <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
-                      {listing.name}
-                    </h1>
-                    <p
-                      className="mt-3 max-w-3xl text-base leading-8 md:text-lg"
-                      style={bodyStyle}
-                    >
-                      {vibe || "Trade-ready safari property profile."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Pill text={location} style={pillStyle} />
-                  {listing.class ? <Pill text={listing.class} style={pillStyle} /> : null}
-                  {typeof rating === "number" ? (
-                    <Pill
-                      text={`Rating ${rating.toFixed(1)}${
-                        typeof reviewCount === "number" ? ` · ${reviewCount}` : ""
-                      }`}
-                      style={pillStyle}
-                    />
-                  ) : null}
-                  {rooms !== null ? (
-                    <Pill text={`Rooms ${rooms}`} style={pillStyle} />
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <QuickFact
-                    label="Rooms"
-                    value={rooms !== null ? String(rooms) : "—"}
-                    theme={theme}
-                  />
-                  <QuickFact
-                    label="Family"
-                    value={family !== null ? String(family) : "—"}
-                    theme={theme}
-                  />
-                  <QuickFact
-                    label="Double"
-                    value={doubleRooms !== null ? String(doubleRooms) : "—"}
-                    theme={theme}
-                  />
-                  <QuickFact
-                    label="Single"
-                    value={singleRooms !== null ? String(singleRooms) : "—"}
-                    theme={theme}
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  {downloadables.length ? (
-                    <a
-                      href={downloadables[0].url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-2xl px-5 py-3 text-sm font-semibold"
-                      style={primaryButtonStyle}
-                    >
-                      Download Trade Pack
-                    </a>
-                  ) : null}
-
-                  {leadCapture?.enquiryEmail ? (
-                    <a
-                      href={`mailto:${leadCapture.enquiryEmail}?subject=${encodeURIComponent(
-                        leadCapture.enquirySubject ||
-                          leadCapture.cta ||
-                          "Trade Request",
-                      )}`}
-                      className="rounded-2xl border px-5 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      Request Rates
-                    </a>
-                  ) : null}
-
-                  {leadCapture?.enquiryWhatsApp ? (
-                    <a
-                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(
-                        /[^\d]/g,
-                        "",
-                      )}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-2xl border px-5 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      WhatsApp
-                    </a>
-                  ) : null}
-                </div>
-
-                {(topInclusions.length > 0 ||
-                  topIncludedActivities.length > 0 ||
-                  topPaidActivities.length > 0) && (
-                  <div
-                    className="rounded-[30px] border p-6"
-                    style={panelStyle(blockColors.tradeDetails)}
-                  >
-                    <div className="grid gap-5 lg:grid-cols-3">
-                      <SnapshotList
-                        title="Key Inclusions"
-                        items={topInclusions}
-                        theme={theme}
-                      />
-                      <SnapshotList
-                        title="Included Experiences"
-                        items={topIncludedActivities}
-                        theme={theme}
-                      />
-                      <SnapshotList
-                        title="Paid Experiences"
-                        items={topPaidActivities}
-                        theme={theme}
-                      />
-                    </div>
-                  </div>
-                )}
+                ) : null}
               </div>
 
-              <div className="space-y-5">
-                <div
-                  className="overflow-hidden rounded-[34px] border"
-                  style={panelStyle(blockColors.header)}
-                >
+              <div className="flex items-start gap-4">
+                {logoImage ? (
                   <div
-                    className="relative aspect-[4/3] overflow-hidden"
-                    style={{ backgroundColor: theme.blockBg }}
+                    className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[22px] border"
+                    style={softStyle(theme)}
                   >
-                    {heroImage ? (
-                      <img
-                        src={heroImage}
-                        alt={`${listing.name} hero`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full bg-[linear-gradient(135deg,rgba(255,255,255,0.03),rgba(255,255,255,0.08))]" />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                    <img
+                      src={logoImage}
+                      alt={`${listing.name} logo`}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
+                ) : null}
 
-                  <div className="grid gap-3 p-5 sm:grid-cols-2">
-                    {website ? (
-                      <a
-                        href={website}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                        style={secondaryButtonStyle}
-                      >
-                        Website
-                      </a>
-                    ) : null}
-                    {(data.mapLink || listing.mapLink) ? (
-                      <a
-                        href={data.mapLink || listing.mapLink || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                        style={secondaryButtonStyle}
-                      >
-                        Open Map
-                      </a>
-                    ) : null}
-                    {socialLinks.instagramUrl ? (
-                      <a
-                        href={socialLinks.instagramUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                        style={secondaryButtonStyle}
-                      >
-                        Instagram
-                      </a>
-                    ) : null}
-                    {socialLinks.facebookUrl ? (
-                      <a
-                        href={socialLinks.facebookUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                        style={secondaryButtonStyle}
-                      >
-                        Facebook
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div
-                  className="rounded-[30px] border p-6"
-                  style={panelStyle(blockColors.leadCapture)}
-                >
-                  <p className="text-sm uppercase tracking-[0.2em]" style={titleStyle}>
-                    First Look Summary
+                <div className="min-w-0">
+                  <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
+                    {listing.name}
+                  </h1>
+                  <p
+                    className="mt-3 max-w-3xl text-base leading-8 md:text-lg"
+                    style={{ color: theme.accent, opacity: 0.75 }}
+                  >
+                    {vibe}
                   </p>
-                  <div className="mt-4 space-y-3">
-                    <SummaryRow
-                      label="Status"
-                      value={listing.status}
-                      theme={theme}
-                    />
-                    <SummaryRow
-                      label="Best for"
-                      value={listing.class || data.class || "Luxury safari trade"}
-                      theme={theme}
-                    />
-                    <SummaryRow
-                      label="Location"
-                      value={location}
-                      theme={theme}
-                    />
-                    <SummaryRow
-                      label="Commercial"
-                      value={data.offersText ? "Offer available" : "Standard terms"}
-                      theme={theme}
-                    />
-                  </div>
                 </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <Pill key={tag} text={tag} theme={theme} />
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <QuickFact
+                  label="Rooms"
+                  value={snapshot.rooms || "—"}
+                  theme={theme}
+                />
+                <QuickFact
+                  label="Best For"
+                  value={snapshot.bestFor || "—"}
+                  theme={theme}
+                />
+                <QuickFact
+                  label="Setting"
+                  value={snapshot.setting || "—"}
+                  theme={theme}
+                />
+                <QuickFact
+                  label="Access"
+                  value={snapshot.access || "—"}
+                  theme={theme}
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {downloads.length > 0 ? (
+                  <a
+                    href={downloads[0].url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-2xl px-5 py-3 text-sm font-semibold"
+                    style={primaryButtonStyle(theme)}
+                  >
+                    Request Trade Pack
+                  </a>
+                ) : null}
+
+                {tradeActions.enquiryEmail ? (
+                  <a
+                    href={`mailto:${tradeActions.enquiryEmail}?subject=${encodeURIComponent(
+                      tradeActions.enquirySubject,
+                    )}`}
+                    className="rounded-2xl border px-5 py-3 text-sm font-semibold"
+                    style={softStyle(theme)}
+                  >
+                    Request Quote
+                  </a>
+                ) : null}
+
+                {tradeActions.enquiryWhatsApp ? (
+                  <a
+                    href={`https://wa.me/${tradeActions.enquiryWhatsApp.replace(/[^\d]/g, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-2xl border px-5 py-3 text-sm font-semibold"
+                    style={softStyle(theme)}
+                  >
+                    WhatsApp
+                  </a>
+                ) : null}
               </div>
             </div>
+
+            <div className="space-y-5">
+              <div
+                className="overflow-hidden rounded-[34px] border"
+                style={panelStyle(theme)}
+              >
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  {heroImage ? (
+                    <img
+                      src={heroImage}
+                      alt={`${listing.name} hero`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-[linear-gradient(135deg,rgba(255,255,255,0.03),rgba(255,255,255,0.08))]" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                </div>
+
+                <div className="grid gap-3 p-5 sm:grid-cols-2">
+                  {website ? (
+                    <a
+                      href={website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-2xl border px-4 py-3 text-sm font-semibold"
+                      style={softStyle(theme)}
+                    >
+                      Website
+                    </a>
+                  ) : null}
+
+                  {listing.mapLink ? (
+                    <a
+                      href={listing.mapLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-2xl border px-4 py-3 text-sm font-semibold"
+                      style={softStyle(theme)}
+                    >
+                      Open Map
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              <SectionCard title="Quick Trade Snapshot" theme={theme}>
+                <div className="space-y-3">
+                  <SummaryRow label="Location" value={location} theme={theme} />
+                  <SummaryRow label="Best for" value={snapshot.bestFor || "—"} theme={theme} />
+                  <SummaryRow label="Style" value={snapshot.style || "—"} theme={theme} />
+                  <SummaryRow label="Access" value={snapshot.access || "—"} theme={theme} />
+                </div>
+              </SectionCard>
+            </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       <section className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:py-12">
         <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-8">
-            {visibleBlocks.matrix && galleryImages.length > 0 ? (
-              <SectionCard
-                title="Gallery"
-                theme={theme}
-                bg={blockColors.matrix}
-              >
+            {galleryImages.length > 0 ? (
+              <SectionCard title="Gallery" theme={theme}>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {galleryImages.slice(0, 6).map((image) => (
                     <div
                       key={`${image.src}-${image.label}`}
                       className="overflow-hidden rounded-[22px] border"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: theme.blockBg,
-                      }}
+                      style={softStyle(theme)}
                     >
                       <img
                         src={image.src}
@@ -721,250 +820,173 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               </SectionCard>
             ) : null}
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              {visibleBlocks.inclusions &&
-              Array.isArray(data.inclusions) &&
-              data.inclusions.length ? (
-                <SectionCard
-                  title="Inclusions"
-                  theme={theme}
-                  bg={blockColors.inclusions}
-                >
-                  <TagList items={data.inclusions} theme={theme} />
-                </SectionCard>
-              ) : null}
+            {rateRows.length > 0 ? (
+              <SectionCard title="Rates" theme={theme}>
+                <div className="overflow-hidden rounded-[22px] border" style={softStyle(theme)}>
+                  <div className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ borderColor: theme.borderColor, opacity: 0.6 }}>
+                    <span>Season</span>
+                    <span>Dates</span>
+                    <span>Rack PPPN</span>
+                  </div>
 
-              {visibleBlocks.exclusions &&
-              Array.isArray(data.exclusions) &&
-              data.exclusions.length ? (
-                <SectionCard
-                  title="Exclusions"
-                  theme={theme}
-                  bg={blockColors.exclusions}
-                >
-                  <TagList items={data.exclusions} theme={theme} />
-                </SectionCard>
-              ) : null}
-            </div>
+                  {rateRows.map((row, index) => (
+                    <div
+                      key={`${row.season}-${row.dates}-${index}`}
+                      className="grid grid-cols-3 px-4 py-3 text-sm"
+                      style={{
+                        borderTop: index === 0 ? "none" : `1px solid ${theme.borderColor}`,
+                      }}
+                    >
+                      <span>{row.season || "—"}</span>
+                      <span>{row.dates || "—"}</span>
+                      <span>{row.rackPPPN || "—"}</span>
+                    </div>
+                  })}
+                </div>
 
-            {visibleBlocks.experiences &&
-            ((Array.isArray(data.freeActivities) && data.freeActivities.length) ||
-              (Array.isArray(data.paidActivities) && data.paidActivities.length)) ? (
-              <SectionCard
-                title="Experiences"
-                theme={theme}
-                bg={blockColors.experiences}
-              >
+                {rateNotes.length > 0 ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {rateNotes.map((note) => (
+                      <Pill key={note} text={note} theme={theme} />
+                    ))}
+                  </div>
+                ) : null}
+              </SectionCard>
+            ) : null}
+
+            {(includedExperiences.length > 0 || paidExperiences.length > 0) ? (
+              <SectionCard title="Experiences" theme={theme}>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div>
                     <p
                       className="text-xs font-semibold uppercase tracking-[0.18em]"
-                      style={titleStyle}
+                      style={{ color: theme.accent, opacity: 0.5 }}
                     >
                       Included
                     </p>
                     <div className="mt-3">
-                      <TagList items={data.freeActivities || []} theme={theme} />
+                      <TagList items={includedExperiences} theme={theme} />
                     </div>
                   </div>
+
                   <div>
                     <p
                       className="text-xs font-semibold uppercase tracking-[0.18em]"
-                      style={titleStyle}
+                      style={{ color: theme.accent, opacity: 0.5 }}
                     >
                       Paid
                     </p>
                     <div className="mt-3">
-                      <TagList items={data.paidActivities || []} theme={theme} />
+                      <TagList items={paidExperiences} theme={theme} />
                     </div>
                   </div>
                 </div>
               </SectionCard>
             ) : null}
 
-            {(visibleBlocks.offers && data.offersText) ||
-            (visibleBlocks.terms && data.terms) ? (
-              <div className="grid gap-6 lg:grid-cols-2">
-                {visibleBlocks.offers && data.offersText ? (
-                  <SectionCard
-                    title="Offer"
-                    theme={theme}
-                    bg={blockColors.offers}
-                  >
-                    <p className="text-base leading-8" style={bodyStyle}>
-                      {data.offersText}
-                    </p>
-                  </SectionCard>
-                ) : null}
-
-                {visibleBlocks.terms && data.terms ? (
-                  <SectionCard
-                    title="Terms"
-                    theme={theme}
-                    bg={blockColors.terms}
-                  >
-                    <p className="text-base leading-8" style={bodyStyle}>
-                      {data.terms}
-                    </p>
-                  </SectionCard>
-                ) : null}
-              </div>
+            {policies.length > 0 ? (
+              <SectionCard title="Policies" theme={theme}>
+                <div className="space-y-3">
+                  {policies.map((row, index) => (
+                    <div
+                      key={`${row.label}-${index}`}
+                      className="rounded-2xl border px-4 py-3"
+                      style={softStyle(theme)}
+                    >
+                      <p
+                        className="text-[11px] uppercase tracking-[0.18em]"
+                        style={{ color: theme.accent, opacity: 0.45 }}
+                      >
+                        {row.label}
+                      </p>
+                      <p className="mt-2 text-sm leading-7">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
             ) : null}
           </div>
 
           <aside className="space-y-6">
-            {visibleBlocks.leadCapture && leadCapture ? (
-              <SectionCard
-                title="Trade Enquiries"
-                theme={theme}
-                bg={blockColors.leadCapture}
-              >
-                <h3 className="text-2xl font-semibold">{leadCapture.headline}</h3>
-                {leadCapture.subcopy ? (
-                  <p className="mt-3 text-sm leading-7" style={bodyStyle}>
-                    {leadCapture.subcopy}
-                  </p>
-                ) : null}
-
-                <div className="mt-5 space-y-2">
-                  {[leadCapture.bullet1, leadCapture.bullet2, leadCapture.bullet3]
-                    .filter(Boolean)
-                    .map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-2xl border px-4 py-3 text-sm"
-                        style={secondaryButtonStyle}
-                      >
-                        {item}
-                      </div>
-                    ))}
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3">
-                  {leadCapture.enquiryEmail ? (
-                    <a
-                      href={`mailto:${leadCapture.enquiryEmail}?subject=${encodeURIComponent(
-                        leadCapture.enquirySubject ||
-                          leadCapture.cta ||
-                          "Trade Request",
-                      )}`}
-                      className="rounded-2xl px-5 py-3 text-center text-sm font-semibold"
-                      style={primaryButtonStyle}
-                    >
-                      {leadCapture.cta || "Request Trade Pack"}
-                    </a>
-                  ) : null}
-
-                  {leadCapture.enquiryWhatsApp ? (
-                    <a
-                      href={`https://wa.me/${leadCapture.enquiryWhatsApp.replace(
-                        /[^\d]/g,
-                        "",
-                      )}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-2xl border px-5 py-3 text-center text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      WhatsApp
-                    </a>
-                  ) : null}
-                </div>
-
-                {leadCapture.disclaimer ? (
-                  <p className="mt-4 text-xs leading-6" style={titleStyle}>
-                    {leadCapture.disclaimer}
-                  </p>
-                ) : null}
-              </SectionCard>
-            ) : null}
-
-            {visibleBlocks.downloadables && downloadables.length ? (
-              <SectionCard
-                title="Fact Sheets & Downloads"
-                theme={theme}
-                bg={blockColors.downloadables}
-              >
+            {downloads.length > 0 ? (
+              <SectionCard title="Downloads" theme={theme}>
                 <div className="space-y-3">
-                  {downloadables.map((item) => (
+                  {downloads.map((item, index) => (
                     <a
-                      key={item.id}
+                      key={`${item.label}-${index}`}
                       href={item.url}
                       target="_blank"
                       rel="noreferrer"
                       className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
+                      style={softStyle(theme)}
                     >
-                      {item.title}
+                      {item.label}
                     </a>
                   ))}
                 </div>
               </SectionCard>
             ) : null}
 
-            {visibleBlocks.contactCard && contactCard ? (
-              <SectionCard
-                title="Contact"
-                theme={theme}
-                bg={blockColors.contactCard}
-              >
-                <div>
-                  <p className="text-xl font-semibold">{contactCard.contactName}</p>
-                  {contactCard.contactTitle ? (
-                    <p className="mt-1 text-sm" style={bodyStyle}>
-                      {contactCard.contactTitle}
-                    </p>
-                  ) : null}
-                  {contactCard.contactCompany ? (
-                    <p className="text-sm" style={bodyStyle}>
-                      {contactCard.contactCompany}
-                    </p>
-                  ) : null}
-                </div>
+            {contactGroups.length > 0 ? (
+              <SectionCard title="Contact" theme={theme}>
+                <div className="space-y-6">
+                  {contactGroups.map((group) => (
+                    <div key={group.title}>
+                      <p
+                        className="text-[11px] uppercase tracking-[0.18em]"
+                        style={{ color: theme.accent, opacity: 0.45 }}
+                      >
+                        {group.title}
+                      </p>
 
-                <div className="mt-5 space-y-3">
-                  {contactCard.contactEmail ? (
-                    <a
-                      href={`mailto:${contactCard.contactEmail}`}
-                      className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      {contactCard.contactEmail}
-                    </a>
-                  ) : null}
-
-                  {contactCard.contactPhone ? (
-                    <div
-                      className="rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      {contactCard.contactPhone}
+                      <div className="mt-3 space-y-3">
+                        {group.items.map((item, index) => (
+                          <div
+                            key={`${group.title}-${index}`}
+                            className="rounded-2xl border px-4 py-3"
+                            style={softStyle(theme)}
+                          >
+                            {item.name ? (
+                              <p className="text-sm font-semibold">{item.name}</p>
+                            ) : null}
+                            {item.role ? (
+                              <p className="mt-1 text-sm" style={{ opacity: 0.75 }}>
+                                {item.role}
+                              </p>
+                            ) : null}
+                            {item.email ? (
+                              <a
+                                href={`mailto:${item.email}`}
+                                className="mt-3 block text-sm underline"
+                              >
+                                {item.email}
+                              </a>
+                            ) : null}
+                            {item.phone ? (
+                              <p className="mt-2 text-sm">{item.phone}</p>
+                            ) : null}
+                            {item.whatsapp ? (
+                              <a
+                                href={`https://wa.me/${item.whatsapp.replace(/[^\d]/g, "")}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 block text-sm underline"
+                              >
+                                WhatsApp
+                              </a>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ) : null}
-
-                  {contactCard.contactWebsite ? (
-                    <a
-                      href={contactCard.contactWebsite}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                      style={secondaryButtonStyle}
-                    >
-                      Open Website
-                    </a>
-                  ) : null}
+                  ))}
                 </div>
               </SectionCard>
             ) : null}
 
-            {visibleBlocks.tripadvisor &&
-            (data.taLink || typeof taRating === "number") ? (
-              <SectionCard
-                title="Tripadvisor"
-                theme={theme}
-                bg={blockColors.tripadvisor}
-              >
-                {data.taLogoUrl ? (
+            {(tripadvisor.rating !== null || tripadvisor.link) ? (
+              <SectionCard title="Tripadvisor" theme={theme}>
+                {tripadvisor.logoUrl ? (
                   <div
                     className="overflow-hidden rounded-2xl border px-4 py-3"
                     style={{
@@ -973,29 +995,29 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     }}
                   >
                     <img
-                      src={data.taLogoUrl}
+                      src={tripadvisor.logoUrl}
                       alt="Tripadvisor"
                       className="h-8 w-auto object-contain"
                     />
                   </div>
                 ) : null}
 
-                {typeof taRating === "number" ? (
+                {tripadvisor.rating !== null ? (
                   <div
                     className="mt-3 rounded-2xl border px-4 py-3 text-sm font-semibold"
-                    style={secondaryButtonStyle}
+                    style={softStyle(theme)}
                   >
-                    Rating {taRating.toFixed(1)}
+                    Rating {tripadvisor.rating.toFixed(1)}
                   </div>
                 ) : null}
 
-                {data.taLink ? (
+                {tripadvisor.link ? (
                   <a
-                    href={data.taLink}
+                    href={tripadvisor.link}
                     target="_blank"
                     rel="noreferrer"
                     className="mt-3 block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                    style={secondaryButtonStyle}
+                    style={softStyle(theme)}
                   >
                     Open Tripadvisor
                   </a>
@@ -1011,13 +1033,20 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
 function Pill({
   text,
-  style,
+  theme,
 }: {
   text: string;
-  style: React.CSSProperties;
+  theme: ThemeState;
 }) {
   return (
-    <span className="rounded-full border px-3 py-1.5 text-sm" style={style}>
+    <span
+      className="rounded-full border px-3 py-1.5 text-sm"
+      style={{
+        borderColor: theme.borderColor,
+        backgroundColor: theme.blockBg,
+        color: theme.accent,
+      }}
+    >
       {text}
     </span>
   );
@@ -1055,12 +1084,10 @@ function QuickFact({
 function SectionCard({
   title,
   theme,
-  bg,
   children,
 }: {
   title: string;
   theme: ThemeState;
-  bg: string;
   children: React.ReactNode;
 }) {
   return (
@@ -1068,7 +1095,7 @@ function SectionCard({
       className="rounded-[30px] border p-6 md:p-8"
       style={{
         borderColor: theme.borderColor,
-        backgroundColor: bg || theme.blockBg,
+        backgroundColor: theme.blockBg,
         color: theme.accent,
       }}
     >
@@ -1079,48 +1106,6 @@ function SectionCard({
         {title}
       </p>
       <div className="mt-5">{children}</div>
-    </div>
-  );
-}
-
-function SnapshotList({
-  title,
-  items,
-  theme,
-}: {
-  title: string;
-  items: string[];
-  theme: ThemeState;
-}) {
-  return (
-    <div>
-      <p
-        className="text-[11px] font-semibold uppercase tracking-[0.18em]"
-        style={{ color: theme.accent, opacity: 0.45 }}
-      >
-        {title}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {items.length ? (
-          items.map((item) => (
-            <span
-              key={item}
-              className="rounded-full border px-3 py-1.5 text-xs"
-              style={{
-                borderColor: theme.borderColor,
-                backgroundColor: theme.blockBg,
-                color: theme.accent,
-              }}
-            >
-              {item}
-            </span>
-          ))
-        ) : (
-          <span style={{ color: theme.accent, opacity: 0.55 }}>
-            None listed
-          </span>
-        )}
-      </div>
     </div>
   );
 }
@@ -1156,6 +1141,10 @@ function TagList({
   items: string[];
   theme: ThemeState;
 }) {
+  if (items.length === 0) {
+    return <span style={{ color: theme.accent, opacity: 0.55 }}>None listed</span>;
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
