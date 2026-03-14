@@ -123,7 +123,7 @@ type ApiListingRecord = {
   slug?: string;
   name?: string;
   companySlug?: string | null;
-  status?: ListingStatus;
+  status?: ListingStatus | string | null;
   location?: string | null;
   class?: string | null;
   vibe?: string | null;
@@ -220,14 +220,14 @@ type PdfImportResponse = {
   error?: string;
 };
 
-const STORAGE_KEY = "safaritrade-admin-v2";
+const STORAGE_KEY = "safaritrade-admin-v3";
 
 const DEFAULT_THEME: ThemeState = {
-  pageBg: "#e9e1d8",
-  blockBg: "#f7f2eb",
-  accent: "#5f472f",
-  highlight: "#8e8260",
-  borderColor: "#cdbfae",
+  pageBg: "#e8e1d8",
+  blockBg: "#f6f1ea",
+  accent: "#6a5237",
+  highlight: "#8b8364",
+  borderColor: "#d7ccbf",
 };
 
 function uid() {
@@ -344,7 +344,7 @@ function makeEmptyListing(): ListingEditorState {
       style: "",
       access: "",
     },
-    gallery: [makeGalleryGroup("Camp Exterior")],
+    gallery: [makeGalleryGroup("Gallery")],
     rates: {
       currency: "",
       notesText: "Rates per person sharing\nFull board\nPark fees excluded",
@@ -361,7 +361,7 @@ function makeEmptyListing(): ListingEditorState {
       importantNotesText: "",
       tradeNotesText: "",
     },
-    downloads: [makeDownload()],
+    downloads: [],
     contacts: {
       reservations: [makeContact()],
       sales: [makeContact()],
@@ -391,22 +391,20 @@ function normalizeTheme(value: unknown): ThemeState {
 }
 
 function normalizeGallery(value: unknown): GalleryGroup[] {
-  if (!Array.isArray(value)) return [makeGalleryGroup("Camp Exterior")];
+  if (!Array.isArray(value)) return [makeGalleryGroup("Gallery")];
 
   const rows = value
     .map((item) => {
       const row = getRecord(item);
-      const label = getString(row.label) || "Gallery";
-      const images = getStringArray(row.images);
       return {
         id: uid(),
-        label,
-        images,
+        label: getString(row.label) || "Gallery",
+        images: getStringArray(row.images),
       };
     })
     .filter((item) => item.label || item.images.length > 0);
 
-  return rows.length > 0 ? rows : [makeGalleryGroup("Camp Exterior")];
+  return rows.length > 0 ? rows : [makeGalleryGroup("Gallery")];
 }
 
 function normalizeRates(value: unknown) {
@@ -421,7 +419,11 @@ function normalizeRates(value: unknown) {
             id: uid(),
             season: getString(row.season),
             dates: getString(row.dates),
-            rackPPPN: getString(row.rackPPPN || row.rackRate),
+            rackPPPN:
+              getString(row.rackPPPN) ||
+              getString(row.rackRate) ||
+              getString(row.rack) ||
+              getString(row.rate),
           };
         })
         .filter((row) => row.season || row.dates || row.rackPPPN)
@@ -458,21 +460,19 @@ function normalizeContactList(value: unknown): ContactItem[] {
 }
 
 function normalizeDownloads(value: unknown): DownloadItem[] {
-  if (!Array.isArray(value)) return [makeDownload()];
+  if (!Array.isArray(value)) return [];
 
-  const rows = value
+  return value
     .map((item) => {
       const row = getRecord(item);
       return {
         id: uid(),
-        label: getString(row.label || row.title),
+        label: getString(row.label || row.title || row.name),
         url: getString(row.url),
         type: getString(row.type) || "link",
       };
     })
     .filter((item) => item.label || item.url);
-
-  return rows.length > 0 ? rows : [makeDownload()];
 }
 
 function fromApiListing(listing: ApiListingRecord): ListingEditorState {
@@ -483,28 +483,38 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
   const policies = getRecord(data.policies);
   const contacts = getRecord(data.contacts);
 
-  const legacyFreeActivities = getStringArray(data.freeActivities);
-  const legacyPaidActivities = getStringArray(data.paidActivities);
-  const legacyDownloads = data.downloadables;
+  const gallery = normalizeGallery(data.gallery);
+  const flatImages = getStringArray(data.images);
+
+  if (flatImages.length > 0 && gallery.length === 1 && gallery[0].images.length === 0) {
+    gallery[0].images = flatImages;
+  }
 
   const logoImage = getString(data.logoImage);
   const coverImage =
     getString(data.coverImage) ||
     getString(data.heroImage) ||
-    getStringArray(data.images)[0];
+    flatImages[0] ||
+    gallery.flatMap((group) => group.images)[0] ||
+    "";
+
   const location =
     getString(listing.location) ||
     getString(snapshot.location) ||
-    getString(data.locationLabel);
-
-  const quickTags = getStringArray(data.quickTags);
+    getString(data.locationLabel) ||
+    getString(data.location);
 
   return {
     ...base,
     slug: getString(listing.slug),
     name: getString(listing.name) || "New Property",
     companySlug: getString(listing.companySlug) || "nyumbani-collection",
-    status: listing.status || "draft",
+    status:
+      listing.status === "published" ||
+      listing.status === "archived" ||
+      listing.status === "draft"
+        ? listing.status
+        : "draft",
     location,
     class: getString(listing.class) || getString(data.class),
     vibe:
@@ -518,7 +528,7 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
     ),
     logoImage,
     coverImage,
-    quickTagsText: quickTags.join("\n"),
+    quickTagsText: getStringArray(data.quickTags).join("\n"),
     preset:
       listing.design?.preset === "modern-trade-deck" ||
       listing.design?.preset === "editorial-luxury" ||
@@ -535,19 +545,11 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
       style: getString(snapshot.style),
       access: getString(snapshot.access),
     },
-    gallery: normalizeGallery(data.gallery),
+    gallery,
     rates: normalizeRates(data.rates),
     experiences: {
-      includedText: (
-        getStringArray(experiences.included).length > 0
-          ? getStringArray(experiences.included)
-          : legacyFreeActivities
-      ).join("\n"),
-      paidText: (
-        getStringArray(experiences.paid).length > 0
-          ? getStringArray(experiences.paid)
-          : legacyPaidActivities
-      ).join("\n"),
+      includedText: getStringArray(experiences.included).join("\n"),
+      paidText: getStringArray(experiences.paid).join("\n"),
     },
     policies: {
       childPolicy: getString(policies.childPolicy),
@@ -556,24 +558,32 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
       importantNotesText: linesToText(policies.importantNotes),
       tradeNotesText: linesToText(policies.tradeNotes),
     },
-    downloads: normalizeDownloads(data.downloads || legacyDownloads),
+    downloads: normalizeDownloads(data.downloads || data.downloadables),
     contacts: {
-      reservations: normalizeContactList(contacts.reservations),
+      reservations:
+        Array.isArray(contacts.reservations) && contacts.reservations.length > 0
+          ? normalizeContactList(contacts.reservations)
+          : normalizeContactList([
+              {
+                name: data.contactName || "Reservations",
+                role: data.contactTitle || "Reservations / Sales",
+                email:
+                  data.contactEmail || data.enquiryEmail || data.email || "",
+                phone:
+                  data.contactPhone || data.phone || data.reservationPhone || "",
+                whatsapp: data.contactWhatsapp || data.whatsapp || "",
+              },
+            ]),
       sales:
         Array.isArray(contacts.sales) && contacts.sales.length > 0
           ? normalizeContactList(contacts.sales)
-          : normalizeContactList([
-              {
-                name: data.contactName,
-                role: data.contactTitle,
-                email: data.contactEmail,
-                phone: data.contactPhone,
-                whatsapp: "",
-              },
-            ]),
-      marketing: normalizeContactList(contacts.marketing),
+          : [makeContact()],
+      marketing:
+        Array.isArray(contacts.marketing) && contacts.marketing.length > 0
+          ? normalizeContactList(contacts.marketing)
+          : [makeContact()],
     },
-    offersText: getString(data.offersText || data.offers),
+    offersText: getString(data.offersText || data.offerText || data.offerHeadline),
     sustainability: getString(data.sustainability),
     enquiryEmail:
       getString(data.enquiryEmail) ||
@@ -583,13 +593,18 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
     enquirySubject: getString(data.enquirySubject) || "Trade Request",
     taLogoUrl: getString(data.taLogoUrl),
     taLink: getString(data.taLink),
-    tradeProfileLabel: getString(data.tradeProfileLabel),
+    tradeProfileLabel:
+      getString(data.tradeProfileLabel) ||
+      (getString(listing.companySlug)
+        ? getString(listing.companySlug).replace(/-/g, " ")
+        : ""),
     tradeProfileSub: getString(data.tradeProfileSub),
   };
 }
 
 function toApiPayload(listing: ListingEditorState) {
   const normalizedSlug = listing.slug.trim() || slugify(listing.name);
+  const flatImages = listing.gallery.flatMap((group) => group.images).filter(Boolean);
 
   return {
     slug: normalizedSlug,
@@ -622,6 +637,7 @@ function toApiPayload(listing: ListingEditorState) {
           images: group.images.filter(Boolean),
         }))
         .filter((group) => group.images.length > 0 || group.label),
+      images: flatImages,
       rates: {
         currency: listing.rates.currency.trim() || null,
         notes: textToLines(listing.rates.notesText),
@@ -701,7 +717,7 @@ function toApiPayload(listing: ListingEditorState) {
               item.whatsapp,
           ),
       },
-      offers: listing.offersText.trim() ? [listing.offersText.trim()] : [],
+      offersText: listing.offersText.trim() || null,
       sustainability: listing.sustainability.trim() || null,
       logoImage: listing.logoImage.trim() || null,
       coverImage: listing.coverImage.trim() || null,
@@ -719,7 +735,6 @@ function toApiPayload(listing: ListingEditorState) {
       tradeProfileLabel: listing.tradeProfileLabel.trim() || null,
       tradeProfileSub: listing.tradeProfileSub.trim() || null,
       quickTags: textToLines(listing.quickTagsText),
-      images: listing.gallery.flatMap((group) => group.images).filter(Boolean),
     },
     preset: listing.preset,
     theme: listing.theme,
@@ -732,7 +747,7 @@ function mergeImportedListing(
 ) {
   if (!parsed) return current;
 
-  const next: ListingEditorState = {
+  return {
     ...current,
     name: parsed.name || current.name,
     slug: current.slug || (parsed.name ? slugify(parsed.name) : current.slug),
@@ -839,8 +854,6 @@ function mergeImportedListing(
           : current.contacts.marketing,
     },
   };
-
-  return next;
 }
 
 function Section(props: {
@@ -910,26 +923,24 @@ function EditorUploadZone(props: {
   subtitle: string;
   onClick: () => void;
   className?: string;
-  children?: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      className={`group relative w-full overflow-hidden rounded-[18px] border border-dashed text-left transition hover:opacity-95 ${props.className || ""}`}
+      className={`group relative w-full overflow-hidden rounded-[16px] border border-dashed text-left transition hover:opacity-95 ${props.className || ""}`}
       style={{
-        borderColor: "rgba(95, 71, 47, 0.28)",
-        backgroundColor: "rgba(255,255,255,0.32)",
+        borderColor: "rgba(106,82,55,0.28)",
+        backgroundColor: "rgba(255,255,255,0.34)",
       }}
     >
-      {props.children}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(95,71,47,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(95,71,47,0.03)_1px,transparent_1px)] bg-[size:28px_28px]" />
-      <div className="absolute left-4 top-4 z-10 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5f472f] backdrop-blur">
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(106,82,55,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(106,82,55,0.03)_1px,transparent_1px)] bg-[size:28px_28px]" />
+      <div className="absolute left-4 top-4 z-10 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6a5237] backdrop-blur">
         Click to upload
       </div>
-      <div className="absolute bottom-4 left-4 z-10 right-4">
-        <div className="text-sm font-semibold text-[#5f472f]">{props.title}</div>
-        <div className="mt-1 text-xs text-[#7a6349]">{props.subtitle}</div>
+      <div className="absolute bottom-4 left-4 right-4 z-10">
+        <div className="text-sm font-semibold text-[#6a5237]">{props.title}</div>
+        <div className="mt-1 text-xs text-[#7d654a]">{props.subtitle}</div>
       </div>
     </button>
   );
@@ -960,10 +971,13 @@ export default function AdminPage() {
         });
         if (response.ok) {
           const json = await response.json();
-          if (Array.isArray(json.listings) && json.listings.length > 0) {
-            const next = (json.listings as ApiListingRecord[]).map(
-              fromApiListing,
-            );
+          const rawListings = Array.isArray(json)
+            ? json
+            : Array.isArray(json.listings)
+              ? json.listings
+              : [];
+          if (rawListings.length > 0) {
+            const next = (rawListings as ApiListingRecord[]).map(fromApiListing);
             setListings(next);
             setSelectedIndex(0);
             setSaveState(`Loaded ${next.length} listing(s) from API`);
@@ -1029,7 +1043,7 @@ export default function AdminPage() {
 
   function addGalleryGroup() {
     updateListing({
-      gallery: [...selected.gallery, makeGalleryGroup("New Group")],
+      gallery: [...selected.gallery, makeGalleryGroup("Gallery")],
     });
   }
 
@@ -1042,8 +1056,7 @@ export default function AdminPage() {
   function removeGalleryGroup(index: number) {
     const next = selected.gallery.filter((_, i) => i !== index);
     updateListing({
-      gallery:
-        next.length > 0 ? next : [makeGalleryGroup("Camp Exterior")],
+      gallery: next.length > 0 ? next : [makeGalleryGroup("Gallery")],
     });
   }
 
@@ -1090,9 +1103,8 @@ export default function AdminPage() {
   }
 
   function removeDownload(index: number) {
-    const rows = selected.downloads.filter((_, i) => i !== index);
     updateListing({
-      downloads: rows.length > 0 ? rows : [makeDownload()],
+      downloads: selected.downloads.filter((_, i) => i !== index),
     });
   }
 
@@ -1137,7 +1149,7 @@ export default function AdminPage() {
     const form = new FormData();
     form.append("file", file);
 
-    const response = await fetch("/api/admin/upload", {
+    const response = await fetch("/api/upload", {
       method: "POST",
       body: form,
     });
@@ -1212,7 +1224,6 @@ export default function AdminPage() {
 
     try {
       setUploadState("Uploading files...");
-
       const uploadedItems: DownloadItem[] = [];
 
       for (const file of files) {
@@ -1225,12 +1236,8 @@ export default function AdminPage() {
         });
       }
 
-      const currentDownloads = selected.downloads.filter(
-        (item) => item.label || item.url,
-      );
-
       updateListing({
-        downloads: [...currentDownloads, ...uploadedItems],
+        downloads: [...selected.downloads, ...uploadedItems],
       });
 
       setUploadState(`${uploadedItems.length} file(s) uploaded`);
@@ -1261,7 +1268,7 @@ export default function AdminPage() {
       const form = new FormData();
       form.append("file", file);
 
-      const response = await fetch("/api/admin/import-pdf", {
+      const response = await fetch("/api/import-pdf", {
         method: "POST",
         body: form,
       });
@@ -1278,16 +1285,12 @@ export default function AdminPage() {
         (item) => item.url === uploaded.url,
       );
 
-      const cleanedDownloads = merged.downloads.filter(
-        (item) => item.label || item.url,
-      );
-
       const nextListing: ListingEditorState = {
         ...merged,
         downloads: alreadyHasPdf
-          ? cleanedDownloads
+          ? merged.downloads
           : [
-              ...cleanedDownloads,
+              ...merged.downloads,
               {
                 id: uid(),
                 label: file.name,
@@ -1358,57 +1361,36 @@ export default function AdminPage() {
     (item) => item.label || item.url,
   );
 
-  const previewContacts = [
-    ...selected.contacts.reservations,
-    ...selected.contacts.sales,
-    ...selected.contacts.marketing,
-  ].filter((item) => item.name || item.email || item.phone || item.role);
+  const previewReservations = selected.contacts.reservations.filter(
+    (item) => item.name || item.role || item.email || item.phone || item.whatsapp,
+  );
 
-  const previewGalleryImages = selected.gallery.flatMap((group) =>
-    group.images.map((image, index) => ({
-      src: image,
+  const heroGallery = selected.gallery.flatMap((group) =>
+    group.images.map((src, index) => ({
+      src,
       label: `${group.label} ${index + 1}`,
-      groupId: group.id,
     })),
   );
+
+  const heroGalleryFour = heroGallery.slice(0, 4);
 
   const overviewText =
     selected.overview.trim() ||
     selected.vibe.trim() ||
-    "A trade-facing safari dossier built for quick qualification, faster quoting, and elegant client-ready sharing.";
+    "A luxury tented camp profile designed for quick trade qualification, elegant presentation, and fast quoting.";
 
-  const snapshotFacts = [
-    {
-      label: "Rooms",
-      value: selected.snapshot.rooms || "—",
-      sub: selected.class || "Inventory",
-    },
-    {
-      label: "Location",
-      value: selected.location || selected.snapshot.location || "—",
-      sub: "Safari region",
-    },
-    {
-      label: "Best For",
-      value: selected.snapshot.bestFor || "—",
-      sub: "Ideal fit",
-    },
-    {
-      label: "Setting",
-      value: selected.snapshot.setting || "—",
-      sub: "Landscape",
-    },
-    {
-      label: "Style",
-      value: selected.snapshot.style || selected.class || "—",
-      sub: "Property style",
-    },
-    {
-      label: "Access",
-      value: selected.snapshot.access || "—",
-      sub: "Arrival",
-    },
+  const factTabs = [
+    { label: "Rooms", value: selected.snapshot.rooms || "—", sub: selected.class || "Inventory" },
+    { label: "Location", value: selected.location || selected.snapshot.location || "—", sub: "Safari region" },
+    { label: "Best For", value: selected.snapshot.bestFor || "—", sub: "Guest fit" },
+    { label: "Setting", value: selected.snapshot.setting || "—", sub: "Landscape" },
+    { label: "Style", value: selected.snapshot.style || selected.class || "—", sub: "Property style" },
+    { label: "Access", value: selected.snapshot.access || "—", sub: "Arrival" },
   ];
+
+  const promoText =
+    selected.offersText.trim() ||
+    "Book 10+ guests in Green Season, 3rd night 50% off";
 
   return (
     <div
@@ -1550,26 +1532,61 @@ export default function AdminPage() {
                 </select>
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                {Object.entries(selected.theme).map(([key, value]) => (
-                  <Field key={key} label={key}>
-                    <input
-                      type="color"
-                      value={
-                        /^#([0-9A-F]{3}){1,2}$/i.test(value) ? value : "#000000"
-                      }
-                      onChange={(e) =>
-                        updateListing({
-                          theme: {
-                            ...selected.theme,
-                            [key]: e.target.value,
-                          },
-                        })
-                      }
-                      className="h-10 w-full rounded-xl border border-white/10 bg-black/20"
-                    />
-                  </Field>
-                ))}
+              <div className="grid gap-3">
+                <Field label="Page background">
+                  <TextInput
+                    value={selected.theme.pageBg}
+                    onChange={(e) =>
+                      updateListing({
+                        theme: { ...selected.theme, pageBg: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Block background">
+                  <TextInput
+                    value={selected.theme.blockBg}
+                    onChange={(e) =>
+                      updateListing({
+                        theme: { ...selected.theme, blockBg: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Accent text">
+                  <TextInput
+                    value={selected.theme.accent}
+                    onChange={(e) =>
+                      updateListing({
+                        theme: { ...selected.theme, accent: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Highlight">
+                  <TextInput
+                    value={selected.theme.highlight}
+                    onChange={(e) =>
+                      updateListing({
+                        theme: { ...selected.theme, highlight: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Border color">
+                  <TextInput
+                    value={selected.theme.borderColor}
+                    onChange={(e) =>
+                      updateListing({
+                        theme: { ...selected.theme, borderColor: e.target.value },
+                      })
+                    }
+                  />
+                </Field>
               </div>
             </Section>
 
@@ -1648,9 +1665,7 @@ export default function AdminPage() {
                 <Field label="Location">
                   <TextInput
                     value={selected.location}
-                    onChange={(e) =>
-                      updateListing({ location: e.target.value })
-                    }
+                    onChange={(e) => updateListing({ location: e.target.value })}
                   />
                 </Field>
 
@@ -1664,18 +1679,14 @@ export default function AdminPage() {
                 <Field label="Website">
                   <TextInput
                     value={selected.website}
-                    onChange={(e) =>
-                      updateListing({ website: e.target.value })
-                    }
+                    onChange={(e) => updateListing({ website: e.target.value })}
                   />
                 </Field>
 
                 <Field label="Map link">
                   <TextInput
                     value={selected.mapLink}
-                    onChange={(e) =>
-                      updateListing({ mapLink: e.target.value })
-                    }
+                    onChange={(e) => updateListing({ mapLink: e.target.value })}
                   />
                 </Field>
 
@@ -1717,7 +1728,7 @@ export default function AdminPage() {
                 </Field>
               </div>
 
-              <Field label="Overview / vibe">
+              <Field label="Short intro / vibe">
                 <TextArea
                   rows={4}
                   value={selected.vibe}
@@ -1725,7 +1736,7 @@ export default function AdminPage() {
                 />
               </Field>
 
-              <Field label="Long overview">
+              <Field label="Main overview">
                 <TextArea
                   rows={5}
                   value={selected.overview}
@@ -1738,9 +1749,7 @@ export default function AdminPage() {
                   <div className="flex gap-2">
                     <TextInput
                       value={selected.logoImage}
-                      onChange={(e) =>
-                        updateListing({ logoImage: e.target.value })
-                      }
+                      onChange={(e) => updateListing({ logoImage: e.target.value })}
                     />
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
                       <Upload size={14} />
@@ -1748,21 +1757,17 @@ export default function AdminPage() {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) =>
-                          handleSingleImageUpload(e, "logoImage")
-                        }
+                        onChange={(e) => handleSingleImageUpload(e, "logoImage")}
                       />
                     </label>
                   </div>
                 </Field>
 
-                <Field label="Cover image">
+                <Field label="Hero image">
                   <div className="flex gap-2">
                     <TextInput
                       value={selected.coverImage}
-                      onChange={(e) =>
-                        updateListing({ coverImage: e.target.value })
-                      }
+                      onChange={(e) => updateListing({ coverImage: e.target.value })}
                     />
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white">
                       <Upload size={14} />
@@ -1770,9 +1775,7 @@ export default function AdminPage() {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) =>
-                          handleSingleImageUpload(e, "coverImage")
-                        }
+                        onChange={(e) => handleSingleImageUpload(e, "coverImage")}
                       />
                     </label>
                   </div>
@@ -1792,48 +1795,47 @@ export default function AdminPage() {
                 <Field label="Location">
                   <TextInput
                     value={selected.snapshot.location}
-                    onChange={(e) =>
-                      updateSnapshot("location", e.target.value)
-                    }
+                    onChange={(e) => updateSnapshot("location", e.target.value)}
                   />
                 </Field>
 
                 <Field label="Best for">
                   <TextInput
                     value={selected.snapshot.bestFor}
-                    onChange={(e) =>
-                      updateSnapshot("bestFor", e.target.value)
-                    }
+                    onChange={(e) => updateSnapshot("bestFor", e.target.value)}
                   />
                 </Field>
 
                 <Field label="Setting">
                   <TextInput
                     value={selected.snapshot.setting}
-                    onChange={(e) =>
-                      updateSnapshot("setting", e.target.value)
-                    }
+                    onChange={(e) => updateSnapshot("setting", e.target.value)}
                   />
                 </Field>
 
                 <Field label="Style">
                   <TextInput
                     value={selected.snapshot.style}
-                    onChange={(e) =>
-                      updateSnapshot("style", e.target.value)
-                    }
+                    onChange={(e) => updateSnapshot("style", e.target.value)}
                   />
                 </Field>
 
                 <Field label="Access">
                   <TextInput
                     value={selected.snapshot.access}
-                    onChange={(e) =>
-                      updateSnapshot("access", e.target.value)
-                    }
+                    onChange={(e) => updateSnapshot("access", e.target.value)}
                   />
                 </Field>
               </div>
+            </Section>
+
+            <Section title="Offer strip">
+              <Field label="Promo text shown below hero">
+                <TextInput
+                  value={selected.offersText}
+                  onChange={(e) => updateListing({ offersText: e.target.value })}
+                />
+              </Field>
             </Section>
 
             <Section title="Gallery">
@@ -1852,9 +1854,7 @@ export default function AdminPage() {
                       <TextInput
                         value={group.label}
                         onChange={(e) =>
-                          updateGalleryGroup(groupIndex, {
-                            label: e.target.value,
-                          })
+                          updateGalleryGroup(groupIndex, { label: e.target.value })
                         }
                       />
                       <SmallButton onClick={() => removeGalleryGroup(groupIndex)}>
@@ -1876,7 +1876,7 @@ export default function AdminPage() {
                       </label>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       {group.images.map((image, imageIndex) => (
                         <div
                           key={`${group.id}-${imageIndex}`}
@@ -2137,97 +2137,75 @@ export default function AdminPage() {
             </Section>
 
             <Section title="Contacts">
-              {(["reservations", "sales", "marketing"] as const).map(
-                (group) => (
-                  <div
-                    key={group}
-                    className="rounded-xl border border-white/10 bg-black/20 p-3"
-                  >
-                    <div className="mb-3 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold capitalize text-white">
-                        {group}
-                      </h3>
-                      <SmallButton onClick={() => addContact(group)}>
-                        <Plus size={14} />
-                        Add
-                      </SmallButton>
-                    </div>
-
-                    <div className="space-y-3">
-                      {selected.contacts[group].map((item, index) => (
-                        <div
-                          key={item.id}
-                          className="grid gap-3 rounded-xl border border-white/10 p-3 md:grid-cols-2"
-                        >
-                          <TextInput
-                            value={item.name}
-                            onChange={(e) =>
-                              updateContact(group, index, {
-                                name: e.target.value,
-                              })
-                            }
-                            placeholder="Name"
-                          />
-                          <TextInput
-                            value={item.role}
-                            onChange={(e) =>
-                              updateContact(group, index, {
-                                role: e.target.value,
-                              })
-                            }
-                            placeholder="Role"
-                          />
-                          <TextInput
-                            value={item.email}
-                            onChange={(e) =>
-                              updateContact(group, index, {
-                                email: e.target.value,
-                              })
-                            }
-                            placeholder="Email"
-                          />
-                          <TextInput
-                            value={item.phone}
-                            onChange={(e) =>
-                              updateContact(group, index, {
-                                phone: e.target.value,
-                              })
-                            }
-                            placeholder="Phone"
-                          />
-                          <TextInput
-                            value={item.whatsapp}
-                            onChange={(e) =>
-                              updateContact(group, index, {
-                                whatsapp: e.target.value,
-                              })
-                            }
-                            placeholder="WhatsApp"
-                          />
-                          <SmallButton onClick={() => removeContact(group, index)}>
-                            <Trash2 size={14} />
-                            Remove
-                          </SmallButton>
-                        </div>
-                      ))}
-                    </div>
+              {(["reservations", "sales", "marketing"] as const).map((group) => (
+                <div
+                  key={group}
+                  className="rounded-xl border border-white/10 bg-black/20 p-3"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold capitalize text-white">
+                      {group}
+                    </h3>
+                    <SmallButton onClick={() => addContact(group)}>
+                      <Plus size={14} />
+                      Add
+                    </SmallButton>
                   </div>
-                ),
-              )}
+
+                  <div className="space-y-3">
+                    {selected.contacts[group].map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="grid gap-3 rounded-xl border border-white/10 p-3 md:grid-cols-2"
+                      >
+                        <TextInput
+                          value={item.name}
+                          onChange={(e) =>
+                            updateContact(group, index, { name: e.target.value })
+                          }
+                          placeholder="Name"
+                        />
+                        <TextInput
+                          value={item.role}
+                          onChange={(e) =>
+                            updateContact(group, index, { role: e.target.value })
+                          }
+                          placeholder="Role"
+                        />
+                        <TextInput
+                          value={item.email}
+                          onChange={(e) =>
+                            updateContact(group, index, { email: e.target.value })
+                          }
+                          placeholder="Email"
+                        />
+                        <TextInput
+                          value={item.phone}
+                          onChange={(e) =>
+                            updateContact(group, index, { phone: e.target.value })
+                          }
+                          placeholder="Phone"
+                        />
+                        <TextInput
+                          value={item.whatsapp}
+                          onChange={(e) =>
+                            updateContact(group, index, { whatsapp: e.target.value })
+                          }
+                          placeholder="WhatsApp"
+                        />
+                        <SmallButton onClick={() => removeContact(group, index)}>
+                          <Trash2 size={14} />
+                          Remove
+                        </SmallButton>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </Section>
 
             <Section title="Commercial & extras">
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Offers text">
-                  <TextArea
-                    rows={4}
-                    value={selected.offersText}
-                    onChange={(e) =>
-                      updateListing({ offersText: e.target.value })
-                    }
-                  />
-                </Field>
-
                 <Field label="Sustainability">
                   <TextArea
                     rows={4}
@@ -2285,9 +2263,9 @@ export default function AdminPage() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto max-w-[1280px] px-4 py-6 md:px-6 md:py-8">
+        <div className="mx-auto max-w-[1240px] px-4 py-6 md:px-6 md:py-8">
           <div
-            className="overflow-hidden rounded-[28px] border shadow-[0_20px_60px_rgba(70,48,22,0.10)]"
+            className="overflow-hidden rounded-[22px] border shadow-[0_22px_60px_rgba(78,56,28,0.08)]"
             style={{
               borderColor: previewTheme.borderColor,
               backgroundColor: previewTheme.blockBg,
@@ -2295,16 +2273,15 @@ export default function AdminPage() {
             }}
           >
             <section
-              className="border-b px-5 py-6 md:px-10 md:py-8"
+              className="border-b px-5 py-4 md:px-10 md:py-5"
               style={{ borderColor: previewTheme.borderColor }}
             >
-              <div className="flex flex-col items-center justify-center text-center">
+              <div className="flex items-center justify-center">
                 {selected.logoImage ? (
                   <button
                     type="button"
                     onClick={() => logoFileRef.current?.click()}
-                    className="mb-4 h-16 w-28 overflow-hidden rounded-xl border transition hover:opacity-90"
-                    style={{ borderColor: previewTheme.borderColor }}
+                    className="h-16 w-44 overflow-hidden rounded-xl"
                     title="Replace logo"
                   >
                     <img
@@ -2314,62 +2291,24 @@ export default function AdminPage() {
                     />
                   </button>
                 ) : (
-                  <div className="mb-4 w-full max-w-[280px]">
-                    <EditorUploadZone
-                      title="Logo area"
-                      subtitle="Upload the property or brand logo"
-                      onClick={() => logoFileRef.current?.click()}
-                      className="h-[90px]"
-                    />
-                  </div>
-                )}
-
-                <h1
-                  className="text-4xl font-semibold tracking-tight md:text-6xl"
-                  style={{ color: previewTheme.accent }}
-                >
-                  {selected.name}
-                </h1>
-
-                <p className="mt-3 text-sm md:text-xl" style={{ opacity: 0.72 }}>
-                  {[
-                    selected.tradeProfileLabel,
-                    selected.location || selected.snapshot.location,
-                    selected.class,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-
-                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  <span
-                    className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.16em]"
+                  <button
+                    type="button"
+                    onClick={() => logoFileRef.current?.click()}
+                    className="rounded-full border px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.24em]"
                     style={{
                       borderColor: previewTheme.borderColor,
                       backgroundColor: "rgba(255,255,255,0.42)",
                     }}
                   >
-                    {selected.status}
-                  </span>
-
-                  {selected.tradeProfileSub ? (
-                    <span
-                      className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.16em]"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.42)",
-                      }}
-                    >
-                      {selected.tradeProfileSub}
-                    </span>
-                  ) : null}
-                </div>
+                    Upload logo
+                  </button>
+                )}
               </div>
             </section>
 
-            <section className="px-4 pb-5 pt-4 md:px-8 md:pb-6 md:pt-6">
+            <section className="px-4 pb-5 pt-4 md:px-8 md:pt-6">
               <div
-                className="overflow-hidden rounded-[24px] border"
+                className="overflow-hidden rounded-[18px] border"
                 style={{ borderColor: previewTheme.borderColor }}
               >
                 <div className="relative">
@@ -2383,125 +2322,73 @@ export default function AdminPage() {
                       <img
                         src={selected.coverImage}
                         alt={`${selected.name} hero`}
-                        className="aspect-[16/7.6] w-full object-cover"
+                        className="aspect-[16/6.6] w-full object-cover"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[rgba(60,41,22,0.52)] via-[rgba(60,41,22,0.08)] to-transparent" />
-                      <div className="absolute right-4 top-4 rounded-full border bg-white/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5f472f] backdrop-blur">
-                        Replace hero
-                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-[rgba(76,56,32,0.58)] via-[rgba(76,56,32,0.10)] to-transparent" />
                     </button>
                   ) : (
-                    <div className="relative">
-                      <EditorUploadZone
-                        title="Hero image"
-                        subtitle="Upload the main cover image used at the top of the dossier"
-                        onClick={() => coverFileRef.current?.click()}
-                        className="aspect-[16/7.6]"
-                      />
-                      <div className="absolute inset-x-0 bottom-0 px-5 pb-6 pt-16 md:px-10 md:pb-8">
-                        <div className="text-center text-[#f8f3eb]">
-                          <h2 className="text-3xl font-semibold drop-shadow-sm md:text-6xl">
-                            {selected.name}
-                          </h2>
-                          <p className="mt-3 text-sm md:text-2xl">
-                            {[
-                              selected.tradeProfileLabel,
-                              selected.location || selected.snapshot.location,
-                              selected.class,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    <EditorUploadZone
+                      title="Hero image"
+                      subtitle="Upload the main cover image"
+                      onClick={() => coverFileRef.current?.click()}
+                      className="aspect-[16/6.6]"
+                    />
                   )}
 
-                  {selected.coverImage ? (
-                    <div className="absolute inset-x-0 bottom-0 px-5 pb-6 pt-16 md:px-10 md:pb-8 pointer-events-none">
-                      <div className="text-center text-[#f8f3eb]">
-                        <h2 className="text-3xl font-semibold drop-shadow-sm md:text-6xl">
-                          {selected.name}
-                        </h2>
-                        <p className="mt-3 text-sm md:text-2xl">
-                          {[
-                            selected.tradeProfileLabel,
-                            selected.location || selected.snapshot.location,
-                            selected.class,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                        {selected.tripadvisorRating ? (
-                          <div className="mt-4 flex items-center justify-center gap-3 text-xs font-medium uppercase tracking-[0.20em] md:text-base">
-                            <span>
-                              {"★".repeat(
-                                Math.max(
-                                  1,
-                                  Math.min(
-                                    5,
-                                    Math.round(Number(selected.tripadvisorRating) || 0),
-                                  ),
-                                ),
-                              )}
-                            </span>
-                            <span>Top trade-rated safari profile</span>
-                          </div>
-                        ) : null}
-                      </div>
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 px-6 pb-8 text-center text-[#f7f1e8] md:px-10 md:pb-10">
+                    <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
+                      {selected.name}
+                    </h1>
+
+                    <div className="mt-3 text-sm md:text-2xl">
+                      {[
+                        selected.tradeProfileLabel ||
+                          selected.companySlug.replace(/-/g, " "),
+                        selected.location || selected.snapshot.location,
+                        selected.class,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </div>
-                  ) : null}
+
+                    {selected.tripadvisorRating ? (
+                      <div className="mt-4 flex items-center justify-center gap-3 text-xs font-semibold uppercase tracking-[0.18em] md:text-sm">
+                        <span>
+                          {"★".repeat(
+                            Math.max(
+                              1,
+                              Math.min(5, Math.round(Number(selected.tripadvisorRating) || 0)),
+                            ),
+                          )}
+                        </span>
+                        <span>Top 5% on Tripadvisor</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
-                {previewDownloads.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => downloadFileRef.current?.click()}
-                    className="block w-full border-t px-5 py-3 text-center text-sm md:px-8 md:text-2xl"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: `${previewTheme.highlight}26`,
-                      color: previewTheme.accent,
-                    }}
-                    title="Upload or replace downloadable files"
-                  >
-                    {previewDownloads[0].label}
-                  </button>
-                ) : (
-                  <div className="border-t p-4" style={{ borderColor: previewTheme.borderColor }}>
-                    <EditorUploadZone
-                      title="Downloads bar"
-                      subtitle="Upload the trade pack PDF or brochure that appears below the hero"
-                      onClick={() => downloadFileRef.current?.click()}
-                      className="h-[72px]"
-                    />
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById("offers-field");
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  className="flex w-full items-center justify-center border-t px-5 py-3 text-center text-sm md:text-[18px]"
+                  style={{
+                    borderColor: previewTheme.borderColor,
+                    backgroundColor: `${previewTheme.highlight}45`,
+                    color: previewTheme.accent,
+                  }}
+                >
+                  {promoText}
+                </button>
 
                 <div className="px-4 py-4 md:px-6">
-                  {selected.gallery.map((group, groupIndex) => {
-                    const groupImages = group.images.slice(0, 4);
-                    const hiddenCount = Math.max(0, group.images.length - 4);
-
-                    return (
-                      <div key={group.id} className="mb-4 last:mb-0">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7a6349]">
-                            {group.label || `Gallery ${groupIndex + 1}`}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => galleryFileRefs.current[group.id]?.click()}
-                            className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                            style={{
-                              borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.42)",
-                            }}
-                          >
-                            Add images
-                          </button>
-
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {selected.gallery.map((group, groupIndex) => {
+                      const image = group.images[0];
+                      return (
+                        <React.Fragment key={group.id}>
                           <input
                             ref={(node) => {
                               galleryFileRefs.current[group.id] = node;
@@ -2512,76 +2399,74 @@ export default function AdminPage() {
                             className="hidden"
                             onChange={(e) => handleGalleryUpload(e, groupIndex)}
                           />
-                        </div>
-
-                        {groupImages.length > 0 ? (
-                          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                            {groupImages.map((image, index) => (
+                          {groupIndex < 4 ? (
+                            image ? (
                               <button
-                                key={`${group.id}-${image}-${index}`}
                                 type="button"
                                 onClick={() => galleryFileRefs.current[group.id]?.click()}
-                                className="overflow-hidden rounded-[12px] border text-left"
+                                className="overflow-hidden rounded-[10px] border text-left"
                                 style={{ borderColor: previewTheme.borderColor }}
-                                title="Add more images to this gallery group"
+                                title="Upload more images to this gallery slot"
                               >
                                 <img
                                   src={image}
-                                  alt={`${group.label} ${index + 1}`}
+                                  alt={group.label}
                                   className="aspect-[4/2.3] w-full object-cover"
                                 />
                               </button>
-                            ))}
-
-                            {hiddenCount > 0 ? (
-                              <button
-                                type="button"
+                            ) : (
+                              <EditorUploadZone
+                                title={group.label || `Gallery ${groupIndex + 1}`}
+                                subtitle="Upload gallery image"
                                 onClick={() => galleryFileRefs.current[group.id]?.click()}
-                                className="flex aspect-[4/2.3] items-center justify-center rounded-[12px] border text-sm font-semibold"
-                                style={{
-                                  borderColor: previewTheme.borderColor,
-                                  backgroundColor: "rgba(255,255,255,0.42)",
-                                }}
-                              >
-                                +{hiddenCount} more
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : (
+                                className="aspect-[4/2.3]"
+                              />
+                            )
+                          ) : null}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {selected.gallery.length < 4
+                      ? Array.from({ length: 4 - selected.gallery.length }).map((_, i) => (
                           <EditorUploadZone
-                            title={`${group.label || `Gallery ${groupIndex + 1}`}`}
-                            subtitle="Upload images for this gallery strip"
-                            onClick={() => galleryFileRefs.current[group.id]?.click()}
-                            className="aspect-[16/3.8]"
+                            key={`empty-gallery-${i}`}
+                            title={`Gallery ${selected.gallery.length + i + 1}`}
+                            subtitle="Add a gallery group first, then upload"
+                            onClick={addGalleryGroup}
+                            className="aspect-[4/2.3]"
                           />
-                        )}
-                      </div>
-                    );
-                  })}
+                        ))
+                      : null}
+                  </div>
                 </div>
 
-                <div
-                  className="border-t px-4 py-4 md:px-6"
-                  style={{ borderColor: previewTheme.borderColor }}
-                >
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-                    {snapshotFacts.map((fact, index) => (
-                      <div
-                        key={`${fact.label}-${index}`}
-                        className="rounded-[12px] border px-4 py-3"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                        }}
-                      >
-                        <div className="text-[11px] uppercase tracking-[0.16em]" style={{ opacity: 0.62 }}>
+                <div className="border-t px-4 py-3 md:px-6" style={{ borderColor: previewTheme.borderColor }}>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+                    {factTabs.map((fact, index) => (
+                      <div key={`${fact.label}-${index}`}>
+                        <div
+                          className="rounded-t-[8px] border border-b-0 px-4 py-2 text-center text-[11px] uppercase tracking-[0.14em]"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.22)",
+                          }}
+                        >
                           {fact.label}
                         </div>
-                        <div className="mt-2 text-lg font-semibold md:text-2xl">
-                          {fact.value}
-                        </div>
-                        <div className="mt-1 text-xs md:text-sm" style={{ opacity: 0.68 }}>
-                          {fact.sub}
+                        <div
+                          className="rounded-b-[8px] border px-4 py-4 text-center"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.40)",
+                          }}
+                        >
+                          <div className="text-[28px] font-semibold leading-none md:text-[34px]">
+                            {fact.value}
+                          </div>
+                          <div className="mt-2 text-sm" style={{ opacity: 0.72 }}>
+                            {fact.sub}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -2591,50 +2476,35 @@ export default function AdminPage() {
             </section>
 
             <section className="px-4 pb-4 md:px-8">
-              <div className="grid gap-5 lg:grid-cols-[1.15fr_430px]">
+              <div className="grid gap-5 lg:grid-cols-[1.05fr_390px]">
                 <div
-                  className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7"
-                  style={{ borderColor: previewTheme.borderColor }}
+                  className="rounded-[14px] border px-5 py-5 md:px-7 md:py-6"
+                  style={{
+                    borderColor: previewTheme.borderColor,
+                    backgroundColor: "rgba(255,255,255,0.20)",
+                  }}
                 >
-                  <h3 className="text-3xl font-semibold md:text-5xl">{selected.name}</h3>
-                  <p className="mt-4 max-w-3xl text-base leading-8 md:text-xl" style={{ opacity: 0.72 }}>
+                  <h2 className="text-[30px] font-semibold leading-tight md:text-[40px]">
+                    {selected.name}
+                  </h2>
+                  <p className="mt-4 max-w-3xl text-base leading-8 md:text-[18px]" style={{ opacity: 0.76 }}>
                     {overviewText}
                   </p>
-
-                  {previewTags.length > 0 ? (
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {[selected.location, selected.class, ...previewTags]
-                        .filter(Boolean)
-                        .slice(0, 8)
-                        .map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
-                            style={{
-                              borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.46)",
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                    </div>
-                  ) : null}
                 </div>
 
                 <div
-                  className="rounded-[22px] border p-4 md:p-5"
+                  className="rounded-[14px] border p-4 md:p-5"
                   style={{
                     borderColor: previewTheme.borderColor,
-                    backgroundColor: "rgba(255,255,255,0.32)",
+                    backgroundColor: "rgba(255,255,255,0.20)",
                   }}
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => downloadFileRef.current?.click()}
-                      className="block rounded-[14px] px-4 py-3 text-center text-sm font-medium md:text-base text-white"
-                      style={{ backgroundColor: `${previewTheme.highlight}` }}
+                      className="rounded-[8px] px-4 py-3 text-sm font-semibold text-white"
+                      style={{ backgroundColor: previewTheme.highlight }}
                     >
                       Request Trade Pack
                     </button>
@@ -2647,8 +2517,8 @@ export default function AdminPage() {
                             )}`
                           : "#"
                       }
-                      className="block rounded-[14px] px-4 py-3 text-center text-sm font-medium md:text-base text-white"
-                      style={{ backgroundColor: `${previewTheme.highlight}` }}
+                      className="rounded-[8px] px-4 py-3 text-center text-sm font-semibold text-white"
+                      style={{ backgroundColor: previewTheme.highlight }}
                     >
                       Check Availability
                     </a>
@@ -2661,7 +2531,7 @@ export default function AdminPage() {
                             )}`
                           : "#"
                       }
-                      className="block rounded-[14px] border px-4 py-3 text-center text-sm font-medium md:text-base"
+                      className="rounded-[8px] border px-4 py-3 text-center text-sm font-semibold"
                       style={{
                         borderColor: previewTheme.borderColor,
                         backgroundColor: "rgba(255,255,255,0.42)",
@@ -2673,7 +2543,7 @@ export default function AdminPage() {
 
                     <a
                       href={selected.website || "#"}
-                      className="block rounded-[14px] border px-4 py-3 text-center text-sm font-medium md:text-base"
+                      className="rounded-[8px] border px-4 py-3 text-center text-sm font-semibold"
                       style={{
                         borderColor: previewTheme.borderColor,
                         backgroundColor: "rgba(255,255,255,0.42)",
@@ -2687,29 +2557,38 @@ export default function AdminPage() {
               </div>
             </section>
 
-            <div className="px-4 pb-2 pt-3 md:px-8">
-              <div className="hidden md:flex md:flex-wrap md:gap-2">
-                {["Overview", "Rates", "Experiences", "Policies", "Downloads", "Contact"].map(
+            <div className="px-4 pb-2 pt-2 md:px-8">
+              <div className="hidden md:flex md:flex-wrap md:gap-1">
+                {["Overview", "Rates", "Experiences", "Policies", "Downloads"].map(
                   (tab, index) => (
                     <div
                       key={tab}
-                      className="rounded-t-[14px] border px-5 py-3 text-sm font-medium"
+                      className="rounded-t-[8px] border px-5 py-3 text-sm font-medium"
                       style={{
                         borderColor: previewTheme.borderColor,
                         backgroundColor:
                           index === 0
-                            ? `${previewTheme.highlight}22`
-                            : "rgba(255,255,255,0.36)",
+                            ? `${previewTheme.highlight}45`
+                            : "rgba(255,255,255,0.28)",
                       }}
                     >
                       {tab}
                     </div>
                   ),
                 )}
+                <div
+                  className="rounded-t-[8px] border px-5 py-3 text-sm font-medium"
+                  style={{
+                    borderColor: previewTheme.borderColor,
+                    backgroundColor: "rgba(255,255,255,0.28)",
+                  }}
+                >
+                  →
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 md:hidden">
-                {["Overview", "Rates", "Experiences", "Policies", "Downloads", "Contact"].map(
+                {["Overview", "Rates", "Experiences", "Policies", "Downloads"].map(
                   (tab, index) => (
                     <div
                       key={tab}
@@ -2718,8 +2597,8 @@ export default function AdminPage() {
                         borderColor: previewTheme.borderColor,
                         backgroundColor:
                           index === 0
-                            ? `${previewTheme.highlight}22`
-                            : "rgba(255,255,255,0.36)",
+                            ? `${previewTheme.highlight}45`
+                            : "rgba(255,255,255,0.28)",
                       }}
                     >
                       {tab}
@@ -2730,22 +2609,22 @@ export default function AdminPage() {
             </div>
 
             <section className="px-4 pb-8 md:px-8 md:pb-10">
-              <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+              <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
                 <div className="space-y-8">
                   {previewRateRows.length > 0 ? (
                     <section
-                      className="rounded-[22px] border p-5 md:p-6"
+                      className="rounded-[14px] border p-5 md:p-6"
                       style={{
                         borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.24)",
+                        backgroundColor: "rgba(255,255,255,0.20)",
                       }}
                     >
                       <div className="flex items-end gap-3">
-                        <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                        <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
                           PUBLIC RACK RATES
                         </h3>
                         <span
-                          className="pb-1 text-lg font-medium tracking-[0.18em] md:text-2xl"
+                          className="pb-1 text-lg font-medium tracking-[0.18em] md:text-[22px]"
                           style={{ color: previewTheme.highlight }}
                         >
                           2026
@@ -2753,10 +2632,10 @@ export default function AdminPage() {
                       </div>
 
                       <div
-                        className="mt-5 overflow-hidden rounded-[16px] border"
+                        className="mt-5 overflow-hidden rounded-[10px] border"
                         style={{
                           borderColor: previewTheme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
+                          backgroundColor: "rgba(255,255,255,0.36)",
                         }}
                       >
                         <div
@@ -2771,7 +2650,7 @@ export default function AdminPage() {
                         {previewRateRows.map((row, index) => (
                           <div
                             key={row.id}
-                            className="grid grid-cols-3 px-4 py-3 text-sm md:grid-cols-[1.2fr_1.5fr_1fr] md:text-lg"
+                            className="grid grid-cols-3 px-4 py-3 text-sm md:grid-cols-[1.2fr_1.5fr_1fr] md:text-[16px]"
                             style={{
                               borderTop:
                                 index === 0
@@ -2787,19 +2666,17 @@ export default function AdminPage() {
                       </div>
 
                       {selected.rates.notesText.trim() ? (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {textToLines(selected.rates.notesText).map((note) => (
-                            <span
-                              key={note}
-                              className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
-                              style={{
-                                borderColor: previewTheme.borderColor,
-                                backgroundColor: "rgba(255,255,255,0.46)",
-                              }}
-                            >
-                              {note}
-                            </span>
-                          ))}
+                        <div className="mt-4 text-sm leading-7" style={{ opacity: 0.78 }}>
+                          {textToLines(selected.rates.notesText).join(" • ")}
+                        </div>
+                      ) : null}
+
+                      {textToLines(selected.experiences.paidText).length > 0 ? (
+                        <div className="mt-4 border-t pt-4" style={{ borderColor: previewTheme.borderColor }}>
+                          <div className="text-sm font-semibold">Supplements</div>
+                          <div className="mt-2 text-sm" style={{ opacity: 0.75 }}>
+                            {textToLines(selected.experiences.paidText).slice(0, 4).join(" • ")}
+                          </div>
                         </div>
                       ) : null}
                     </section>
@@ -2808,74 +2685,66 @@ export default function AdminPage() {
                   {(selected.experiences.includedText.trim() ||
                     selected.experiences.paidText.trim()) ? (
                     <section
-                      className="rounded-[22px] border p-5 md:p-6"
+                      className="rounded-[14px] border p-5 md:p-6"
                       style={{
                         borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.24)",
+                        backgroundColor: "rgba(255,255,255,0.20)",
                       }}
                     >
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
                         EXPERIENCES
                       </h3>
 
                       <div className="mt-5 grid gap-5 md:grid-cols-2">
                         <div
-                          className="rounded-[16px] border p-4"
+                          className="rounded-[10px] border p-4"
                           style={{
                             borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
+                            backgroundColor: "rgba(255,255,255,0.36)",
                           }}
                         >
                           <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
                             Included
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {textToLines(selected.experiences.includedText).length > 0 ? (
-                              textToLines(selected.experiences.includedText).map((item) => (
-                                <span
-                                  key={item}
-                                  className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
-                                  style={{
-                                    borderColor: previewTheme.borderColor,
-                                    backgroundColor: "rgba(255,255,255,0.46)",
-                                  }}
-                                >
-                                  {item}
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{ opacity: 0.6 }}>None listed</span>
-                            )}
+                            {textToLines(selected.experiences.includedText).map((item) => (
+                              <span
+                                key={item}
+                                className="rounded-full border px-3 py-1.5 text-xs"
+                                style={{
+                                  borderColor: previewTheme.borderColor,
+                                  backgroundColor: "rgba(255,255,255,0.46)",
+                                }}
+                              >
+                                {item}
+                              </span>
+                            ))}
                           </div>
                         </div>
 
                         <div
-                          className="rounded-[16px] border p-4"
+                          className="rounded-[10px] border p-4"
                           style={{
                             borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
+                            backgroundColor: "rgba(255,255,255,0.36)",
                           }}
                         >
                           <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
                             Paid
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {textToLines(selected.experiences.paidText).length > 0 ? (
-                              textToLines(selected.experiences.paidText).map((item) => (
-                                <span
-                                  key={item}
-                                  className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
-                                  style={{
-                                    borderColor: previewTheme.borderColor,
-                                    backgroundColor: "rgba(255,255,255,0.46)",
-                                  }}
-                                >
-                                  {item}
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{ opacity: 0.6 }}>None listed</span>
-                            )}
+                            {textToLines(selected.experiences.paidText).map((item) => (
+                              <span
+                                key={item}
+                                className="rounded-full border px-3 py-1.5 text-xs"
+                                style={{
+                                  borderColor: previewTheme.borderColor,
+                                  backgroundColor: "rgba(255,255,255,0.46)",
+                                }}
+                              >
+                                {item}
+                              </span>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -2888,13 +2757,13 @@ export default function AdminPage() {
                     selected.policies.importantNotesText.trim() ||
                     selected.policies.tradeNotesText.trim()) ? (
                     <section
-                      className="rounded-[22px] border p-5 md:p-6"
+                      className="rounded-[14px] border p-5 md:p-6"
                       style={{
                         borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.24)",
+                        backgroundColor: "rgba(255,255,255,0.20)",
                       }}
                     >
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
                         POLICIES
                       </h3>
 
@@ -2916,10 +2785,10 @@ export default function AdminPage() {
                           .map(([label, value], index) => (
                             <div
                               key={`${label}-${index}`}
-                              className="rounded-[16px] border px-4 py-4"
+                              className="rounded-[10px] border px-4 py-4"
                               style={{
                                 borderColor: previewTheme.borderColor,
-                                backgroundColor: "rgba(255,255,255,0.42)",
+                                backgroundColor: "rgba(255,255,255,0.36)",
                               }}
                             >
                               <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
@@ -2937,14 +2806,14 @@ export default function AdminPage() {
 
                 <aside className="space-y-6">
                   <section
-                    className="rounded-[22px] border p-5 md:p-6"
+                    className="rounded-[14px] border p-5 md:p-6"
                     style={{
                       borderColor: previewTheme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.24)",
+                      backgroundColor: "rgba(255,255,255,0.20)",
                     }}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
                         DOWNLOADS
                       </h3>
                       <button
@@ -2967,10 +2836,10 @@ export default function AdminPage() {
                             key={item.id}
                             type="button"
                             onClick={() => downloadFileRef.current?.click()}
-                            className="block w-full rounded-[16px] border px-4 py-3 text-left text-sm font-medium md:text-base"
+                            className="block w-full rounded-[10px] border px-4 py-3 text-left text-sm font-medium"
                             style={{
                               borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.42)",
+                              backgroundColor: "rgba(255,255,255,0.36)",
                               color: previewTheme.accent,
                             }}
                           >
@@ -2989,109 +2858,70 @@ export default function AdminPage() {
                   </section>
 
                   <section
-                    className="rounded-[22px] border p-5 md:p-6"
+                    className="rounded-[14px] border p-5 md:p-6"
                     style={{
                       borderColor: previewTheme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.24)",
+                      backgroundColor: "rgba(255,255,255,0.20)",
                     }}
                   >
-                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
                       CONTACT
                     </h3>
 
-                    <div className="mt-5 space-y-5">
-                      {previewContacts.length > 0 ? (
-                        previewContacts.map((item, index) => (
+                    <div className="mt-5 space-y-3">
+                      {previewReservations.length > 0 ? (
+                        previewReservations.map((item, index) => (
                           <div
                             key={`${item.id}-${index}`}
-                            className="rounded-[16px] border px-4 py-4"
+                            className="rounded-[10px] border px-4 py-4"
                             style={{
                               borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.42)",
+                              backgroundColor: "rgba(255,255,255,0.36)",
                             }}
                           >
-                            {item.name ? (
-                              <div className="text-base font-semibold md:text-lg">
-                                {item.name}
-                              </div>
-                            ) : null}
+                            <div className="text-base font-semibold">
+                              {item.name || "Reservations"}
+                            </div>
                             {item.role ? (
-                              <div className="mt-1 text-sm md:text-base" style={{ opacity: 0.7 }}>
+                              <div className="mt-1 text-sm" style={{ opacity: 0.72 }}>
                                 {item.role}
                               </div>
                             ) : null}
                             {item.email ? (
-                              <div className="mt-3 text-sm md:text-base">{item.email}</div>
+                              <div className="mt-3 text-sm underline">{item.email}</div>
                             ) : null}
                             {item.phone ? (
-                              <div className="mt-2 text-sm md:text-base">{item.phone}</div>
+                              <div className="mt-2 text-sm">{item.phone}</div>
                             ) : null}
                             {item.whatsapp ? (
-                              <div className="mt-2 text-sm md:text-base">
-                                WhatsApp: {item.whatsapp}
-                              </div>
+                              <div className="mt-2 text-sm underline">WhatsApp</div>
                             ) : null}
                           </div>
                         ))
                       ) : (
                         <div
-                          className="rounded-[16px] border px-4 py-4 text-sm"
+                          className="rounded-[10px] border px-4 py-4 text-sm"
                           style={{
                             borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
+                            backgroundColor: "rgba(255,255,255,0.36)",
                           }}
                         >
-                          Add contact details in the editor.
+                          Add reservations contact details in the editor.
                         </div>
                       )}
                     </div>
                   </section>
-
-                  {(selected.tripadvisorRating || selected.taLink) ? (
-                    <section
-                      className="rounded-[22px] border p-5 md:p-6"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.24)",
-                      }}
-                    >
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
-                        TRIPADVISOR
-                      </h3>
-
-                      {selected.tripadvisorRating ? (
-                        <div
-                          className="mt-5 rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
-                          style={{
-                            borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
-                          }}
-                        >
-                          Rating {selected.tripadvisorRating}
-                        </div>
-                      ) : null}
-
-                      {selected.taLink ? (
-                        <a
-                          href={selected.taLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-3 block rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
-                          style={{
-                            borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
-                            color: previewTheme.accent,
-                          }}
-                        >
-                          Open Tripadvisor
-                        </a>
-                      ) : null}
-                    </section>
-                  ) : null}
                 </aside>
               </div>
             </section>
           </div>
+
+          <input
+            id="offers-field"
+            type="hidden"
+            value={selected.offersText}
+            readOnly
+          />
         </div>
       )}
     </div>
