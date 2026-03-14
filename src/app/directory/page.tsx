@@ -13,20 +13,6 @@ type RateRow = {
   rackPPPN: string;
 };
 
-type DownloadItem = {
-  label: string;
-  url: string;
-  type?: string | null;
-};
-
-type ContactItem = {
-  name?: string | null;
-  role?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  whatsapp?: string | null;
-};
-
 type ApiListingRecord = {
   id: string;
   slug: string;
@@ -76,16 +62,38 @@ type ApiListingRecord = {
       importantNotes?: string[];
       tradeNotes?: string[];
     };
-    downloads?: DownloadItem[];
+    downloads?: Array<{
+      label: string;
+      url: string;
+      type?: string | null;
+    }>;
     contacts?: {
-      reservations?: ContactItem[];
-      sales?: ContactItem[];
-      marketing?: ContactItem[];
+      reservations?: Array<{
+        name?: string | null;
+        role?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        whatsapp?: string | null;
+      }>;
+      sales?: Array<{
+        name?: string | null;
+        role?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        whatsapp?: string | null;
+      }>;
+      marketing?: Array<{
+        name?: string | null;
+        role?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        whatsapp?: string | null;
+      }>;
     };
     offers?: string[];
     sustainability?: string | null;
 
-    // Backward-compatible fields still tolerated by directory UI
+    // backward-compatible legacy fields
     class?: string;
     vibe?: string;
     tradeProfileLabel?: string;
@@ -93,6 +101,7 @@ type ApiListingRecord = {
     locationLabel?: string;
     logoImage?: string;
     coverImage?: string;
+    heroImage?: string;
     website?: string;
     facebookUrl?: string;
     instagramUrl?: string;
@@ -101,7 +110,6 @@ type ApiListingRecord = {
     rating?: number | string;
     reviewCount?: number | string;
     quickTags?: string[];
-    heroImage?: string;
   };
 };
 
@@ -114,24 +122,24 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function asString(value: unknown): string {
+function toText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
 function getPrimaryImage(listing: ApiListingRecord): string {
   const data = listing.data;
+
+  if (toText(data?.coverImage)) return toText(data?.coverImage);
+  if (toText(data?.heroImage)) return toText(data?.heroImage);
+
   const gallery = data?.gallery;
-
-  if (asString(data?.coverImage)) return asString(data?.coverImage);
-  if (asString(data?.heroImage)) return asString(data?.heroImage);
-
   if (Array.isArray(gallery)) {
     for (const group of gallery) {
-      if (Array.isArray(group.images) && group.images.length > 0) {
-        const firstImage = group.images.find(
-          (image) => typeof image === "string" && image.trim(),
-        );
-        if (firstImage) return firstImage.trim();
+      if (!group || !Array.isArray(group.images)) continue;
+      for (const image of group.images) {
+        if (typeof image === "string" && image.trim()) {
+          return image.trim();
+        }
       }
     }
   }
@@ -140,45 +148,51 @@ function getPrimaryImage(listing: ApiListingRecord): string {
 }
 
 function getQuickTags(listing: ApiListingRecord): string[] {
-  const tags = listing.data?.quickTags;
-  if (Array.isArray(tags)) {
-    return tags
-      .filter((tag): tag is string => typeof tag === "string")
+  const legacyTags = listing.data?.quickTags;
+
+  if (Array.isArray(legacyTags)) {
+    const cleaned = legacyTags
+      .filter((tag) => typeof tag === "string")
       .map((tag) => tag.trim())
-      .filter(Boolean)
-      .slice(0, 4);
+      .filter(Boolean);
+
+    return Array.from(new Set(cleaned)).slice(0, 4);
   }
 
-  const fallback = [listing.class, listing.vibe, listing.data?.snapshot?.bestFor]
-    .filter((value): value is string => typeof value === "string" && value.trim())
-    .map((value) => value.trim());
+  const fallbackValues = [
+    listing.class,
+    listing.vibe,
+    listing.data?.snapshot?.bestFor,
+  ];
 
-  return Array.from(new Set(fallback)).slice(0, 4);
+  const cleaned = fallbackValues
+    .filter((value) => typeof value === "string" && value.trim())
+    .map((value) => (typeof value === "string" ? value.trim() : ""));
+
+  return Array.from(new Set(cleaned)).slice(0, 4);
 }
 
 function getLowestRackRate(listing: ApiListingRecord): string {
   const rows = listing.data?.rates?.rows;
+
   if (!Array.isArray(rows) || rows.length === 0) return "";
 
   const values = rows
     .map((row) => {
-      const raw = row?.rackPPPN;
-      if (typeof raw !== "string") return null;
-      const numeric = Number(raw.replace(/[^0-9.]/g, ""));
+      if (!row || typeof row.rackPPPN !== "string") return null;
+      const numeric = Number(row.rackPPPN.replace(/[^0-9.]/g, ""));
       return Number.isFinite(numeric) ? numeric : null;
     })
-    .filter((value): value is number => value !== null);
+    .filter((value) => value !== null) as number[];
 
   if (values.length === 0) return "";
 
-  const min = Math.min(...values);
-  return `$${min}`;
+  return `$${Math.min(...values)}`;
 }
 
 function isPropertyListing(listing: ApiListingRecord): boolean {
-  const slug = asString(listing.slug);
   if (listing.status !== "published") return false;
-  if (!slug) return false;
+  if (!toText(listing.slug)) return false;
   return true;
 }
 
@@ -187,8 +201,8 @@ export default async function DirectoryPage() {
   let loadError = false;
 
   try {
-    const headersList = headers();
-    const host = headersList.get("host");
+    const headerStore = headers();
+    const host = headerStore.get("host");
     const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
     if (!host) {
@@ -204,7 +218,9 @@ export default async function DirectoryPage() {
     }
 
     const json = await res.json();
-    listings = Array.isArray(json.listings) ? json.listings : [];
+    listings = Array.isArray(json.listings)
+      ? (json.listings as ApiListingRecord[])
+      : [];
   } catch {
     loadError = true;
   }
@@ -245,36 +261,39 @@ export default async function DirectoryPage() {
           {visibleListings.map((listing) => {
             const data = listing.data ?? {};
             const coverImage = getPrimaryImage(listing);
-            const logoImage = asString(data.logoImage);
+            const logoImage = toText(data.logoImage);
             const location =
-              listing.location ??
-              data.snapshot?.location ??
-              data.locationLabel ??
+              listing.location ||
+              data.snapshot?.location ||
+              data.locationLabel ||
               "Location not set";
-            const vibe = listing.vibe ?? data.vibe ?? data.overview ?? "";
-            const website = listing.website ?? data.website ?? "";
+
+            const vibe =
+              listing.vibe || data.vibe || data.overview || "Trade-ready safari property profile.";
+
+            const website = listing.website || data.website || "";
             const rating = toNumber(data.rating ?? listing.tripadvisorRating);
             const reviewCount = toNumber(data.reviewCount);
-            const propertyClass = listing.class ?? data.class ?? "";
-            const rooms = asString(data.snapshot?.rooms);
-            const bestFor = asString(data.snapshot?.bestFor);
-            const access = asString(data.snapshot?.access);
+            const propertyClass = listing.class || data.class || "";
+            const rooms = toText(data.snapshot?.rooms);
+            const bestFor = toText(data.snapshot?.bestFor);
+            const access = toText(data.snapshot?.access);
             const rackFrom = getLowestRackRate(listing);
             const quickTags = getQuickTags(listing);
 
             const socialLinks = {
-              facebookUrl: asString(data.facebookUrl),
-              instagramUrl: asString(data.instagramUrl),
-              tiktokUrl: asString(data.tiktokUrl),
-              youtubeUrl: asString(data.youtubeUrl),
+              facebookUrl: toText(data.facebookUrl),
+              instagramUrl: toText(data.instagramUrl),
+              tiktokUrl: toText(data.tiktokUrl),
+              youtubeUrl: toText(data.youtubeUrl),
             };
 
             const hasLinks =
-              !!website ||
-              !!socialLinks.facebookUrl ||
-              !!socialLinks.instagramUrl ||
-              !!socialLinks.tiktokUrl ||
-              !!socialLinks.youtubeUrl;
+              Boolean(website) ||
+              Boolean(socialLinks.facebookUrl) ||
+              Boolean(socialLinks.instagramUrl) ||
+              Boolean(socialLinks.tiktokUrl) ||
+              Boolean(socialLinks.youtubeUrl);
 
             return (
               <div
@@ -353,7 +372,7 @@ export default async function DirectoryPage() {
                   </div>
 
                   <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
-                    {vibe || "Trade-ready safari property profile."}
+                    {vibe}
                   </p>
 
                   {quickTags.length > 0 ? (
