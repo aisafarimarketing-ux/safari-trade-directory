@@ -13,6 +13,84 @@ type RateRow = {
   rackPPPN: string;
 };
 
+type ContactItem = {
+  name?: string | null;
+  role?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+};
+
+type ListingData = {
+  overview?: string | null;
+  snapshot?: {
+    rooms?: string | null;
+    location?: string | null;
+    bestFor?: string | null;
+    setting?: string | null;
+    style?: string | null;
+    access?: string | null;
+  };
+  gallery?: GalleryGroup[];
+  rates?: {
+    currency?: string | null;
+    notes?: string[];
+    rows?: RateRow[];
+  };
+  experiences?: {
+    included?: string[];
+    paid?: string[];
+  };
+  policies?: {
+    childPolicy?: string | null;
+    honeymoonPolicy?: string | null;
+    cancellation?: string | null;
+    importantNotes?: string[];
+    tradeNotes?: string[];
+  };
+  downloads?: {
+    label: string;
+    url: string;
+    type?: string | null;
+  }[];
+  contacts?: {
+    reservations?: ContactItem[];
+    sales?: ContactItem[];
+    marketing?: ContactItem[];
+  };
+  offers?: string[];
+  sustainability?: string | null;
+
+  // legacy fields still tolerated
+  class?: string;
+  vibe?: string;
+  tradeProfileLabel?: string;
+  tradeProfileSub?: string;
+  locationLabel?: string;
+  logoImage?: string;
+  coverImage?: string;
+  heroImage?: string;
+  website?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  tiktokUrl?: string;
+  youtubeUrl?: string;
+  rating?: number | string;
+  reviewCount?: number | string;
+  quickTags?: string[];
+};
+
+type ListingDesign = {
+  preset?: "safari-dossier" | "modern-trade-deck" | "editorial-luxury";
+  theme?: {
+    pageBg?: string;
+    blockBg?: string;
+    accent?: string;
+    highlight?: string;
+    borderColor?: string;
+  } | null;
+};
+
 type ApiListingRecord = {
   id: string;
   slug: string;
@@ -25,92 +103,8 @@ type ApiListingRecord = {
   website: string | null;
   mapLink: string | null;
   tripadvisorRating: number | null;
-  design?: {
-    preset?: "safari-dossier" | "modern-trade-deck" | "editorial-luxury";
-    theme?: {
-      pageBg?: string;
-      blockBg?: string;
-      accent?: string;
-      highlight?: string;
-      borderColor?: string;
-    } | null;
-  };
-  data?: {
-    overview?: string | null;
-    snapshot?: {
-      rooms?: string | null;
-      location?: string | null;
-      bestFor?: string | null;
-      setting?: string | null;
-      style?: string | null;
-      access?: string | null;
-    };
-    gallery?: GalleryGroup[];
-    rates?: {
-      currency?: string | null;
-      notes?: string[];
-      rows?: RateRow[];
-    };
-    experiences?: {
-      included?: string[];
-      paid?: string[];
-    };
-    policies?: {
-      childPolicy?: string | null;
-      honeymoonPolicy?: string | null;
-      cancellation?: string | null;
-      importantNotes?: string[];
-      tradeNotes?: string[];
-    };
-    downloads?: Array<{
-      label: string;
-      url: string;
-      type?: string | null;
-    }>;
-    contacts?: {
-      reservations?: Array<{
-        name?: string | null;
-        role?: string | null;
-        email?: string | null;
-        phone?: string | null;
-        whatsapp?: string | null;
-      }>;
-      sales?: Array<{
-        name?: string | null;
-        role?: string | null;
-        email?: string | null;
-        phone?: string | null;
-        whatsapp?: string | null;
-      }>;
-      marketing?: Array<{
-        name?: string | null;
-        role?: string | null;
-        email?: string | null;
-        phone?: string | null;
-        whatsapp?: string | null;
-      }>;
-    };
-    offers?: string[];
-    sustainability?: string | null;
-
-    // backward-compatible legacy fields
-    class?: string;
-    vibe?: string;
-    tradeProfileLabel?: string;
-    tradeProfileSub?: string;
-    locationLabel?: string;
-    logoImage?: string;
-    coverImage?: string;
-    heroImage?: string;
-    website?: string;
-    facebookUrl?: string;
-    instagramUrl?: string;
-    tiktokUrl?: string;
-    youtubeUrl?: string;
-    rating?: number | string;
-    reviewCount?: number | string;
-    quickTags?: string[];
-  };
+  design?: ListingDesign;
+  data?: ListingData;
 };
 
 function toNumber(value: unknown): number | null {
@@ -132,10 +126,10 @@ function getPrimaryImage(listing: ApiListingRecord): string {
   if (toText(data?.coverImage)) return toText(data?.coverImage);
   if (toText(data?.heroImage)) return toText(data?.heroImage);
 
-  const gallery = data?.gallery;
-  if (Array.isArray(gallery)) {
-    for (const group of gallery) {
-      if (!group || !Array.isArray(group.images)) continue;
+  if (Array.isArray(data?.gallery)) {
+    for (const group of data.gallery) {
+      if (!Array.isArray(group.images)) continue;
+
       for (const image of group.images) {
         if (typeof image === "string" && image.trim()) {
           return image.trim();
@@ -148,28 +142,24 @@ function getPrimaryImage(listing: ApiListingRecord): string {
 }
 
 function getQuickTags(listing: ApiListingRecord): string[] {
-  const legacyTags = listing.data?.quickTags;
-
-  if (Array.isArray(legacyTags)) {
-    const cleaned = legacyTags
-      .filter((tag) => typeof tag === "string")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
-    return Array.from(new Set(cleaned)).slice(0, 4);
+  if (Array.isArray(listing.data?.quickTags)) {
+    return Array.from(
+      new Set(
+        listing.data.quickTags
+          .filter((tag): tag is string => typeof tag === "string")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      ),
+    ).slice(0, 4);
   }
 
-  const fallbackValues = [
-    listing.class,
-    listing.vibe,
-    listing.data?.snapshot?.bestFor,
-  ];
-
-  const cleaned = fallbackValues
-    .filter((value) => typeof value === "string" && value.trim())
-    .map((value) => (typeof value === "string" ? value.trim() : ""));
-
-  return Array.from(new Set(cleaned)).slice(0, 4);
+  return Array.from(
+    new Set(
+      [listing.class, listing.vibe, listing.data?.snapshot?.bestFor]
+        .filter((value): value is string => typeof value === "string" && value.trim())
+        .map((value) => value.trim()),
+    ),
+  ).slice(0, 4);
 }
 
 function getLowestRackRate(listing: ApiListingRecord): string {
@@ -177,17 +167,20 @@ function getLowestRackRate(listing: ApiListingRecord): string {
 
   if (!Array.isArray(rows) || rows.length === 0) return "";
 
-  const values = rows
-    .map((row) => {
-      if (!row || typeof row.rackPPPN !== "string") return null;
-      const numeric = Number(row.rackPPPN.replace(/[^0-9.]/g, ""));
-      return Number.isFinite(numeric) ? numeric : null;
-    })
-    .filter((value) => value !== null) as number[];
+  const numericValues: number[] = [];
 
-  if (values.length === 0) return "";
+  for (const row of rows) {
+    if (!row || typeof row.rackPPPN !== "string") continue;
 
-  return `$${Math.min(...values)}`;
+    const numeric = Number(row.rackPPPN.replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(numeric)) {
+      numericValues.push(numeric);
+    }
+  }
+
+  if (numericValues.length === 0) return "";
+
+  return `$${Math.min(...numericValues)}`;
 }
 
 function isPropertyListing(listing: ApiListingRecord): boolean {
@@ -209,18 +202,24 @@ export default async function DirectoryPage() {
       throw new Error("Missing host header");
     }
 
-    const res = await fetch(`${protocol}://${host}/api/admin/listings`, {
+    const response = await fetch(`${protocol}://${host}/api/admin/listings`, {
       cache: "no-store",
     });
 
-    if (!res.ok) {
+    if (!response.ok) {
       throw new Error("Failed to load listings");
     }
 
-    const json = await res.json();
-    listings = Array.isArray(json.listings)
-      ? (json.listings as ApiListingRecord[])
-      : [];
+    const json: unknown = await response.json();
+
+    if (
+      typeof json === "object" &&
+      json !== null &&
+      "listings" in json &&
+      Array.isArray((json as { listings?: unknown }).listings)
+    ) {
+      listings = (json as { listings: ApiListingRecord[] }).listings;
+    }
   } catch {
     loadError = true;
   }
@@ -267,10 +266,11 @@ export default async function DirectoryPage() {
               data.snapshot?.location ||
               data.locationLabel ||
               "Location not set";
-
             const vibe =
-              listing.vibe || data.vibe || data.overview || "Trade-ready safari property profile.";
-
+              listing.vibe ||
+              data.vibe ||
+              data.overview ||
+              "Trade-ready safari property profile.";
             const website = listing.website || data.website || "";
             const rating = toNumber(data.rating ?? listing.tripadvisorRating);
             const reviewCount = toNumber(data.reviewCount);
