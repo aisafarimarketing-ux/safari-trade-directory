@@ -4,10 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Download,
-  ExternalLink,
   Eye,
   EyeOff,
+  ExternalLink,
   FileText,
   Plus,
   Save,
@@ -224,11 +223,11 @@ type PdfImportResponse = {
 const STORAGE_KEY = "safaritrade-admin-v2";
 
 const DEFAULT_THEME: ThemeState = {
-  pageBg: "#0A0A0A",
-  blockBg: "#111111",
-  accent: "#FFFFFF",
-  highlight: "#9E5A24",
-  borderColor: "rgba(255,255,255,0.10)",
+  pageBg: "#e9e1d8",
+  blockBg: "#f7f2eb",
+  accent: "#5f472f",
+  highlight: "#8e8260",
+  borderColor: "#cdbfae",
 };
 
 function uid() {
@@ -489,7 +488,10 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
   const legacyDownloads = data.downloadables;
 
   const logoImage = getString(data.logoImage);
-  const coverImage = getString(data.coverImage);
+  const coverImage =
+    getString(data.coverImage) ||
+    getString(data.heroImage) ||
+    getStringArray(data.images)[0];
   const location =
     getString(listing.location) ||
     getString(snapshot.location) ||
@@ -573,8 +575,11 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
     },
     offersText: getString(data.offersText || data.offers),
     sustainability: getString(data.sustainability),
-    enquiryEmail: getString(data.enquiryEmail),
-    enquiryWhatsApp: getString(data.enquiryWhatsApp),
+    enquiryEmail:
+      getString(data.enquiryEmail) ||
+      getString(data.contactEmail) ||
+      getString(data.email),
+    enquiryWhatsApp: getString(data.enquiryWhatsApp) || getString(data.whatsapp),
     enquirySubject: getString(data.enquirySubject) || "Trade Request",
     taLogoUrl: getString(data.taLogoUrl),
     taLink: getString(data.taLink),
@@ -601,7 +606,7 @@ function toApiPayload(listing: ListingEditorState) {
       ? Number(listing.tripadvisorRating)
       : null,
     data: {
-      overview: listing.overview.trim() || null,
+      overview: listing.overview.trim() || listing.vibe.trim() || null,
       snapshot: {
         rooms: listing.snapshot.rooms.trim() || null,
         location:
@@ -698,9 +703,9 @@ function toApiPayload(listing: ListingEditorState) {
       },
       offers: listing.offersText.trim() ? [listing.offersText.trim()] : [],
       sustainability: listing.sustainability.trim() || null,
-
       logoImage: listing.logoImage.trim() || null,
       coverImage: listing.coverImage.trim() || null,
+      heroImage: listing.coverImage.trim() || null,
       website: listing.website.trim() || null,
       mapLink: listing.mapLink.trim() || null,
       taLogoUrl: listing.taLogoUrl.trim() || null,
@@ -714,6 +719,7 @@ function toApiPayload(listing: ListingEditorState) {
       tradeProfileLabel: listing.tradeProfileLabel.trim() || null,
       tradeProfileSub: listing.tradeProfileSub.trim() || null,
       quickTags: textToLines(listing.quickTagsText),
+      images: listing.gallery.flatMap((group) => group.images).filter(Boolean),
     },
     preset: listing.preset,
     theme: listing.theme,
@@ -899,6 +905,36 @@ function SmallButton(props: {
   );
 }
 
+function EditorUploadZone(props: {
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className={`group relative w-full overflow-hidden rounded-[18px] border border-dashed text-left transition hover:opacity-95 ${props.className || ""}`}
+      style={{
+        borderColor: "rgba(95, 71, 47, 0.28)",
+        backgroundColor: "rgba(255,255,255,0.32)",
+      }}
+    >
+      {props.children}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(95,71,47,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(95,71,47,0.03)_1px,transparent_1px)] bg-[size:28px_28px]" />
+      <div className="absolute left-4 top-4 z-10 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5f472f] backdrop-blur">
+        Click to upload
+      </div>
+      <div className="absolute bottom-4 left-4 z-10 right-4">
+        <div className="text-sm font-semibold text-[#5f472f]">{props.title}</div>
+        <div className="mt-1 text-xs text-[#7a6349]">{props.subtitle}</div>
+      </div>
+    </button>
+  );
+}
+
 export default function AdminPage() {
   const [listings, setListings] = useState<ListingEditorState[]>([
     makeEmptyListing(),
@@ -910,6 +946,9 @@ export default function AdminPage() {
 
   const downloadFileRef = useRef<HTMLInputElement | null>(null);
   const importPdfRef = useRef<HTMLInputElement | null>(null);
+  const logoFileRef = useRef<HTMLInputElement | null>(null);
+  const coverFileRef = useRef<HTMLInputElement | null>(null);
+  const galleryFileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const selected = listings[selectedIndex] || listings[0];
 
@@ -1186,8 +1225,12 @@ export default function AdminPage() {
         });
       }
 
+      const currentDownloads = selected.downloads.filter(
+        (item) => item.label || item.url,
+      );
+
       updateListing({
-        downloads: [...selected.downloads, ...uploadedItems],
+        downloads: [...currentDownloads, ...uploadedItems],
       });
 
       setUploadState(`${uploadedItems.length} file(s) uploaded`);
@@ -1235,12 +1278,16 @@ export default function AdminPage() {
         (item) => item.url === uploaded.url,
       );
 
+      const cleanedDownloads = merged.downloads.filter(
+        (item) => item.label || item.url,
+      );
+
       const nextListing: ListingEditorState = {
         ...merged,
         downloads: alreadyHasPdf
-          ? merged.downloads
+          ? cleanedDownloads
           : [
-              ...merged.downloads,
+              ...cleanedDownloads,
               {
                 id: uid(),
                 label: file.name,
@@ -1311,14 +1358,82 @@ export default function AdminPage() {
     (item) => item.label || item.url,
   );
 
+  const previewContacts = [
+    ...selected.contacts.reservations,
+    ...selected.contacts.sales,
+    ...selected.contacts.marketing,
+  ].filter((item) => item.name || item.email || item.phone || item.role);
+
+  const previewGalleryImages = selected.gallery.flatMap((group) =>
+    group.images.map((image, index) => ({
+      src: image,
+      label: `${group.label} ${index + 1}`,
+      groupId: group.id,
+    })),
+  );
+
+  const overviewText =
+    selected.overview.trim() ||
+    selected.vibe.trim() ||
+    "A trade-facing safari dossier built for quick qualification, faster quoting, and elegant client-ready sharing.";
+
+  const snapshotFacts = [
+    {
+      label: "Rooms",
+      value: selected.snapshot.rooms || "—",
+      sub: selected.class || "Inventory",
+    },
+    {
+      label: "Location",
+      value: selected.location || selected.snapshot.location || "—",
+      sub: "Safari region",
+    },
+    {
+      label: "Best For",
+      value: selected.snapshot.bestFor || "—",
+      sub: "Ideal fit",
+    },
+    {
+      label: "Setting",
+      value: selected.snapshot.setting || "—",
+      sub: "Landscape",
+    },
+    {
+      label: "Style",
+      value: selected.snapshot.style || selected.class || "—",
+      sub: "Property style",
+    },
+    {
+      label: "Access",
+      value: selected.snapshot.access || "—",
+      sub: "Arrival",
+    },
+  ];
+
   return (
     <div
       className="min-h-screen"
       style={{
         backgroundColor: isPreview ? previewTheme.pageBg : "#0b0b0b",
-        color: "#fff",
+        color: isPreview ? previewTheme.accent : "#fff",
       }}
     >
+      <input
+        ref={logoFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleSingleImageUpload(e, "logoImage")}
+      />
+
+      <input
+        ref={coverFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleSingleImageUpload(e, "coverImage")}
+      />
+
       <div className="sticky top-0 z-40 border-b border-white/10 bg-black/70 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -1376,7 +1491,7 @@ export default function AdminPage() {
             <button
               onClick={saveActiveListing}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white"
-              style={{ backgroundColor: selected.theme.highlight }}
+              style={{ backgroundColor: "#b36a31" }}
               type="button"
             >
               <Save size={14} />
@@ -1440,7 +1555,9 @@ export default function AdminPage() {
                   <Field key={key} label={key}>
                     <input
                       type="color"
-                      value={value}
+                      value={
+                        /^#([0-9A-F]{3}){1,2}$/i.test(value) ? value : "#000000"
+                      }
                       onChange={(e) =>
                         updateListing({
                           theme: {
@@ -1453,6 +1570,30 @@ export default function AdminPage() {
                     />
                   </Field>
                 ))}
+              </div>
+            </Section>
+
+            <Section title="Preview shortcuts">
+              <div className="space-y-2">
+                <SmallButton onClick={() => setIsPreview(true)}>
+                  <Eye size={14} />
+                  Open dossier preview
+                </SmallButton>
+
+                <SmallButton onClick={() => logoFileRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload logo
+                </SmallButton>
+
+                <SmallButton onClick={() => coverFileRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload hero
+                </SmallButton>
+
+                <SmallButton onClick={() => downloadFileRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload downloadable
+                </SmallButton>
               </div>
             </Section>
           </aside>
@@ -1581,6 +1722,14 @@ export default function AdminPage() {
                   rows={4}
                   value={selected.vibe}
                   onChange={(e) => updateListing({ vibe: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Long overview">
+                <TextArea
+                  rows={5}
+                  value={selected.overview}
+                  onChange={(e) => updateListing({ overview: e.target.value })}
                 />
               </Field>
 
@@ -1740,6 +1889,12 @@ export default function AdminPage() {
                           />
                         </div>
                       ))}
+
+                      {group.images.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/45">
+                          No images in this group yet.
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -2130,405 +2285,812 @@ export default function AdminPage() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="mx-auto max-w-[1280px] px-4 py-6 md:px-6 md:py-8">
           <div
-            className="overflow-hidden rounded-[32px] border"
+            className="overflow-hidden rounded-[28px] border shadow-[0_20px_60px_rgba(70,48,22,0.10)]"
             style={{
               borderColor: previewTheme.borderColor,
               backgroundColor: previewTheme.blockBg,
               color: previewTheme.accent,
             }}
           >
-            <div className="grid gap-8 p-6 lg:grid-cols-[1.05fr_0.95fr] lg:p-10">
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-3">
+            <section
+              className="border-b px-5 py-6 md:px-10 md:py-8"
+              style={{ borderColor: previewTheme.borderColor }}
+            >
+              <div className="flex flex-col items-center justify-center text-center">
+                {selected.logoImage ? (
+                  <button
+                    type="button"
+                    onClick={() => logoFileRef.current?.click()}
+                    className="mb-4 h-16 w-28 overflow-hidden rounded-xl border transition hover:opacity-90"
+                    style={{ borderColor: previewTheme.borderColor }}
+                    title="Replace logo"
+                  >
+                    <img
+                      src={selected.logoImage}
+                      alt={`${selected.name} logo`}
+                      className="h-full w-full object-contain"
+                    />
+                  </button>
+                ) : (
+                  <div className="mb-4 w-full max-w-[280px]">
+                    <EditorUploadZone
+                      title="Logo area"
+                      subtitle="Upload the property or brand logo"
+                      onClick={() => logoFileRef.current?.click()}
+                      className="h-[90px]"
+                    />
+                  </div>
+                )}
+
+                <h1
+                  className="text-4xl font-semibold tracking-tight md:text-6xl"
+                  style={{ color: previewTheme.accent }}
+                >
+                  {selected.name}
+                </h1>
+
+                <p className="mt-3 text-sm md:text-xl" style={{ opacity: 0.72 }}>
+                  {[
+                    selected.tradeProfileLabel,
+                    selected.location || selected.snapshot.location,
+                    selected.class,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                   <span
-                    className="rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em]"
+                    className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.16em]"
                     style={{
-                      borderColor: previewTheme.highlight,
-                      backgroundColor: `${previewTheme.highlight}22`,
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.42)",
                     }}
                   >
-                    Property
+                    {selected.status}
                   </span>
 
-                  {selected.tradeProfileLabel || selected.tradeProfileSub ? (
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.22em] opacity-50">
-                      {[selected.tradeProfileLabel, selected.tradeProfileSub]
-                        .filter(Boolean)
-                        .join(" · ")}
+                  {selected.tradeProfileSub ? (
+                    <span
+                      className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.16em]"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.42)",
+                      }}
+                    >
+                      {selected.tradeProfileSub}
                     </span>
                   ) : null}
                 </div>
+              </div>
+            </section>
 
-                <div className="flex items-start gap-4">
-                  {selected.logoImage ? (
-                    <div
-                      className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: previewTheme.pageBg,
-                      }}
+            <section className="px-4 pb-5 pt-4 md:px-8 md:pb-6 md:pt-6">
+              <div
+                className="overflow-hidden rounded-[24px] border"
+                style={{ borderColor: previewTheme.borderColor }}
+              >
+                <div className="relative">
+                  {selected.coverImage ? (
+                    <button
+                      type="button"
+                      onClick={() => coverFileRef.current?.click()}
+                      className="relative block w-full overflow-hidden text-left"
+                      title="Replace hero image"
                     >
                       <img
-                        src={selected.logoImage}
-                        alt={`${selected.name} logo`}
-                        className="h-full w-full object-cover"
+                        src={selected.coverImage}
+                        alt={`${selected.name} hero`}
+                        className="aspect-[16/7.6] w-full object-cover"
                       />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[rgba(60,41,22,0.52)] via-[rgba(60,41,22,0.08)] to-transparent" />
+                      <div className="absolute right-4 top-4 rounded-full border bg-white/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5f472f] backdrop-blur">
+                        Replace hero
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="relative">
+                      <EditorUploadZone
+                        title="Hero image"
+                        subtitle="Upload the main cover image used at the top of the dossier"
+                        onClick={() => coverFileRef.current?.click()}
+                        className="aspect-[16/7.6]"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 px-5 pb-6 pt-16 md:px-10 md:pb-8">
+                        <div className="text-center text-[#f8f3eb]">
+                          <h2 className="text-3xl font-semibold drop-shadow-sm md:text-6xl">
+                            {selected.name}
+                          </h2>
+                          <p className="mt-3 text-sm md:text-2xl">
+                            {[
+                              selected.tradeProfileLabel,
+                              selected.location || selected.snapshot.location,
+                              selected.class,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selected.coverImage ? (
+                    <div className="absolute inset-x-0 bottom-0 px-5 pb-6 pt-16 md:px-10 md:pb-8 pointer-events-none">
+                      <div className="text-center text-[#f8f3eb]">
+                        <h2 className="text-3xl font-semibold drop-shadow-sm md:text-6xl">
+                          {selected.name}
+                        </h2>
+                        <p className="mt-3 text-sm md:text-2xl">
+                          {[
+                            selected.tradeProfileLabel,
+                            selected.location || selected.snapshot.location,
+                            selected.class,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        {selected.tripadvisorRating ? (
+                          <div className="mt-4 flex items-center justify-center gap-3 text-xs font-medium uppercase tracking-[0.20em] md:text-base">
+                            <span>
+                              {"★".repeat(
+                                Math.max(
+                                  1,
+                                  Math.min(
+                                    5,
+                                    Math.round(Number(selected.tripadvisorRating) || 0),
+                                  ),
+                                ),
+                              )}
+                            </span>
+                            <span>Top trade-rated safari profile</span>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
-
-                  <div className="min-w-0">
-                    <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
-                      {selected.name}
-                    </h1>
-                    <p className="mt-3 max-w-3xl text-base leading-8 opacity-75 md:text-lg">
-                      {selected.vibe || "Trade-ready safari property profile."}
-                    </p>
-                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {[selected.location, selected.class, ...previewTags]
-                    .filter(Boolean)
-                    .slice(0, 6)
-                    .map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full border px-3 py-1.5 text-sm"
+                {previewDownloads.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => downloadFileRef.current?.click()}
+                    className="block w-full border-t px-5 py-3 text-center text-sm md:px-8 md:text-2xl"
+                    style={{
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor: `${previewTheme.highlight}26`,
+                      color: previewTheme.accent,
+                    }}
+                    title="Upload or replace downloadable files"
+                  >
+                    {previewDownloads[0].label}
+                  </button>
+                ) : (
+                  <div className="border-t p-4" style={{ borderColor: previewTheme.borderColor }}>
+                    <EditorUploadZone
+                      title="Downloads bar"
+                      subtitle="Upload the trade pack PDF or brochure that appears below the hero"
+                      onClick={() => downloadFileRef.current?.click()}
+                      className="h-[72px]"
+                    />
+                  </div>
+                )}
+
+                <div className="px-4 py-4 md:px-6">
+                  {selected.gallery.map((group, groupIndex) => {
+                    const groupImages = group.images.slice(0, 4);
+                    const hiddenCount = Math.max(0, group.images.length - 4);
+
+                    return (
+                      <div key={group.id} className="mb-4 last:mb-0">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7a6349]">
+                            {group.label || `Gallery ${groupIndex + 1}`}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => galleryFileRefs.current[group.id]?.click()}
+                            className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                            }}
+                          >
+                            Add images
+                          </button>
+
+                          <input
+                            ref={(node) => {
+                              galleryFileRefs.current[group.id] = node;
+                            }}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => handleGalleryUpload(e, groupIndex)}
+                          />
+                        </div>
+
+                        {groupImages.length > 0 ? (
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                            {groupImages.map((image, index) => (
+                              <button
+                                key={`${group.id}-${image}-${index}`}
+                                type="button"
+                                onClick={() => galleryFileRefs.current[group.id]?.click()}
+                                className="overflow-hidden rounded-[12px] border text-left"
+                                style={{ borderColor: previewTheme.borderColor }}
+                                title="Add more images to this gallery group"
+                              >
+                                <img
+                                  src={image}
+                                  alt={`${group.label} ${index + 1}`}
+                                  className="aspect-[4/2.3] w-full object-cover"
+                                />
+                              </button>
+                            ))}
+
+                            {hiddenCount > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => galleryFileRefs.current[group.id]?.click()}
+                                className="flex aspect-[4/2.3] items-center justify-center rounded-[12px] border text-sm font-semibold"
+                                style={{
+                                  borderColor: previewTheme.borderColor,
+                                  backgroundColor: "rgba(255,255,255,0.42)",
+                                }}
+                              >
+                                +{hiddenCount} more
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <EditorUploadZone
+                            title={`${group.label || `Gallery ${groupIndex + 1}`}`}
+                            subtitle="Upload images for this gallery strip"
+                            onClick={() => galleryFileRefs.current[group.id]?.click()}
+                            className="aspect-[16/3.8]"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div
+                  className="border-t px-4 py-4 md:px-6"
+                  style={{ borderColor: previewTheme.borderColor }}
+                >
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+                    {snapshotFacts.map((fact, index) => (
+                      <div
+                        key={`${fact.label}-${index}`}
+                        className="rounded-[12px] border px-4 py-3"
                         style={{
                           borderColor: previewTheme.borderColor,
-                          backgroundColor: previewTheme.pageBg,
+                          backgroundColor: "rgba(255,255,255,0.42)",
                         }}
                       >
-                        {tag}
-                      </span>
+                        <div className="text-[11px] uppercase tracking-[0.16em]" style={{ opacity: 0.62 }}>
+                          {fact.label}
+                        </div>
+                        <div className="mt-2 text-lg font-semibold md:text-2xl">
+                          {fact.value}
+                        </div>
+                        <div className="mt-1 text-xs md:text-sm" style={{ opacity: 0.68 }}>
+                          {fact.sub}
+                        </div>
+                      </div>
                     ))}
+                  </div>
                 </div>
+              </div>
+            </section>
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    ["Rooms", selected.snapshot.rooms || "—"],
-                    ["Best For", selected.snapshot.bestFor || "—"],
-                    ["Setting", selected.snapshot.setting || "—"],
-                    ["Access", selected.snapshot.access || "—"],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="rounded-[24px] border p-4"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: previewTheme.pageBg,
-                      }}
-                    >
-                      <p className="text-[11px] uppercase tracking-[0.18em] opacity-45">
-                        {label}
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold">{value}</p>
+            <section className="px-4 pb-4 md:px-8">
+              <div className="grid gap-5 lg:grid-cols-[1.15fr_430px]">
+                <div
+                  className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7"
+                  style={{ borderColor: previewTheme.borderColor }}
+                >
+                  <h3 className="text-3xl font-semibold md:text-5xl">{selected.name}</h3>
+                  <p className="mt-4 max-w-3xl text-base leading-8 md:text-xl" style={{ opacity: 0.72 }}>
+                    {overviewText}
+                  </p>
+
+                  {previewTags.length > 0 ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {[selected.location, selected.class, ...previewTags]
+                        .filter(Boolean)
+                        .slice(0, 8)
+                        .map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.46)",
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
                     </div>
-                  ))}
+                  ) : null}
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  {previewDownloads[0]?.url ? (
-                    <a
-                      href={previewDownloads[0].url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-2xl px-5 py-3 text-sm font-semibold text-white"
-                      style={{ backgroundColor: previewTheme.highlight }}
+                <div
+                  className="rounded-[22px] border p-4 md:p-5"
+                  style={{
+                    borderColor: previewTheme.borderColor,
+                    backgroundColor: "rgba(255,255,255,0.32)",
+                  }}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => downloadFileRef.current?.click()}
+                      className="block rounded-[14px] px-4 py-3 text-center text-sm font-medium md:text-base text-white"
+                      style={{ backgroundColor: `${previewTheme.highlight}` }}
                     >
                       Request Trade Pack
-                    </a>
-                  ) : null}
+                    </button>
 
-                  {selected.enquiryEmail ? (
                     <a
-                      href={`mailto:${selected.enquiryEmail}?subject=${encodeURIComponent(
-                        selected.enquirySubject || "Trade Request",
-                      )}`}
-                      className="rounded-2xl border px-5 py-3 text-sm font-semibold"
+                      href={
+                        selected.enquiryEmail
+                          ? `mailto:${selected.enquiryEmail}?subject=${encodeURIComponent(
+                              selected.enquirySubject || "Trade Request",
+                            )}`
+                          : "#"
+                      }
+                      className="block rounded-[14px] px-4 py-3 text-center text-sm font-medium md:text-base text-white"
+                      style={{ backgroundColor: `${previewTheme.highlight}` }}
+                    >
+                      Check Availability
+                    </a>
+
+                    <a
+                      href={
+                        selected.enquiryEmail
+                          ? `mailto:${selected.enquiryEmail}?subject=${encodeURIComponent(
+                              selected.enquirySubject || "Trade Request",
+                            )}`
+                          : "#"
+                      }
+                      className="block rounded-[14px] border px-4 py-3 text-center text-sm font-medium md:text-base"
                       style={{
                         borderColor: previewTheme.borderColor,
-                        backgroundColor: previewTheme.pageBg,
+                        backgroundColor: "rgba(255,255,255,0.42)",
                         color: previewTheme.accent,
                       }}
                     >
                       Request Quote
                     </a>
-                  ) : null}
+
+                    <a
+                      href={selected.website || "#"}
+                      className="block rounded-[14px] border px-4 py-3 text-center text-sm font-medium md:text-base"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.42)",
+                        color: previewTheme.accent,
+                      }}
+                    >
+                      {selected.website ? "Visit Website" : "Share with Client"}
+                    </a>
+                  </div>
                 </div>
               </div>
+            </section>
 
-              <div className="space-y-5">
-                <div
-                  className="overflow-hidden rounded-[34px] border"
-                  style={{
-                    borderColor: previewTheme.borderColor,
-                    backgroundColor: previewTheme.pageBg,
-                  }}
-                >
-                  <div className="relative aspect-[4/3] overflow-hidden">
-                    {selected.coverImage ? (
-                      <img
-                        src={selected.coverImage}
-                        alt={`${selected.name} hero`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full bg-[linear-gradient(135deg,rgba(255,255,255,0.03),rgba(255,255,255,0.08))]" />
-                    )}
-                  </div>
-                </div>
+            <div className="px-4 pb-2 pt-3 md:px-8">
+              <div className="hidden md:flex md:flex-wrap md:gap-2">
+                {["Overview", "Rates", "Experiences", "Policies", "Downloads", "Contact"].map(
+                  (tab, index) => (
+                    <div
+                      key={tab}
+                      className="rounded-t-[14px] border px-5 py-3 text-sm font-medium"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor:
+                          index === 0
+                            ? `${previewTheme.highlight}22`
+                            : "rgba(255,255,255,0.36)",
+                      }}
+                    >
+                      {tab}
+                    </div>
+                  ),
+                )}
+              </div>
 
-                <div
-                  className="rounded-[30px] border p-6"
-                  style={{
-                    borderColor: previewTheme.borderColor,
-                    backgroundColor: previewTheme.pageBg,
-                  }}
-                >
-                  <p className="text-sm uppercase tracking-[0.2em] opacity-45">
-                    Quick Trade Snapshot
-                  </p>
-                  <div className="mt-5 space-y-3">
-                    {[
-                      ["Location", selected.location || "—"],
-                      ["Best for", selected.snapshot.bestFor || "—"],
-                      ["Style", selected.snapshot.style || "—"],
-                      ["Access", selected.snapshot.access || "—"],
-                    ].map(([label, value]) => (
-                      <div
-                        key={label}
-                        className="flex items-center justify-between gap-4 rounded-2xl border px-4 py-3"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: previewTheme.blockBg,
-                        }}
-                      >
-                        <span className="opacity-50">{label}</span>
-                        <span className="text-right font-semibold">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex flex-wrap gap-2 md:hidden">
+                {["Overview", "Rates", "Experiences", "Policies", "Downloads", "Contact"].map(
+                  (tab, index) => (
+                    <div
+                      key={tab}
+                      className="rounded-full border px-4 py-2 text-xs font-medium"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor:
+                          index === 0
+                            ? `${previewTheme.highlight}22`
+                            : "rgba(255,255,255,0.36)",
+                      }}
+                    >
+                      {tab}
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 
-            <div
-              className="grid gap-8 border-t px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10"
-              style={{ borderColor: previewTheme.borderColor }}
-            >
-              <div className="space-y-8">
-                {selected.gallery.some((group) => group.images.length > 0) ? (
-                  <div
-                    className="rounded-[30px] border p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: previewTheme.pageBg,
-                    }}
-                  >
-                    <p className="text-sm uppercase tracking-[0.2em] opacity-45">
-                      Gallery
-                    </p>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {selected.gallery
-                        .flatMap((group) =>
-                          group.images.map((image, index) => ({
-                            src: image,
-                            label: `${group.label} ${index + 1}`,
-                          })),
-                        )
-                        .slice(0, 6)
-                        .map((image) => (
-                          <div
-                            key={`${image.src}-${image.label}`}
-                            className="overflow-hidden rounded-[22px] border"
-                            style={{
-                              borderColor: previewTheme.borderColor,
-                              backgroundColor: previewTheme.blockBg,
-                            }}
-                          >
-                            <img
-                              src={image.src}
-                              alt={image.label}
-                              className="aspect-[4/3] h-full w-full object-cover"
-                            />
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {previewRateRows.length > 0 ? (
-                  <div
-                    className="rounded-[30px] border p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: previewTheme.pageBg,
-                    }}
-                  >
-                    <p className="text-sm uppercase tracking-[0.2em] opacity-45">
-                      Rates
-                    </p>
-                    <div
-                      className="mt-5 overflow-hidden rounded-[22px] border"
+            <section className="px-4 pb-8 md:px-8 md:pb-10">
+              <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+                <div className="space-y-8">
+                  {previewRateRows.length > 0 ? (
+                    <section
+                      className="rounded-[22px] border p-5 md:p-6"
                       style={{
                         borderColor: previewTheme.borderColor,
-                        backgroundColor: previewTheme.blockBg,
+                        backgroundColor: "rgba(255,255,255,0.24)",
                       }}
                     >
-                      <div
-                        className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] opacity-60"
-                        style={{ borderColor: previewTheme.borderColor }}
-                      >
-                        <span>Season</span>
-                        <span>Dates</span>
-                        <span>Rack PPPN</span>
+                      <div className="flex items-end gap-3">
+                        <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                          PUBLIC RACK RATES
+                        </h3>
+                        <span
+                          className="pb-1 text-lg font-medium tracking-[0.18em] md:text-2xl"
+                          style={{ color: previewTheme.highlight }}
+                        >
+                          2026
+                        </span>
                       </div>
 
-                      {previewRateRows.map((row, index) => (
+                      <div
+                        className="mt-5 overflow-hidden rounded-[16px] border"
+                        style={{
+                          borderColor: previewTheme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                        }}
+                      >
                         <div
-                          key={row.id}
-                          className="grid grid-cols-3 px-4 py-3 text-sm"
-                          style={{
-                            borderTop:
-                              index === 0
-                                ? "none"
-                                : `1px solid ${previewTheme.borderColor}`,
-                          }}
+                          className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] md:grid-cols-[1.2fr_1.5fr_1fr]"
+                          style={{ borderColor: previewTheme.borderColor, opacity: 0.62 }}
                         >
-                          <span>{row.season || "—"}</span>
-                          <span>{row.dates || "—"}</span>
-                          <span>{row.rackPPPN || "—"}</span>
+                          <span>Season</span>
+                          <span>Dates</span>
+                          <span>Rack PPPN</span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
 
-              <aside className="space-y-6">
-                {previewDownloads.length > 0 ? (
-                  <div
-                    className="rounded-[30px] border p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: previewTheme.pageBg,
-                    }}
-                  >
-                    <p className="text-sm uppercase tracking-[0.2em] opacity-45">
-                      Downloads
-                    </p>
-                    <div className="mt-5 space-y-3">
-                      {previewDownloads.map((item) => (
-                        <a
-                          key={item.id}
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block rounded-2xl border px-4 py-3 text-sm font-semibold"
+                        {previewRateRows.map((row, index) => (
+                          <div
+                            key={row.id}
+                            className="grid grid-cols-3 px-4 py-3 text-sm md:grid-cols-[1.2fr_1.5fr_1fr] md:text-lg"
+                            style={{
+                              borderTop:
+                                index === 0
+                                  ? "none"
+                                  : `1px solid ${previewTheme.borderColor}`,
+                            }}
+                          >
+                            <span className="font-medium">{row.season || "—"}</span>
+                            <span>{row.dates || "—"}</span>
+                            <span>{row.rackPPPN || "—"}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {selected.rates.notesText.trim() ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {textToLines(selected.rates.notesText).map((note) => (
+                            <span
+                              key={note}
+                              className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
+                              style={{
+                                borderColor: previewTheme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.46)",
+                              }}
+                            >
+                              {note}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
+
+                  {(selected.experiences.includedText.trim() ||
+                    selected.experiences.paidText.trim()) ? (
+                    <section
+                      className="rounded-[22px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.24)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                        EXPERIENCES
+                      </h3>
+
+                      <div className="mt-5 grid gap-5 md:grid-cols-2">
+                        <div
+                          className="rounded-[16px] border p-4"
                           style={{
                             borderColor: previewTheme.borderColor,
-                            backgroundColor: previewTheme.blockBg,
-                            color: previewTheme.accent,
+                            backgroundColor: "rgba(255,255,255,0.42)",
                           }}
                         >
-                          {item.label}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
+                            Included
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {textToLines(selected.experiences.includedText).length > 0 ? (
+                              textToLines(selected.experiences.includedText).map((item) => (
+                                <span
+                                  key={item}
+                                  className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
+                                  style={{
+                                    borderColor: previewTheme.borderColor,
+                                    backgroundColor: "rgba(255,255,255,0.46)",
+                                  }}
+                                >
+                                  {item}
+                                </span>
+                              ))
+                            ) : (
+                              <span style={{ opacity: 0.6 }}>None listed</span>
+                            )}
+                          </div>
+                        </div>
 
-                {selected.contacts.sales.some(
-                  (item) => item.name || item.email || item.phone,
-                ) ? (
-                  <div
-                    className="rounded-[30px] border p-6"
+                        <div
+                          className="rounded-[16px] border p-4"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                          }}
+                        >
+                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
+                            Paid
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {textToLines(selected.experiences.paidText).length > 0 ? (
+                              textToLines(selected.experiences.paidText).map((item) => (
+                                <span
+                                  key={item}
+                                  className="rounded-full border px-3 py-1.5 text-xs md:text-sm"
+                                  style={{
+                                    borderColor: previewTheme.borderColor,
+                                    backgroundColor: "rgba(255,255,255,0.46)",
+                                  }}
+                                >
+                                  {item}
+                                </span>
+                              ))
+                            ) : (
+                              <span style={{ opacity: 0.6 }}>None listed</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {(selected.policies.childPolicy.trim() ||
+                    selected.policies.honeymoonPolicy.trim() ||
+                    selected.policies.cancellation.trim() ||
+                    selected.policies.importantNotesText.trim() ||
+                    selected.policies.tradeNotesText.trim()) ? (
+                    <section
+                      className="rounded-[22px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.24)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                        POLICIES
+                      </h3>
+
+                      <div className="mt-5 grid gap-3">
+                        {[
+                          ["Child policy", selected.policies.childPolicy],
+                          ["Honeymoon policy", selected.policies.honeymoonPolicy],
+                          ["Cancellation", selected.policies.cancellation],
+                          ...textToLines(selected.policies.importantNotesText).map((item) => [
+                            "Important note",
+                            item,
+                          ]),
+                          ...textToLines(selected.policies.tradeNotesText).map((item) => [
+                            "Trade note",
+                            item,
+                          ]),
+                        ]
+                          .filter((row) => row[1])
+                          .map(([label, value], index) => (
+                            <div
+                              key={`${label}-${index}`}
+                              className="rounded-[16px] border px-4 py-4"
+                              style={{
+                                borderColor: previewTheme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.42)",
+                              }}
+                            >
+                              <div className="text-[11px] uppercase tracking-[0.18em]" style={{ opacity: 0.6 }}>
+                                {label}
+                              </div>
+                              <div className="mt-2 whitespace-pre-line text-sm leading-7 md:text-base">
+                                {value}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+
+                <aside className="space-y-6">
+                  <section
+                    className="rounded-[22px] border p-5 md:p-6"
                     style={{
                       borderColor: previewTheme.borderColor,
-                      backgroundColor: previewTheme.pageBg,
+                      backgroundColor: "rgba(255,255,255,0.24)",
                     }}
                   >
-                    <p className="text-sm uppercase tracking-[0.2em] opacity-45">
-                      Contact
-                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                        DOWNLOADS
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => downloadFileRef.current?.click()}
+                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                        style={{
+                          borderColor: previewTheme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                        }}
+                      >
+                        Upload
+                      </button>
+                    </div>
+
                     <div className="mt-5 space-y-3">
-                      {selected.contacts.sales
-                        .filter((item) => item.name || item.email || item.phone)
-                        .map((item) => (
-                          <div
+                      {previewDownloads.length > 0 ? (
+                        previewDownloads.map((item) => (
+                          <button
                             key={item.id}
-                            className="rounded-2xl border px-4 py-3"
+                            type="button"
+                            onClick={() => downloadFileRef.current?.click()}
+                            className="block w-full rounded-[16px] border px-4 py-3 text-left text-sm font-medium md:text-base"
                             style={{
                               borderColor: previewTheme.borderColor,
-                              backgroundColor: previewTheme.blockBg,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                              color: previewTheme.accent,
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        ))
+                      ) : (
+                        <EditorUploadZone
+                          title="Downloads panel"
+                          subtitle="Upload PDFs, brochures, or fact sheets"
+                          onClick={() => downloadFileRef.current?.click()}
+                          className="h-[120px]"
+                        />
+                      )}
+                    </div>
+                  </section>
+
+                  <section
+                    className="rounded-[22px] border p-5 md:p-6"
+                    style={{
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.24)",
+                    }}
+                  >
+                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                      CONTACT
+                    </h3>
+
+                    <div className="mt-5 space-y-5">
+                      {previewContacts.length > 0 ? (
+                        previewContacts.map((item, index) => (
+                          <div
+                            key={`${item.id}-${index}`}
+                            className="rounded-[16px] border px-4 py-4"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
                             }}
                           >
                             {item.name ? (
-                              <p className="text-sm font-semibold">
+                              <div className="text-base font-semibold md:text-lg">
                                 {item.name}
-                              </p>
+                              </div>
                             ) : null}
                             {item.role ? (
-                              <p className="mt-1 text-sm opacity-75">
+                              <div className="mt-1 text-sm md:text-base" style={{ opacity: 0.7 }}>
                                 {item.role}
-                              </p>
+                              </div>
                             ) : null}
                             {item.email ? (
-                              <p className="mt-2 text-sm">{item.email}</p>
+                              <div className="mt-3 text-sm md:text-base">{item.email}</div>
                             ) : null}
                             {item.phone ? (
-                              <p className="mt-1 text-sm">{item.phone}</p>
+                              <div className="mt-2 text-sm md:text-base">{item.phone}</div>
+                            ) : null}
+                            {item.whatsapp ? (
+                              <div className="mt-2 text-sm md:text-base">
+                                WhatsApp: {item.whatsapp}
+                              </div>
                             ) : null}
                           </div>
-                        ))}
+                        ))
+                      ) : (
+                        <div
+                          className="rounded-[16px] border px-4 py-4 text-sm"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                          }}
+                        >
+                          Add contact details in the editor.
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : null}
+                  </section>
 
-                {selected.tripadvisorRating || selected.taLink ? (
-                  <div
-                    className="rounded-[30px] border p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: previewTheme.pageBg,
-                    }}
-                  >
-                    <p className="text-sm uppercase tracking-[0.2em] opacity-45">
-                      Tripadvisor
-                    </p>
-                    {selected.tripadvisorRating ? (
-                      <div
-                        className="mt-5 rounded-2xl border px-4 py-3 text-sm font-semibold"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: previewTheme.blockBg,
-                        }}
-                      >
-                        Rating {selected.tripadvisorRating}
-                      </div>
-                    ) : null}
-                    {selected.taLink ? (
-                      <a
-                        href={selected.taLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 block rounded-2xl border px-4 py-3 text-sm font-semibold"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: previewTheme.blockBg,
-                          color: previewTheme.accent,
-                        }}
-                      >
-                        Open Tripadvisor
-                      </a>
-                    ) : null}
-                  </div>
-                ) : null}
-              </aside>
-            </div>
+                  {(selected.tripadvisorRating || selected.taLink) ? (
+                    <section
+                      className="rounded-[22px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.24)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
+                        TRIPADVISOR
+                      </h3>
+
+                      {selected.tripadvisorRating ? (
+                        <div
+                          className="mt-5 rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                          }}
+                        >
+                          Rating {selected.tripadvisorRating}
+                        </div>
+                      ) : null}
+
+                      {selected.taLink ? (
+                        <a
+                          href={selected.taLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-3 block rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                            color: previewTheme.accent,
+                          }}
+                        >
+                          Open Tripadvisor
+                        </a>
+                      ) : null}
+                    </section>
+                  ) : null}
+                </aside>
+              </div>
+            </section>
           </div>
         </div>
       )}
