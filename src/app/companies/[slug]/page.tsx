@@ -7,38 +7,57 @@ type CompanyPageProps = {
   };
 };
 
+type ListingStatus = "draft" | "published" | "archived";
+
 type ApiListing = {
   id: string;
   slug: string;
   name: string;
   companySlug: string | null;
-  status: "draft" | "published" | "archived";
-  locationLabel?: string | null;
-  class?: string | null;
-  vibe?: string | null;
-  website?: string | null;
-  tripadvisorRating?: number | null;
-  data?: {
-    coverImage?: string;
-    logoImage?: string;
-    tradeProfileLabel?: string;
-    tradeProfileSub?: string;
-    locationLabel?: string;
-    website?: string;
-    facebookUrl?: string;
-    instagramUrl?: string;
-    tiktokUrl?: string;
-    youtubeUrl?: string;
-    rating?: number | string;
-    reviewCount?: number | string;
-    vibe?: string;
-    class?: string;
-  };
+  status: ListingStatus;
+  location: string | null;
+  class: string | null;
+  vibe: string | null;
+  website: string | null;
+  mapLink: string | null;
+  tripadvisorRating: number | null;
+  design?: {
+    preset?: string;
+  } | null;
+  data?: Record<string, unknown> | null;
 };
 
+function getRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function toText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === "string")
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+}
+
 async function getApiListings(): Promise<ApiListing[]> {
-  const headersList = await headers();
-  const host = headersList.get("host");
+  const headerStore = headers();
+  const host = headerStore.get("host");
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
 
   if (!host) return [];
@@ -51,19 +70,113 @@ async function getApiListings(): Promise<ApiListing[]> {
     if (!res.ok) return [];
 
     const json = await res.json();
-    return Array.isArray(json.listings) ? (json.listings as ApiListing[]) : [];
+    const root = getRecord(json);
+    const listings = root.listings;
+
+    return Array.isArray(listings) ? (listings as ApiListing[]) : [];
   } catch {
     return [];
   }
 }
 
-function toNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+function getListingData(listing: ApiListing): Record<string, unknown> {
+  return getRecord(listing.data);
+}
+
+function getSnapshot(listing: ApiListing): Record<string, unknown> {
+  return getRecord(getListingData(listing).snapshot);
+}
+
+function getListingLocation(listing: ApiListing): string {
+  const data = getListingData(listing);
+  const snapshot = getSnapshot(listing);
+
+  return (
+    listing.location ||
+    toText(snapshot.location) ||
+    toText(data.locationLabel) ||
+    "Location not set"
+  );
+}
+
+function getListingClass(listing: ApiListing): string {
+  const data = getListingData(listing);
+  return listing.class || toText(data.class) || "Property";
+}
+
+function getListingVibe(listing: ApiListing): string {
+  const data = getListingData(listing);
+  return (
+    listing.vibe ||
+    toText(data.vibe) ||
+    toText(data.overview) ||
+    "Trade-ready safari property profile."
+  );
+}
+
+function getListingWebsite(listing: ApiListing): string {
+  const data = getListingData(listing);
+  return listing.website || toText(data.website);
+}
+
+function getPrimaryImage(listing: ApiListing): string {
+  const data = getListingData(listing);
+
+  const coverImage = toText(data.coverImage);
+  if (coverImage) return coverImage;
+
+  const heroImage = toText(data.heroImage);
+  if (heroImage) return heroImage;
+
+  const logoImage = toText(data.logoImage);
+  if (logoImage) return logoImage;
+
+  const gallery = data.gallery;
+  if (Array.isArray(gallery)) {
+    for (const group of gallery) {
+      const groupRecord = getRecord(group);
+      const images = groupRecord.images;
+
+      if (Array.isArray(images)) {
+        for (const image of images) {
+          const value = toText(image);
+          if (value) return value;
+        }
+      }
+    }
   }
-  return null;
+
+  return "";
+}
+
+function getLogoImage(listing: ApiListing): string {
+  const data = getListingData(listing);
+  return toText(data.logoImage);
+}
+
+function getRating(listing: ApiListing): number | null {
+  const data = getListingData(listing);
+  return toNumber(
+    data.rating !== undefined ? data.rating : listing.tripadvisorRating,
+  );
+}
+
+function getReviewCount(listing: ApiListing): number | null {
+  const data = getListingData(listing);
+  return toNumber(data.reviewCount);
+}
+
+function getBestFor(listing: ApiListing): string {
+  const snapshot = getSnapshot(listing);
+  return toText(snapshot.bestFor);
+}
+
+function getSupportImageData(listing: ApiListing) {
+  return {
+    src: getPrimaryImage(listing),
+    alt: listing.name,
+    href: `/profiles/${listing.slug}`,
+  };
 }
 
 export default async function CompanyPage({ params }: CompanyPageProps) {
@@ -105,24 +218,19 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
 
   const apiListings = await getApiListings();
 
-  const companyListings: ApiListing[] = apiListings.filter(
+  const companyListings = apiListings.filter(
     (listing) =>
       listing.companySlug === company.slug && listing.status === "published",
   );
 
   const showcaseListings = companyListings.slice(0, 5);
-  const leadListing = showcaseListings[0];
+  const leadListing = showcaseListings[0] || null;
   const supportListings = showcaseListings.slice(1, 5);
 
-  const leadImage =
-    leadListing?.data?.coverImage || leadListing?.data?.logoImage || "";
+  const leadImage = leadListing ? getPrimaryImage(leadListing) : "";
 
   const supportImages: Array<{ src: string; alt: string; href: string }> =
-    supportListings.map((listing) => ({
-      src: listing.data?.coverImage || listing.data?.logoImage || "",
-      alt: listing.name,
-      href: `/profiles/${listing.slug}`,
-    }));
+    supportListings.map(getSupportImageData);
 
   while (supportImages.length < 4) {
     supportImages.push({
@@ -132,35 +240,30 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
     });
   }
 
-  const regions: string[] = Array.from(
+  const regions = Array.from(
     new Set(
       companyListings
-        .map((listing) =>
-          String(
-            listing.locationLabel || listing.data?.locationLabel || "",
-          ).trim(),
-        )
-        .filter((value) => value.length > 0),
+        .map((listing) => getListingLocation(listing))
+        .filter((value) => value && value !== "Location not set"),
     ),
   ).slice(0, 3);
 
-  const listingTypes: string[] = Array.from(
+  const listingTypes = Array.from(
     new Set(
       companyListings
-        .map((listing) =>
-          String(listing.class || listing.data?.class || "").trim(),
-        )
-        .filter((value) => value.length > 0),
+        .map((listing) => getListingClass(listing))
+        .filter(Boolean),
     ),
   ).slice(0, 3);
 
-  const bestForTags: string[] = Array.from(
+  const bestForTags = Array.from(
     new Set(
       companyListings
-        .map((listing) =>
-          String(listing.vibe || listing.data?.vibe || "").trim(),
-        )
-        .filter((value) => value.length > 0),
+        .map((listing) => {
+          const bestFor = getBestFor(listing);
+          return bestFor || getListingVibe(listing);
+        })
+        .filter(Boolean),
     ),
   ).slice(0, 4);
 
@@ -172,15 +275,15 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
       a: company.name,
     },
     {
-      q: "What kind of portfolio?",
+      q: "What do they operate?",
       a: listingTypes.length ? listingTypes.join(" · ") : company.type,
     },
     {
-      q: "Where do they operate?",
+      q: "Where are they located?",
       a: regions.length ? regions.join(" · ") : company.location,
     },
     {
-      q: "How many properties?",
+      q: "How big is the portfolio?",
       a: `${companyListings.length} listing${companyListings.length === 1 ? "" : "s"}`,
     },
     {
@@ -191,8 +294,8 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
           : "Trade-ready safari portfolio with quick qualification value",
     },
     {
-      q: "How do I get the facts fast?",
-      a: "Open listings, view profiles, and contact the trade desk",
+      q: "How do I contact them quickly?",
+      a: "Open listings, view profiles, and use the contact section inside each dossier",
     },
   ];
 
@@ -472,34 +575,30 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
         ) : (
           <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {featuredListings.map((listing) => {
-              const coverImage = listing.data?.coverImage || "";
-              const logoImage = listing.data?.logoImage || "";
-              const location =
-                listing.locationLabel ||
-                listing.data?.locationLabel ||
-                "Location not set";
-              const vibe = listing.vibe || listing.data?.vibe || "";
-              const website = listing.website || listing.data?.website || "";
-              const propertyClass =
-                listing.class || listing.data?.class || "property";
-              const rating = toNumber(
-                listing.data?.rating ?? listing.tripadvisorRating,
-              );
-              const reviewCount = toNumber(listing.data?.reviewCount);
+              const data = getListingData(listing);
+              const coverImage = getPrimaryImage(listing);
+              const logoImage = getLogoImage(listing);
+              const location = getListingLocation(listing);
+              const vibe = getListingVibe(listing);
+              const website = getListingWebsite(listing);
+              const propertyClass = getListingClass(listing);
+              const rating = getRating(listing);
+              const reviewCount = getReviewCount(listing);
 
-              const socialLinks = {
-                facebookUrl: listing.data?.facebookUrl || "",
-                instagramUrl: listing.data?.instagramUrl || "",
-                tiktokUrl: listing.data?.tiktokUrl || "",
-                youtubeUrl: listing.data?.youtubeUrl || "",
-              };
+              const instagramUrl = toText(data.instagramUrl);
+              const facebookUrl = toText(data.facebookUrl);
+              const tiktokUrl = toText(data.tiktokUrl);
+              const youtubeUrl = toText(data.youtubeUrl);
 
               const hasLinks =
-                !!website ||
-                !!socialLinks.facebookUrl ||
-                !!socialLinks.instagramUrl ||
-                !!socialLinks.tiktokUrl ||
-                !!socialLinks.youtubeUrl;
+                Boolean(website) ||
+                Boolean(instagramUrl) ||
+                Boolean(facebookUrl) ||
+                Boolean(tiktokUrl) ||
+                Boolean(youtubeUrl);
+
+              const tradeProfileLabel = toText(data.tradeProfileLabel);
+              const tradeProfileSub = toText(data.tradeProfileSub);
 
               return (
                 <div
@@ -545,14 +644,13 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
                   </div>
 
                   <div className="p-6">
-                    {(listing.data?.tradeProfileLabel ||
-                      listing.data?.tradeProfileSub) && (
+                    {(tradeProfileLabel || tradeProfileSub) ? (
                       <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                        {[listing.data?.tradeProfileLabel, listing.data?.tradeProfileSub]
+                        {[tradeProfileLabel, tradeProfileSub]
                           .filter(Boolean)
                           .join(" · ")}
                       </p>
-                    )}
+                    ) : null}
 
                     <h3 className="text-2xl font-semibold">{listing.name}</h3>
 
@@ -573,7 +671,7 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
                     </div>
 
                     <p className="mt-4 line-clamp-3 text-sm leading-7 text-white/65">
-                      {vibe || "Trade-ready safari property profile."}
+                      {vibe}
                     </p>
 
                     <div className="mt-5 flex flex-wrap gap-2">
@@ -591,22 +689,22 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
 
                     {hasLinks ? (
                       <div className="mt-5 flex flex-wrap gap-2">
-                        {socialLinks.instagramUrl ? (
+                        {instagramUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             Instagram
                           </span>
                         ) : null}
-                        {socialLinks.facebookUrl ? (
+                        {facebookUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             Facebook
                           </span>
                         ) : null}
-                        {socialLinks.tiktokUrl ? (
+                        {tiktokUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             TikTok
                           </span>
                         ) : null}
-                        {socialLinks.youtubeUrl ? (
+                        {youtubeUrl ? (
                           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] text-white/70">
                             YouTube
                           </span>
