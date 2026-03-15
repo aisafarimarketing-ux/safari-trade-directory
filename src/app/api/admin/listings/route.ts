@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 type ListingStatus = "draft" | "published" | "archived";
 
 type ThemeState = {
@@ -82,6 +84,22 @@ type ListingData = {
   };
   offers: string[];
   sustainability?: string | null;
+
+  logoImage?: string | null;
+  coverImage?: string | null;
+  heroImage?: string | null;
+  website?: string | null;
+  mapLink?: string | null;
+  taLogoUrl?: string | null;
+  taLink?: string | null;
+  taRating?: number | null;
+  enquiryEmail?: string | null;
+  enquiryWhatsApp?: string | null;
+  enquirySubject?: string | null;
+  tradeProfileLabel?: string | null;
+  tradeProfileSub?: string | null;
+  quickTags?: string[];
+  images?: string[];
 };
 
 type ListingRecord = {
@@ -299,16 +317,7 @@ function normalizeDownloads(raw: unknown): DownloadItem[] {
 
       const type = asTrimmedString(item.type);
 
-      return type
-        ? {
-            label,
-            url,
-            type,
-          }
-        : {
-            label,
-            url,
-          };
+      return type ? { label, url, type } : { label, url };
     })
     .filter(isNonNull);
 }
@@ -353,7 +362,6 @@ function normalizeData(
 ): ListingData {
   const rawData = isObject(input.data) ? input.data : {};
   const previous = existing?.data;
-
   const snapshotSource = isObject(rawData.snapshot) ? rawData.snapshot : {};
 
   return {
@@ -432,6 +440,47 @@ function normalizeData(
       asTrimmedString(rawData.sustainability) ??
       previous?.sustainability ??
       null,
+
+    logoImage:
+      asTrimmedString(rawData.logoImage) ?? previous?.logoImage ?? null,
+    coverImage:
+      asTrimmedString(rawData.coverImage) ?? previous?.coverImage ?? null,
+    heroImage:
+      asTrimmedString(rawData.heroImage) ?? previous?.heroImage ?? null,
+    website:
+      asTrimmedString(rawData.website) ?? previous?.website ?? null,
+    mapLink:
+      asTrimmedString(rawData.mapLink) ?? previous?.mapLink ?? null,
+    taLogoUrl:
+      asTrimmedString(rawData.taLogoUrl) ?? previous?.taLogoUrl ?? null,
+    taLink:
+      asTrimmedString(rawData.taLink) ?? previous?.taLink ?? null,
+    taRating:
+      toNumberOrNull(rawData.taRating) ?? previous?.taRating ?? null,
+    enquiryEmail:
+      asTrimmedString(rawData.enquiryEmail) ?? previous?.enquiryEmail ?? null,
+    enquiryWhatsApp:
+      asTrimmedString(rawData.enquiryWhatsApp) ??
+      previous?.enquiryWhatsApp ??
+      null,
+    enquirySubject:
+      asTrimmedString(rawData.enquirySubject) ??
+      previous?.enquirySubject ??
+      null,
+    tradeProfileLabel:
+      asTrimmedString(rawData.tradeProfileLabel) ??
+      previous?.tradeProfileLabel ??
+      null,
+    tradeProfileSub:
+      asTrimmedString(rawData.tradeProfileSub) ??
+      previous?.tradeProfileSub ??
+      null,
+    quickTags: Array.isArray(rawData.quickTags)
+      ? asStringArray(rawData.quickTags)
+      : previous?.quickTags ?? [],
+    images: Array.isArray(rawData.images)
+      ? asStringArray(rawData.images)
+      : previous?.images ?? [],
   };
 }
 
