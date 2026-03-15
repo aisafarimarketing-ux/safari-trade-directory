@@ -1204,11 +1204,10 @@ export default function AdminPage() {
     const form = new FormData();
     form.append("file", file);
 
-    const response = await fetch("/api/upload", {
-      method: "POST",
-      body: form,
-    });
-
+   const response = await fetch("/api/admin/upload", {
+  method: "POST",
+  body: form,
+});
     const { json, text } = await parseResponseSafely<UploadApiResponse>(response);
 
     if (!response.ok) {
