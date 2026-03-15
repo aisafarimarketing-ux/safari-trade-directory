@@ -16,15 +16,15 @@ type UploadResponse = {
 };
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const UPLOAD_ROOT =
+  process.env.UPLOAD_DIR?.trim() || path.join(process.cwd(), ".uploads");
 
 function ensureUploadDir() {
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+  if (!fs.existsSync(UPLOAD_ROOT)) {
+    fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
   }
 
-  return uploadDir;
+  return UPLOAD_ROOT;
 }
 
 function sanitizeFileName(name: string) {
@@ -110,7 +110,6 @@ export async function POST(req: Request) {
     }
 
     const uploadDir = ensureUploadDir();
-
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -131,7 +130,7 @@ export async function POST(req: Request) {
     return NextResponse.json<UploadResponse>({
       success: true,
       file: {
-        url: `/uploads/${uniqueName}`,
+        url: `/api/uploads/${encodeURIComponent(uniqueName)}`,
         fileName: uniqueName,
         mimeType: file.type,
         size: file.size,
