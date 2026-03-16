@@ -1230,7 +1230,18 @@ export default function AdminPage() {
     field: "logoImage" | "coverImage",
   ) {
     const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) {
+  setUploadState("No file selected");
+  return;
+}
+
+if (!file.type || !file.type.startsWith("image/")) {
+  setUploadState(
+    `Selected file is not a valid image: ${file.name} (${file.type || "unknown"})`,
+  );
+  e.target.value = "";
+  return;
+}
 
     try {
       setUploadState("Uploading image...");
