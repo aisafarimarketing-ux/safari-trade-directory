@@ -83,6 +83,12 @@ type ListingEditorState = {
   preset: DesignPreset;
   theme: ThemeState;
   overview: string;
+
+  roomConfigsText: string;
+  roomImages: string[];
+  activitiesText: string;
+  experienceText: string;
+
   snapshot: SnapshotState;
   gallery: GalleryGroup[];
   rates: {
@@ -220,7 +226,7 @@ type PdfImportResponse = {
   error?: string;
 };
 
-const STORAGE_KEY = "safaritrade-admin-v4";
+const STORAGE_KEY = "safaritrade-admin-v5";
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e8e1d8",
@@ -229,6 +235,14 @@ const DEFAULT_THEME: ThemeState = {
   highlight: "#8b8364",
   borderColor: "#d7ccbf",
 };
+
+const DEFAULT_ROOM_CONFIGS = [
+  "Double",
+  "Twin",
+  "Triple",
+  "Single",
+  "Family",
+];
 
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -359,6 +373,12 @@ function makeEmptyListing(): ListingEditorState {
     preset: "safari-dossier",
     theme: DEFAULT_THEME,
     overview: "",
+
+    roomConfigsText: DEFAULT_ROOM_CONFIGS.join("\n"),
+    roomImages: [],
+    activitiesText: "",
+    experienceText: "",
+
     snapshot: {
       rooms: "",
       location: "",
@@ -549,6 +569,11 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
     getString(data.locationLabel) ||
     getString(data.location);
 
+  const roomImages =
+    getStringArray(data.roomImages).length > 0
+      ? getStringArray(data.roomImages)
+      : gallery.slice(0, 4).map((group) => group.images[0]).filter(Boolean);
+
   return {
     ...base,
     slug: getString(listing.slug),
@@ -582,6 +607,18 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
         : "safari-dossier",
     theme: normalizeTheme(listing.design?.theme),
     overview: getString(data.overview),
+
+    roomConfigsText:
+      linesToText(data.roomConfigs) || DEFAULT_ROOM_CONFIGS.join("\n"),
+    roomImages,
+    activitiesText:
+      getString(data.activitiesText) ||
+      getStringArray(experiences.included).join("\n"),
+    experienceText:
+      getString(data.experienceText) ||
+      getString(data.experienceSummary) ||
+      getString(data.sustainability),
+
     snapshot: {
       rooms: getString(snapshot.rooms) || getNumberString(data.rooms),
       location,
@@ -671,6 +708,11 @@ function toApiPayload(listing: ListingEditorState) {
       : null,
     data: {
       overview: listing.overview.trim() || listing.vibe.trim() || null,
+      roomConfigs: textToLines(listing.roomConfigsText),
+      roomImages: listing.roomImages.filter(Boolean),
+      activitiesText: listing.activitiesText.trim() || null,
+      experienceText: listing.experienceText.trim() || null,
+
       snapshot: {
         rooms: listing.snapshot.rooms.trim() || null,
         location:
@@ -815,6 +857,10 @@ function mergeImportedListing(
       parsed.quickTags && parsed.quickTags.length > 0
         ? parsed.quickTags.join("\n")
         : current.quickTagsText,
+    activitiesText:
+      parsed.experiences?.included && parsed.experiences.included.length > 0
+        ? parsed.experiences.included.join("\n")
+        : current.activitiesText,
     snapshot: {
       ...current.snapshot,
       rooms: parsed.snapshot?.rooms || current.snapshot.rooms,
@@ -996,6 +1042,49 @@ function EditorUploadZone(props: {
   );
 }
 
+function EditablePreviewImage(props: {
+  src?: string;
+  alt: string;
+  onTrigger: () => void;
+  className?: string;
+  borderColor: string;
+  emptyTitle: string;
+  emptySubtitle: string;
+}) {
+  const openPicker = () => props.onTrigger();
+
+  return props.src ? (
+    <button
+      type="button"
+      onClick={openPicker}
+      onDoubleClick={openPicker}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        openPicker();
+      }}
+      className={`relative overflow-hidden rounded-[10px] border text-left ${props.className || ""}`}
+      style={{ borderColor: props.borderColor }}
+      title="Click, double-click, or right-click to replace"
+    >
+      <img
+        src={props.src}
+        alt={props.alt}
+        className="h-full w-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
+        Replace
+      </div>
+    </button>
+  ) : (
+    <EditorUploadZone
+      title={props.emptyTitle}
+      subtitle={props.emptySubtitle}
+      onClick={openPicker}
+      className={props.className}
+    />
+  );
+}
+
 export default function AdminPage() {
   const [listings, setListings] = useState<ListingEditorState[]>([
     makeEmptyListing(),
@@ -1009,7 +1098,12 @@ export default function AdminPage() {
   const importPdfRef = useRef<HTMLInputElement | null>(null);
   const logoFileRef = useRef<HTMLInputElement | null>(null);
   const coverFileRef = useRef<HTMLInputElement | null>(null);
-  const galleryFileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const roomGalleryAppendRef = useRef<HTMLInputElement | null>(null);
+  const roomImageReplaceRef = useRef<HTMLInputElement | null>(null);
+
+  const [pendingRoomReplaceIndex, setPendingRoomReplaceIndex] = useState<
+    number | null
+  >(null);
 
   const selected = listings[selectedIndex] || listings[0];
 
@@ -1063,6 +1157,34 @@ export default function AdminPage() {
   const profileSlug = useMemo(() => {
     return selected.slug.trim() || slugify(selected.name);
   }, [selected.slug, selected.name]);
+
+  const roomConfigLines = useMemo(() => {
+    const lines = textToLines(selected.roomConfigsText);
+    return lines.length > 0 ? lines : DEFAULT_ROOM_CONFIGS;
+  }, [selected.roomConfigsText]);
+
+  const previewDownloads = selected.downloads.filter(
+    (item) => item.label || item.url,
+  );
+
+  const previewReservations = selected.contacts.reservations.filter(
+    (item) => item.name || item.role || item.email || item.phone || item.whatsapp,
+  );
+
+  const overviewText =
+    selected.overview.trim() ||
+    selected.vibe.trim() ||
+    "A luxury safari property profile designed for quick trade qualification, elegant presentation, and fast quoting.";
+
+  const experienceText =
+    selected.experienceText.trim() ||
+    selected.sustainability.trim() ||
+    selected.vibe.trim() ||
+    overviewText;
+
+  const promoText =
+    selected.offersText.trim() ||
+    "Book 10+ guests in Green Season, 3rd night 50% off";
 
   function updateListing(patch: Partial<ListingEditorState>) {
     setListings((prev) => {
@@ -1204,10 +1326,11 @@ export default function AdminPage() {
     const form = new FormData();
     form.append("file", file);
 
-   const response = await fetch("/api/admin/upload", {
-  method: "POST",
-  body: form,
-});
+    const response = await fetch("/api/admin/upload", {
+      method: "POST",
+      body: form,
+    });
+
     const { json, text } = await parseResponseSafely<UploadApiResponse>(response);
 
     if (!response.ok) {
@@ -1231,17 +1354,17 @@ export default function AdminPage() {
   ) {
     const file = e.target.files?.[0];
     if (!file) {
-  setUploadState("No file selected");
-  return;
-}
+      setUploadState("No file selected");
+      return;
+    }
 
-if (!file.type || !file.type.startsWith("image/")) {
-  setUploadState(
-    `Selected file is not a valid image: ${file.name} (${file.type || "unknown"})`,
-  );
-  e.target.value = "";
-  return;
-}
+    if (!file.type || !file.type.startsWith("image/")) {
+      setUploadState(
+        `Selected file is not a valid image: ${file.name} (${file.type || "unknown"})`,
+      );
+      e.target.value = "";
+      return;
+    }
 
     try {
       setUploadState("Uploading image...");
@@ -1253,6 +1376,83 @@ if (!file.type || !file.type.startsWith("image/")) {
     } finally {
       e.target.value = "";
     }
+  }
+
+  async function handleRoomImagesAppend(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    try {
+      setUploadState("Uploading room images...");
+      const uploadedUrls: string[] = [];
+
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        const uploaded = await uploadFile(file);
+        uploadedUrls.push(uploaded.url);
+      }
+
+      updateListing({
+        roomImages: [...selected.roomImages, ...uploadedUrls],
+      });
+
+      setUploadState(
+        uploadedUrls.length > 0
+          ? `${uploadedUrls.length} room image(s) uploaded`
+          : "No valid image files selected",
+      );
+    } catch (error) {
+      setUploadState(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function handleRoomImageReplace(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.target.files?.[0];
+    const targetIndex = pendingRoomReplaceIndex;
+
+    if (!file || targetIndex === null) {
+      e.target.value = "";
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setUploadState("Please choose a valid image file");
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadState("Replacing image...");
+      const uploaded = await uploadFile(file);
+
+      const next = [...selected.roomImages];
+      next[targetIndex] = uploaded.url;
+
+      updateListing({ roomImages: next });
+      setUploadState("Image replaced");
+    } catch (error) {
+      setUploadState(error instanceof Error ? error.message : "Replace failed");
+    } finally {
+      setPendingRoomReplaceIndex(null);
+      e.target.value = "";
+    }
+  }
+
+  function openRoomReplacePicker(index: number) {
+    setPendingRoomReplaceIndex(index);
+    roomImageReplaceRef.current?.click();
+  }
+
+  function removeRoomImage(index: number) {
+    updateListing({
+      roomImages: selected.roomImages.filter((_, i) => i !== index),
+    });
   }
 
   async function handleGalleryUpload(
@@ -1433,34 +1633,6 @@ if (!file.type || !file.type.startsWith("image/")) {
   }
 
   const previewTheme = selected.theme;
-  const previewRateRows = selected.rates.rows.filter(
-    (row) => row.season || row.dates || row.rackPPPN,
-  );
-  const previewDownloads = selected.downloads.filter(
-    (item) => item.label || item.url,
-  );
-
-  const previewReservations = selected.contacts.reservations.filter(
-    (item) => item.name || item.role || item.email || item.phone || item.whatsapp,
-  );
-
-  const overviewText =
-    selected.overview.trim() ||
-    selected.vibe.trim() ||
-    "A luxury tented camp profile designed for quick trade qualification, elegant presentation, and fast quoting.";
-
-  const factTabs = [
-    { label: "Rooms", value: selected.snapshot.rooms || "—", sub: selected.class || "Inventory" },
-    { label: "Location", value: selected.location || selected.snapshot.location || "—", sub: "Safari region" },
-    { label: "Best For", value: selected.snapshot.bestFor || "—", sub: "Guest fit" },
-    { label: "Setting", value: selected.snapshot.setting || "—", sub: "Landscape" },
-    { label: "Style", value: selected.snapshot.style || selected.class || "—", sub: "Property style" },
-    { label: "Access", value: selected.snapshot.access || "—", sub: "Arrival" },
-  ];
-
-  const promoText =
-    selected.offersText.trim() ||
-    "Book 10+ guests in Green Season, 3rd night 50% off";
 
   return (
     <div
@@ -1484,6 +1656,23 @@ if (!file.type || !file.type.startsWith("image/")) {
         accept="image/*"
         className="hidden"
         onChange={(e) => handleSingleImageUpload(e, "coverImage")}
+      />
+
+      <input
+        ref={roomGalleryAppendRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleRoomImagesAppend}
+      />
+
+      <input
+        ref={roomImageReplaceRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleRoomImageReplace}
       />
 
       <div className="sticky top-0 z-40 border-b border-white/10 bg-black/70 backdrop-blur">
@@ -1606,6 +1795,11 @@ if (!file.type || !file.type.startsWith("image/")) {
                 <SmallButton onClick={() => coverFileRef.current?.click()}>
                   <Upload size={14} />
                   Upload hero
+                </SmallButton>
+
+                <SmallButton onClick={() => roomGalleryAppendRef.current?.click()}>
+                  <Upload size={14} />
+                  Upload room blast images
                 </SmallButton>
 
                 <SmallButton onClick={() => downloadFileRef.current?.click()}>
@@ -1859,7 +2053,7 @@ if (!file.type || !file.type.startsWith("image/")) {
 
             <Section title="Snapshot">
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <Field label="Rooms">
+                <Field label="Rooms total">
                   <TextInput
                     value={selected.snapshot.rooms}
                     onChange={(e) => updateSnapshot("rooms", e.target.value)}
@@ -1912,7 +2106,100 @@ if (!file.type || !file.type.startsWith("image/")) {
               </Field>
             </Section>
 
-            <Section title="Gallery">
+            <Section title="Rooms">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Room configurations (one per line)">
+                  <TextArea
+                    rows={6}
+                    value={selected.roomConfigsText}
+                    onChange={(e) =>
+                      updateListing({ roomConfigsText: e.target.value })
+                    }
+                  />
+                </Field>
+
+                <Field label="Room blast images">
+                  <div className="flex flex-wrap gap-2">
+                    <SmallButton onClick={() => roomGalleryAppendRef.current?.click()}>
+                      <Upload size={14} />
+                      Upload room images
+                    </SmallButton>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {selected.roomImages.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="overflow-hidden rounded-xl border border-white/10 bg-black/20"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openRoomReplacePicker(index)}
+                          onDoubleClick={() => openRoomReplacePicker(index)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            openRoomReplacePicker(index);
+                          }}
+                          className="block w-full"
+                          title="Click, double-click, or right-click to replace"
+                        >
+                          <img
+                            src={image}
+                            alt={`Room image ${index + 1}`}
+                            className="aspect-[4/3] w-full object-cover"
+                          />
+                        </button>
+
+                        <div className="flex items-center justify-between border-t border-white/10 px-3 py-2">
+                          <span className="text-xs text-white/60">
+                            Room image {index + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeRoomImage(index)}
+                            className="text-xs font-semibold text-red-300"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {selected.roomImages.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/45">
+                        No room blast images yet.
+                      </div>
+                    ) : null}
+                  </div>
+                </Field>
+              </div>
+            </Section>
+
+            <Section title="Activities">
+              <Field label="Activities (one per line)">
+                <TextArea
+                  rows={8}
+                  value={selected.activitiesText}
+                  onChange={(e) =>
+                    updateListing({ activitiesText: e.target.value })
+                  }
+                />
+              </Field>
+            </Section>
+
+            <Section title="Experience">
+              <Field label="Experience summary">
+                <TextArea
+                  rows={8}
+                  value={selected.experienceText}
+                  onChange={(e) =>
+                    updateListing({ experienceText: e.target.value })
+                  }
+                />
+              </Field>
+            </Section>
+
+            <Section title="Gallery (optional extra)">
               <div className="space-y-4">
                 <SmallButton onClick={addGalleryGroup}>
                   <Plus size={14} />
@@ -1972,185 +2259,6 @@ if (!file.type || !file.type.startsWith("image/")) {
                     </div>
                   </div>
                 ))}
-              </div>
-            </Section>
-
-            <Section title="Rates">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Currency">
-                  <TextInput
-                    value={selected.rates.currency}
-                    onChange={(e) =>
-                      updateListing({
-                        rates: { ...selected.rates, currency: e.target.value },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Notes (one per line)">
-                  <TextArea
-                    rows={4}
-                    value={selected.rates.notesText}
-                    onChange={(e) =>
-                      updateListing({
-                        rates: { ...selected.rates, notesText: e.target.value },
-                      })
-                    }
-                  />
-                </Field>
-              </div>
-
-              <div className="space-y-3">
-                <SmallButton onClick={addRateRow}>
-                  <Plus size={14} />
-                  Add rate row
-                </SmallButton>
-
-                {selected.rates.rows.map((row, index) => (
-                  <div
-                    key={row.id}
-                    className="grid gap-3 rounded-xl border border-white/10 bg-black/20 p-3 md:grid-cols-[1fr_1fr_1fr_auto]"
-                  >
-                    <TextInput
-                      value={row.season}
-                      onChange={(e) =>
-                        updateRateRow(index, { season: e.target.value })
-                      }
-                      placeholder="Season"
-                    />
-                    <TextInput
-                      value={row.dates}
-                      onChange={(e) =>
-                        updateRateRow(index, { dates: e.target.value })
-                      }
-                      placeholder="Dates"
-                    />
-                    <TextInput
-                      value={row.rackPPPN}
-                      onChange={(e) =>
-                        updateRateRow(index, { rackPPPN: e.target.value })
-                      }
-                      placeholder="Rack PPPN"
-                    />
-                    <SmallButton onClick={() => removeRateRow(index)}>
-                      <Trash2 size={14} />
-                    </SmallButton>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            <Section title="Experiences">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Included (one per line)">
-                  <TextArea
-                    rows={8}
-                    value={selected.experiences.includedText}
-                    onChange={(e) =>
-                      updateListing({
-                        experiences: {
-                          ...selected.experiences,
-                          includedText: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Paid (one per line)">
-                  <TextArea
-                    rows={8}
-                    value={selected.experiences.paidText}
-                    onChange={(e) =>
-                      updateListing({
-                        experiences: {
-                          ...selected.experiences,
-                          paidText: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
-              </div>
-            </Section>
-
-            <Section title="Policies">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Child policy">
-                  <TextArea
-                    rows={3}
-                    value={selected.policies.childPolicy}
-                    onChange={(e) =>
-                      updateListing({
-                        policies: {
-                          ...selected.policies,
-                          childPolicy: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Honeymoon policy">
-                  <TextArea
-                    rows={3}
-                    value={selected.policies.honeymoonPolicy}
-                    onChange={(e) =>
-                      updateListing({
-                        policies: {
-                          ...selected.policies,
-                          honeymoonPolicy: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Cancellation">
-                  <TextArea
-                    rows={3}
-                    value={selected.policies.cancellation}
-                    onChange={(e) =>
-                      updateListing({
-                        policies: {
-                          ...selected.policies,
-                          cancellation: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Important notes (one per line)">
-                  <TextArea
-                    rows={5}
-                    value={selected.policies.importantNotesText}
-                    onChange={(e) =>
-                      updateListing({
-                        policies: {
-                          ...selected.policies,
-                          importantNotesText: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Trade notes (one per line)">
-                  <TextArea
-                    rows={5}
-                    value={selected.policies.tradeNotesText}
-                    onChange={(e) =>
-                      updateListing({
-                        policies: {
-                          ...selected.policies,
-                          tradeNotesText: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Field>
               </div>
             </Section>
 
@@ -2355,6 +2463,11 @@ if (!file.type || !file.type.startsWith("image/")) {
                   <button
                     type="button"
                     onClick={() => logoFileRef.current?.click()}
+                    onDoubleClick={() => logoFileRef.current?.click()}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      logoFileRef.current?.click();
+                    }}
                     className="h-16 w-44 overflow-hidden rounded-xl"
                     title="Replace logo"
                   >
@@ -2390,6 +2503,11 @@ if (!file.type || !file.type.startsWith("image/")) {
                     <button
                       type="button"
                       onClick={() => coverFileRef.current?.click()}
+                      onDoubleClick={() => coverFileRef.current?.click()}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        coverFileRef.current?.click();
+                      }}
                       className="relative block w-full overflow-hidden text-left"
                       title="Replace hero image"
                     >
@@ -2458,47 +2576,48 @@ if (!file.type || !file.type.startsWith("image/")) {
                 </button>
 
                 <div className="px-4 py-4 md:px-6">
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {selected.gallery.slice(0, 4).map((group, groupIndex) => {
-                      const image = group.images[0];
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-sm font-semibold uppercase tracking-[0.14em]">
+                      Room blast images
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => roomGalleryAppendRef.current?.click()}
+                      className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.42)",
+                      }}
+                    >
+                      Upload
+                    </button>
+                  </div>
 
-                      return (
-                        <React.Fragment key={group.id}>
-                          <input
-                            ref={(node) => {
-                              galleryFileRefs.current[group.id] = node;
-                            }}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={(e) => handleGalleryUpload(e, groupIndex)}
-                          />
-                          {image ? (
-                            <button
-                              type="button"
-                              onClick={() => galleryFileRefs.current[group.id]?.click()}
-                              className="overflow-hidden rounded-[10px] border text-left"
-                              style={{ borderColor: previewTheme.borderColor }}
-                              title="Replace gallery image"
-                            >
-                              <img
-                                src={image}
-                                alt={group.label}
-                                className="aspect-[4/2.25] w-full object-cover"
-                              />
-                            </button>
-                          ) : (
-                            <EditorUploadZone
-                              title={group.label || `Gallery ${groupIndex + 1}`}
-                              subtitle="Upload gallery image"
-                              onClick={() => galleryFileRefs.current[group.id]?.click()}
-                              className="aspect-[4/2.25]"
-                            />
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {selected.roomImages.length > 0 ? (
+                      selected.roomImages.slice(0, 4).map((image, index) => (
+                        <EditablePreviewImage
+                          key={`${image}-${index}`}
+                          src={image}
+                          alt={`Room image ${index + 1}`}
+                          onTrigger={() => openRoomReplacePicker(index)}
+                          className="aspect-[4/2.25]"
+                          borderColor={previewTheme.borderColor}
+                          emptyTitle={`Room image ${index + 1}`}
+                          emptySubtitle="Upload room image"
+                        />
+                      ))
+                    ) : (
+                      Array.from({ length: 4 }).map((_, index) => (
+                        <EditorUploadZone
+                          key={`room-empty-${index}`}
+                          title={`Room image ${index + 1}`}
+                          subtitle="Upload room blast image"
+                          onClick={() => roomGalleryAppendRef.current?.click()}
+                          className="aspect-[4/2.25]"
+                        />
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -2507,7 +2626,39 @@ if (!file.type || !file.type.startsWith("image/")) {
                   style={{ borderColor: previewTheme.borderColor }}
                 >
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
-                    {factTabs.map((fact, index) => (
+                    {[
+                      {
+                        label: "Rooms",
+                        value: selected.snapshot.rooms || "—",
+                        sub: selected.class || "Inventory",
+                      },
+                      {
+                        label: "Location",
+                        value:
+                          selected.location || selected.snapshot.location || "—",
+                        sub: "Safari region",
+                      },
+                      {
+                        label: "Best For",
+                        value: selected.snapshot.bestFor || "—",
+                        sub: "Guest fit",
+                      },
+                      {
+                        label: "Setting",
+                        value: selected.snapshot.setting || "—",
+                        sub: "Landscape",
+                      },
+                      {
+                        label: "Style",
+                        value: selected.snapshot.style || selected.class || "—",
+                        sub: "Property style",
+                      },
+                      {
+                        label: "Access",
+                        value: selected.snapshot.access || "—",
+                        sub: "Arrival",
+                      },
+                    ].map((fact, index) => (
                       <div key={`${fact.label}-${index}`}>
                         <div
                           className="rounded-t-[8px] border border-b-0 px-4 py-2 text-center text-[11px] uppercase tracking-[0.14em]"
@@ -2626,7 +2777,7 @@ if (!file.type || !file.type.startsWith("image/")) {
 
             <div className="px-4 pb-2 pt-2 md:px-8">
               <div className="hidden md:flex md:flex-wrap md:gap-1">
-                {["Overview", "Rates", "Experiences", "Policies", "Downloads"].map(
+                {["Rooms", "Activities", "Experience", "Contact", "Downloads"].map(
                   (tab, index) => (
                     <div
                       key={tab}
@@ -2643,19 +2794,10 @@ if (!file.type || !file.type.startsWith("image/")) {
                     </div>
                   ),
                 )}
-                <div
-                  className="rounded-t-[8px] border px-5 py-3 text-sm font-medium"
-                  style={{
-                    borderColor: previewTheme.borderColor,
-                    backgroundColor: "rgba(255,255,255,0.28)",
-                  }}
-                >
-                  →
-                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 md:hidden">
-                {["Overview", "Rates", "Experiences", "Policies", "Downloads"].map(
+                {["Rooms", "Activities", "Experience", "Contact", "Downloads"].map(
                   (tab, index) => (
                     <div
                       key={tab}
@@ -2678,214 +2820,6 @@ if (!file.type || !file.type.startsWith("image/")) {
             <section className="px-4 pb-8 md:px-8 md:pb-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
                 <div className="space-y-8">
-                  {previewRateRows.length > 0 ? (
-                    <section
-                      className="rounded-[14px] border p-5 md:p-6"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.20)",
-                      }}
-                    >
-                      <div className="flex items-end gap-3">
-                        <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                          PUBLIC RACK RATES
-                        </h3>
-                        <span
-                          className="pb-1 text-lg font-medium tracking-[0.18em] md:text-[22px]"
-                          style={{ color: previewTheme.highlight }}
-                        >
-                          2026
-                        </span>
-                      </div>
-
-                      <div
-                        className="mt-5 overflow-hidden rounded-[10px] border"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.36)",
-                        }}
-                      >
-                        <div
-                          className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] md:grid-cols-[1.2fr_1.5fr_1fr]"
-                          style={{ borderColor: previewTheme.borderColor, opacity: 0.62 }}
-                        >
-                          <span>Season</span>
-                          <span>Dates</span>
-                          <span>Rack PPPN</span>
-                        </div>
-
-                        {previewRateRows.map((row, index) => (
-                          <div
-                            key={row.id}
-                            className="grid grid-cols-3 px-4 py-3 text-sm md:grid-cols-[1.2fr_1.5fr_1fr] md:text-[16px]"
-                            style={{
-                              borderTop:
-                                index === 0
-                                  ? "none"
-                                  : `1px solid ${previewTheme.borderColor}`,
-                            }}
-                          >
-                            <span className="font-medium">{row.season || "—"}</span>
-                            <span>{row.dates || "—"}</span>
-                            <span>{row.rackPPPN || "—"}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {selected.rates.notesText.trim() ? (
-                        <div className="mt-4 text-sm leading-7" style={{ opacity: 0.78 }}>
-                          {textToLines(selected.rates.notesText).join(" • ")}
-                        </div>
-                      ) : null}
-
-                      {textToLines(selected.experiences.paidText).length > 0 ? (
-                        <div
-                          className="mt-4 border-t pt-4"
-                          style={{ borderColor: previewTheme.borderColor }}
-                        >
-                          <div className="text-sm font-semibold">Supplements</div>
-                          <div className="mt-2 text-sm" style={{ opacity: 0.75 }}>
-                            {textToLines(selected.experiences.paidText)
-                              .slice(0, 4)
-                              .join(" • ")}
-                          </div>
-                        </div>
-                      ) : null}
-                    </section>
-                  ) : null}
-
-                  {(selected.experiences.includedText.trim() ||
-                    selected.experiences.paidText.trim()) ? (
-                    <section
-                      className="rounded-[14px] border p-5 md:p-6"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.20)",
-                      }}
-                    >
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                        EXPERIENCES
-                      </h3>
-
-                      <div className="mt-5 grid gap-5 md:grid-cols-2">
-                        <div
-                          className="rounded-[10px] border p-4"
-                          style={{
-                            borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.36)",
-                          }}
-                        >
-                          <div
-                            className="text-[11px] uppercase tracking-[0.18em]"
-                            style={{ opacity: 0.6 }}
-                          >
-                            Included
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {textToLines(selected.experiences.includedText).map((item) => (
-                              <span
-                                key={item}
-                                className="rounded-full border px-3 py-1.5 text-xs"
-                                style={{
-                                  borderColor: previewTheme.borderColor,
-                                  backgroundColor: "rgba(255,255,255,0.46)",
-                                }}
-                              >
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div
-                          className="rounded-[10px] border p-4"
-                          style={{
-                            borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.36)",
-                          }}
-                        >
-                          <div
-                            className="text-[11px] uppercase tracking-[0.18em]"
-                            style={{ opacity: 0.6 }}
-                          >
-                            Paid
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {textToLines(selected.experiences.paidText).map((item) => (
-                              <span
-                                key={item}
-                                className="rounded-full border px-3 py-1.5 text-xs"
-                                style={{
-                                  borderColor: previewTheme.borderColor,
-                                  backgroundColor: "rgba(255,255,255,0.46)",
-                                }}
-                              >
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-                  ) : null}
-
-                  {(selected.policies.childPolicy.trim() ||
-                    selected.policies.honeymoonPolicy.trim() ||
-                    selected.policies.cancellation.trim() ||
-                    selected.policies.importantNotesText.trim() ||
-                    selected.policies.tradeNotesText.trim()) ? (
-                    <section
-                      className="rounded-[14px] border p-5 md:p-6"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.20)",
-                      }}
-                    >
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                        POLICIES
-                      </h3>
-
-                      <div className="mt-5 grid gap-3">
-                        {[
-                          ["Child policy", selected.policies.childPolicy],
-                          ["Honeymoon policy", selected.policies.honeymoonPolicy],
-                          ["Cancellation", selected.policies.cancellation],
-                          ...textToLines(selected.policies.importantNotesText).map((item) => [
-                            "Important note",
-                            item,
-                          ]),
-                          ...textToLines(selected.policies.tradeNotesText).map((item) => [
-                            "Trade note",
-                            item,
-                          ]),
-                        ]
-                          .filter((row) => row[1])
-                          .map(([label, value], index) => (
-                            <div
-                              key={`${label}-${index}`}
-                              className="rounded-[10px] border px-4 py-4"
-                              style={{
-                                borderColor: previewTheme.borderColor,
-                                backgroundColor: "rgba(255,255,255,0.36)",
-                              }}
-                            >
-                              <div
-                                className="text-[11px] uppercase tracking-[0.18em]"
-                                style={{ opacity: 0.6 }}
-                              >
-                                {label}
-                              </div>
-                              <div className="mt-2 whitespace-pre-line text-sm leading-7 md:text-base">
-                                {value}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </section>
-                  ) : null}
-                </div>
-
-                <aside className="space-y-6">
                   <section
                     className="rounded-[14px] border p-5 md:p-6"
                     style={{
@@ -2893,51 +2827,76 @@ if (!file.type || !file.type.startsWith("image/")) {
                       backgroundColor: "rgba(255,255,255,0.20)",
                     }}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                        DOWNLOADS
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => downloadFileRef.current?.click()}
-                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                        }}
-                      >
-                        Upload
-                      </button>
-                    </div>
+                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                      ROOMS
+                    </h3>
 
-                    <div className="mt-5 space-y-3">
-                      {previewDownloads.length > 0 ? (
-                        previewDownloads.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => downloadFileRef.current?.click()}
-                            className="block w-full rounded-[10px] border px-4 py-3 text-left text-sm font-medium"
-                            style={{
-                              borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.36)",
-                              color: previewTheme.accent,
-                            }}
-                          >
-                            {item.label}
-                          </button>
-                        ))
-                      ) : (
-                        <EditorUploadZone
-                          title="Downloads panel"
-                          subtitle="Upload PDFs, brochures, or fact sheets"
-                          onClick={() => downloadFileRef.current?.click()}
-                          className="h-[120px]"
-                        />
-                      )}
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {roomConfigLines.map((item) => (
+                        <span
+                          key={item}
+                          className="rounded-full border px-4 py-2 text-sm font-medium"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.36)",
+                          }}
+                        >
+                          {item}
+                        </span>
+                      ))}
                     </div>
                   </section>
 
+                  {selected.activitiesText.trim() ? (
+                    <section
+                      className="rounded-[14px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.20)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                        ACTIVITIES
+                      </h3>
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        {textToLines(selected.activitiesText).map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-full border px-3 py-1.5 text-xs"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.46)",
+                            }}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  <section
+                    className="rounded-[14px] border p-5 md:p-6"
+                    style={{
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.20)",
+                    }}
+                  >
+                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                      EXPERIENCE
+                    </h3>
+
+                    <div
+                      className="mt-4 whitespace-pre-line text-base leading-8 md:text-[18px]"
+                      style={{ opacity: 0.76 }}
+                    >
+                      {experienceText}
+                    </div>
+                  </section>
+                </div>
+
+                <aside className="space-y-6">
                   <section
                     className="rounded-[14px] border p-5 md:p-6"
                     style={{
@@ -2975,7 +2934,9 @@ if (!file.type || !file.type.startsWith("image/")) {
                               <div className="mt-2 text-sm">{item.phone}</div>
                             ) : null}
                             {item.whatsapp ? (
-                              <div className="mt-2 text-sm underline">WhatsApp</div>
+                              <div className="mt-2 text-sm underline">
+                                {item.whatsapp}
+                              </div>
                             ) : null}
                           </div>
                         ))
@@ -2989,6 +2950,59 @@ if (!file.type || !file.type.startsWith("image/")) {
                         >
                           Add reservations contact details in the editor.
                         </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section
+                    className="rounded-[14px] border p-5 md:p-6"
+                    style={{
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.20)",
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                        DOWNLOADS
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => downloadFileRef.current?.click()}
+                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                        style={{
+                          borderColor: previewTheme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                        }}
+                      >
+                        Upload
+                      </button>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      {previewDownloads.length > 0 ? (
+                        previewDownloads.map((item) => (
+                          <a
+                            key={item.id}
+                            href={item.url || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block w-full rounded-[10px] border px-4 py-3 text-left text-sm font-medium"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.36)",
+                              color: previewTheme.accent,
+                            }}
+                          >
+                            {item.label}
+                          </a>
+                        ))
+                      ) : (
+                        <EditorUploadZone
+                          title="Downloads panel"
+                          subtitle="Upload PDFs, brochures, or fact sheets"
+                          onClick={() => downloadFileRef.current?.click()}
+                          className="h-[120px]"
+                        />
                       )}
                     </div>
                   </section>
