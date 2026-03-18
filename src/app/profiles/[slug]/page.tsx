@@ -1,5 +1,6 @@
-import { headers } from "next/headers";
-import type { ReactNode } from "react";
+"use client";
+
+import React, { ReactNode, useEffect, useMemo, useState } from "react";
 
 type ProfilePageProps = {
   params: {
@@ -35,6 +36,8 @@ type ApiListingRecord = {
   data?: Record<string, unknown> | null;
 };
 
+type ProfileTab = "rooms" | "activities" | "experience" | "contact" | "downloads";
+
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e9e1d8",
   blockBg: "#f7f2eb",
@@ -43,6 +46,33 @@ const DEFAULT_THEME: ThemeState = {
   borderColor: "rgba(117, 93, 62, 0.16)",
   mutedText: "rgba(95, 71, 47, 0.72)",
 };
+
+const DEFAULT_INCLUDED_ACTIVITIES = [
+  "Stargazing",
+  "Spear throwing with Maasai",
+];
+
+const DEFAULT_PAID_ACTIVITIES = [
+  "Resident rate",
+  "All-inclusive supplement",
+  "Sundowner",
+  "Private bush dinner",
+  "Private bush breakfast",
+  "Picnic hamper lunch",
+  "Extra lunch",
+  "Seronera / Kuro airstrip transfer",
+  "Exclusive game drive vehicle",
+  "Tour leader room",
+  "Night game drive (Tarangire)",
+];
+
+const DEFAULT_ROOM_CONFIGS = [
+  "Double",
+  "Twin",
+  "Triple",
+  "Single",
+  "Family",
+];
 
 function getRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -114,32 +144,6 @@ function isValidPropertyProfile(item: ApiListingRecord, slug: string): boolean {
   return listingSlug === requestedSlug;
 }
 
-async function getListingBySlug(slug: string): Promise<ApiListingRecord | null> {
-  const headerStore = headers();
-  const host = headerStore.get("host");
-  const forwardedProto = headerStore.get("x-forwarded-proto");
-  const protocol =
-    forwardedProto || (process.env.NODE_ENV === "development" ? "http" : "https");
-
-  if (!host) return null;
-
-  try {
-    const response = await fetch(`${protocol}://${host}/api/admin/listings`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) return null;
-
-    const json = await response.json();
-    const listings = normalizeResponse(json);
-
-    const match = listings.find((item) => isValidPropertyProfile(item, slug));
-    return match || null;
-  } catch {
-    return null;
-  }
-}
-
 function getData(listing: ApiListingRecord): Record<string, unknown> {
   return getRecord(listing.data);
 }
@@ -149,24 +153,9 @@ function getSnapshot(listing: ApiListingRecord): Record<string, unknown> {
   return getRecord(data.snapshot);
 }
 
-function getRates(listing: ApiListingRecord): Record<string, unknown> {
-  const data = getData(listing);
-  return getRecord(data.rates);
-}
-
 function getExperiences(listing: ApiListingRecord): Record<string, unknown> {
   const data = getData(listing);
   return getRecord(data.experiences);
-}
-
-function getPolicies(listing: ApiListingRecord): Record<string, unknown> {
-  const data = getData(listing);
-  return getRecord(data.policies);
-}
-
-function getContacts(listing: ApiListingRecord): Record<string, unknown> {
-  const data = getData(listing);
-  return getRecord(data.contacts);
 }
 
 function getLocation(listing: ApiListingRecord): string {
@@ -184,12 +173,22 @@ function getLocation(listing: ApiListingRecord): string {
 
 function getClassLabel(listing: ApiListingRecord): string {
   const data = getData(listing);
-  return listing.class || getString(data.class) || getString(getSnapshot(listing).style) || "Property";
+  return (
+    listing.class ||
+    getString(data.class) ||
+    getString(getSnapshot(listing).style) ||
+    "Property"
+  );
 }
 
 function getOverview(listing: ApiListingRecord): string {
   const data = getData(listing);
-  return getString(data.overview) || getString(data.description) || "";
+  return (
+    getString(data.overview) ||
+    getString(data.description) ||
+    getString(data.experienceText) ||
+    ""
+  );
 }
 
 function getVibe(listing: ApiListingRecord): string {
@@ -249,16 +248,24 @@ function getQuickTags(listing: ApiListingRecord): string[] {
   ).slice(0, 6);
 }
 
-function getGalleryImages(
-  listing: ApiListingRecord,
-): Array<{ src: string; label: string }> {
+function getRoomConfigs(listing: ApiListingRecord): string[] {
   const data = getData(listing);
-  const directImages = getStringArray(data.images);
+  const configs = getStringArray(data.roomConfigs);
+  if (configs.length > 0) return configs;
 
-  const directResults = directImages.map((src, index) => ({
-    src,
-    label: `Gallery ${index + 1}`,
-  }));
+  return DEFAULT_ROOM_CONFIGS;
+}
+
+function getRoomBlastImages(listing: ApiListingRecord): Array<{ src: string; label: string }> {
+  const data = getData(listing);
+  const roomImages = getStringArray(data.roomImages);
+
+  if (roomImages.length > 0) {
+    return roomImages.map((src, index) => ({
+      src,
+      label: `Room image ${index + 1}`,
+    }));
+  }
 
   const gallery = data.gallery;
   if (Array.isArray(gallery)) {
@@ -283,49 +290,15 @@ function getGalleryImages(
     }
 
     if (images.length > 0) {
-      return Array.from(
-        new Map(images.map((item) => [item.src, item])).values(),
-      );
+      return Array.from(new Map(images.map((item) => [item.src, item])).values()).slice(0, 4);
     }
   }
 
-  const roomPhotos = getRecord(data.roomPhotos);
-  const roomTypeLabels = getRecord(data.roomTypeLabels);
-
-  const groups = [
-    {
-      label: getString(roomTypeLabels.family) || "Family setup",
-      items: roomPhotos.family,
-    },
-    {
-      label: getString(roomTypeLabels.double) || "Double setup",
-      items: roomPhotos.double,
-    },
-    {
-      label: getString(roomTypeLabels.single) || "Single setup",
-      items: roomPhotos.single,
-    },
-  ];
-
-  const roomResults: Array<{ src: string; label: string }> = [];
-
-  for (const group of groups) {
-    if (!Array.isArray(group.items)) continue;
-
-    group.items.forEach((item, index) => {
-      const src = getString(item);
-      if (src) {
-        roomResults.push({
-          src,
-          label: `${group.label} ${index + 1}`,
-        });
-      }
-    });
-  }
-
-  return Array.from(
-    new Map([...directResults, ...roomResults].map((item) => [item.src, item])).values(),
-  );
+  const directImages = getStringArray(data.images).slice(0, 4);
+  return directImages.map((src, index) => ({
+    src,
+    label: `Gallery ${index + 1}`,
+  }));
 }
 
 function getHeroImage(listing: ApiListingRecord): string {
@@ -337,8 +310,11 @@ function getHeroImage(listing: ApiListingRecord): string {
   const hero = getString(data.heroImage);
   if (hero) return hero;
 
-  const images = getGalleryImages(listing);
-  if (images.length > 0) return images[0].src;
+  const roomImages = getRoomBlastImages(listing);
+  if (roomImages.length > 0) return roomImages[0].src;
+
+  const directImages = getStringArray(data.images);
+  if (directImages.length > 0) return directImages[0];
 
   return "";
 }
@@ -359,51 +335,16 @@ function getQuickSnapshot(listing: ApiListingRecord) {
   };
 }
 
-function getRateRows(
-  listing: ApiListingRecord,
-): Array<{
-  season: string;
-  dates: string;
-  rackPPPN: string;
-}> {
-  const rates = getRates(listing);
-  const rows = rates.rows;
-
-  if (!Array.isArray(rows)) return [];
-
-  return rows
-    .map((item) => {
-      const row = getRecord(item);
-      return {
-        season: getString(row.season),
-        dates: getString(row.dates),
-        rackPPPN:
-          getString(row.rackPPPN) ||
-          getString(row.rackRate) ||
-          getString(row.rack) ||
-          getString(row.rate) ||
-          getString(row.price),
-      };
-    })
-    .filter((row) => row.season || row.dates || row.rackPPPN);
-}
-
-function getRateNotes(listing: ApiListingRecord): string[] {
-  const rates = getRates(listing);
-  const notes = getStringArray(rates.notes);
-
-  if (notes.length > 0) return notes;
-
-  return ["Rates per person sharing", "Full board", "Park fees excluded"];
-}
-
 function getIncludedExperiences(listing: ApiListingRecord): string[] {
   const experiences = getExperiences(listing);
   const included = getStringArray(experiences.included);
   if (included.length > 0) return included;
 
   const data = getData(listing);
-  return getStringArray(data.freeActivities);
+  const freeActivities = getStringArray(data.freeActivities);
+  if (freeActivities.length > 0) return freeActivities;
+
+  return DEFAULT_INCLUDED_ACTIVITIES;
 }
 
 function getPaidExperiences(listing: ApiListingRecord): string[] {
@@ -412,44 +353,15 @@ function getPaidExperiences(listing: ApiListingRecord): string[] {
   if (paid.length > 0) return paid;
 
   const data = getData(listing);
-  return getStringArray(data.paidActivities);
+  const paidActivities = getStringArray(data.paidActivities);
+  if (paidActivities.length > 0) return paidActivities;
+
+  return DEFAULT_PAID_ACTIVITIES;
 }
 
-function getPolicyRows(listing: ApiListingRecord): Array<{ label: string; value: string }> {
-  const policies = getPolicies(listing);
+function getActivitiesSummary(listing: ApiListingRecord): string {
   const data = getData(listing);
-
-  const rows: Array<{ label: string; value: string }> = [];
-
-  const childPolicy = getString(policies.childPolicy);
-  const honeymoonPolicy = getString(policies.honeymoonPolicy);
-  const cancellation = getString(policies.cancellation);
-  const importantNotes = getStringArray(policies.importantNotes);
-  const tradeNotes = getStringArray(policies.tradeNotes);
-  const legacyTerms = getString(data.terms);
-  const rawPolicies = getStringArray(data.policies);
-
-  if (childPolicy) rows.push({ label: "Child policy", value: childPolicy });
-  if (honeymoonPolicy) rows.push({ label: "Honeymoon policy", value: honeymoonPolicy });
-  if (cancellation) rows.push({ label: "Cancellation", value: cancellation });
-
-  importantNotes.forEach((item) => {
-    rows.push({ label: "Important note", value: item });
-  });
-
-  tradeNotes.forEach((item) => {
-    rows.push({ label: "Trade note", value: item });
-  });
-
-  rawPolicies.forEach((item) => {
-    rows.push({ label: "Policy", value: item });
-  });
-
-  if (legacyTerms && rows.length === 0) {
-    rows.push({ label: "Terms", value: legacyTerms });
-  }
-
-  return rows;
+  return getString(data.activitiesText);
 }
 
 function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: string }> {
@@ -461,7 +373,8 @@ function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: st
   if (Array.isArray(source)) {
     source.forEach((item, index) => {
       const row = getRecord(item);
-      const label = getString(row.label || row.title || row.name) || `Download ${index + 1}`;
+      const label =
+        getString(row.label || row.title || row.name) || `Download ${index + 1}`;
       const url = getString(row.url);
 
       if (url) {
@@ -471,7 +384,8 @@ function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: st
   }
 
   const uploadedPdfUrl = getString(data.pdfUrl) || getString(data.sourcePdfUrl);
-  const uploadedPdfName = getString(data.pdfName) || getString(data.sourcePdfName) || "Property PDF";
+  const uploadedPdfName =
+    getString(data.pdfName) || getString(data.sourcePdfName) || "Property PDF";
 
   if (uploadedPdfUrl) {
     results.push({ label: uploadedPdfName, url: uploadedPdfUrl });
@@ -490,7 +404,8 @@ function getContactGroups(listing: ApiListingRecord): Array<{
     whatsapp: string;
   }>;
 }> {
-  const contacts = getContacts(listing);
+  const data = getData(listing);
+  const contacts = getRecord(data.contacts);
 
   const normalizeList = (value: unknown) => {
     if (!Array.isArray(value)) return [];
@@ -524,8 +439,6 @@ function getContactGroups(listing: ApiListingRecord): Array<{
   ].filter((group) => group.items.length > 0);
 
   if (groups.length > 0) return groups;
-
-  const data = getData(listing);
 
   const directEmail =
     getString(data.contactEmail) ||
@@ -600,11 +513,6 @@ function getTripadvisorData(listing: ApiListingRecord) {
   };
 }
 
-function getSupplementTags(listing: ApiListingRecord): string[] {
-  const paid = getPaidExperiences(listing);
-  return paid.slice(0, 4);
-}
-
 function getOverviewCopy(listing: ApiListingRecord): string {
   const overview = getOverview(listing);
   if (overview) return overview;
@@ -615,6 +523,17 @@ function getOverviewCopy(listing: ApiListingRecord): string {
   return "A trade-facing safari dossier built for quick qualification, faster quoting, and elegant client-ready sharing.";
 }
 
+function getExperienceCopy(listing: ApiListingRecord): string {
+  const data = getData(listing);
+
+  return (
+    getString(data.experienceText) ||
+    getString(data.experienceSummary) ||
+    getString(data.sustainability) ||
+    getOverviewCopy(listing)
+  );
+}
+
 function getBestFacts(listing: ApiListingRecord) {
   const snapshot = getQuickSnapshot(listing);
   const location = getLocation(listing);
@@ -622,7 +541,7 @@ function getBestFacts(listing: ApiListingRecord) {
 
   return [
     {
-      label: "Rooms",
+      label: "Capacity",
       value: snapshot.rooms || "—",
       sub: snapshot.rooms ? classLabel : "Inventory pending",
     },
@@ -633,7 +552,7 @@ function getBestFacts(listing: ApiListingRecord) {
     },
     {
       label: "Best For",
-      value: snapshot.bestFor || "—",
+      value: snapshot.bestFor || "All year round",
       sub: "Ideal fit",
     },
     {
@@ -643,12 +562,12 @@ function getBestFacts(listing: ApiListingRecord) {
     },
     {
       label: "Style",
-      value: snapshot.style || classLabel,
+      value: snapshot.style || classLabel || "Luxury",
       sub: "Property style",
     },
     {
       label: "Access",
-      value: snapshot.access || "—",
+      value: snapshot.access || "25 mins from Kuro airstrip",
       sub: "Arrival",
     },
   ];
@@ -658,9 +577,77 @@ function formatWhatsappLink(value: string): string {
   return `https://wa.me/${value.replace(/[^\d]/g, "")}`;
 }
 
-export default async function ProfilePage({ params }: ProfilePageProps) {
+export default function ProfilePage({ params }: ProfilePageProps) {
   const slug = params.slug;
-  const listing = await getListingBySlug(slug);
+  const [listing, setListing] = useState<ApiListingRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<ProfileTab>("rooms");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const response = await fetch("/api/admin/listings", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (mounted) {
+            setListing(null);
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const json = await response.json();
+        const listings = normalizeResponse(json);
+        const match = listings.find((item) => isValidPropertyProfile(item, slug)) || null;
+
+        if (mounted) {
+          setListing(match);
+          setIsLoading(false);
+        }
+      } catch {
+        if (mounted) {
+          setListing(null);
+          setIsLoading(false);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, [slug]);
+
+  const theme = useMemo(() => (listing ? getTheme(listing) : DEFAULT_THEME), [listing]);
+
+  if (isLoading) {
+    return (
+      <main
+        className="min-h-screen"
+        style={{ backgroundColor: DEFAULT_THEME.pageBg, color: DEFAULT_THEME.accent }}
+      >
+        <div className="mx-auto max-w-[1280px] px-4 py-12 md:px-6">
+          <div
+            className="rounded-[28px] border p-10"
+            style={{
+              borderColor: DEFAULT_THEME.borderColor,
+              backgroundColor: DEFAULT_THEME.blockBg,
+            }}
+          >
+            <div className="text-sm uppercase tracking-[0.22em]" style={{ color: DEFAULT_THEME.mutedText }}>
+              SafariTrade
+            </div>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight">Loading profile…</h1>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (!listing) {
     return (
@@ -696,19 +683,17 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     );
   }
 
-  const theme = getTheme(listing);
   const location = getLocation(listing);
   const propertyClass = getClassLabel(listing);
   const overviewCopy = getOverviewCopy(listing);
+  const experienceCopy = getExperienceCopy(listing);
   const website = getWebsite(listing);
   const logoImage = getLogoImage(listing);
   const heroImage = getHeroImage(listing);
-  const galleryImages = getGalleryImages(listing);
-  const rateRows = getRateRows(listing);
-  const rateNotes = getRateNotes(listing);
+  const roomImages = getRoomBlastImages(listing);
   const includedExperiences = getIncludedExperiences(listing);
   const paidExperiences = getPaidExperiences(listing);
-  const policyRows = getPolicyRows(listing);
+  const activitiesSummary = getActivitiesSummary(listing);
   const downloads = getDownloads(listing);
   const contactGroups = getContactGroups(listing);
   const tradeActions = getTradeActions(listing);
@@ -717,10 +702,8 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const label = getTradeProfileLabel(listing);
   const subLabel = getTradeProfileSub(listing);
   const bestFacts = getBestFacts(listing);
-  const supplements = getSupplementTags(listing);
+  const roomConfigs = getRoomConfigs(listing);
   const statusLabel = getString(listing.status).toLowerCase();
-
-  const heroGallery = galleryImages.length > 0 ? galleryImages.slice(0, 4) : [];
 
   return (
     <main
@@ -735,7 +718,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             backgroundColor: theme.blockBg,
           }}
         >
-          <section className="border-b px-5 py-6 md:px-10 md:py-8" style={{ borderColor: theme.borderColor }}>
+          <section
+            className="border-b px-5 py-6 md:px-10 md:py-8"
+            style={{ borderColor: theme.borderColor }}
+          >
             <div className="flex flex-col items-center justify-center text-center">
               {logoImage ? (
                 <div className="mb-4 h-16 w-28 overflow-hidden rounded-xl">
@@ -796,16 +782,19 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           </section>
 
           <section className="px-4 pb-5 pt-4 md:px-8 md:pb-6 md:pt-6">
-            <div className="overflow-hidden rounded-[24px] border" style={{ borderColor: theme.borderColor }}>
+            <div
+              className="overflow-hidden rounded-[24px] border"
+              style={{ borderColor: theme.borderColor }}
+            >
               <div className="relative">
                 {heroImage ? (
                   <img
                     src={heroImage}
                     alt={`${listing.name} hero`}
-                    className="aspect-[16/7.6] w-full object-cover"
+                    className="aspect-[16/7.2] w-full object-cover"
                   />
                 ) : (
-                  <div className="aspect-[16/7.6] w-full bg-[linear-gradient(135deg,#d8c2a0,#9b7d54)]" />
+                  <div className="aspect-[16/7.2] w-full bg-[linear-gradient(135deg,#d8c2a0,#9b7d54)]" />
                 )}
 
                 <div className="absolute inset-0 bg-gradient-to-t from-[rgba(60,41,22,0.52)] via-[rgba(60,41,22,0.08)] to-transparent" />
@@ -822,7 +811,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
                     {tripadvisor.rating !== null ? (
                       <div className="mt-4 flex items-center justify-center gap-3 text-xs font-medium uppercase tracking-[0.20em] md:text-base">
-                        <span>{"★".repeat(Math.max(1, Math.min(5, Math.round(tripadvisor.rating))))}</span>
+                        <span>
+                          {"★".repeat(
+                            Math.max(1, Math.min(5, Math.round(tripadvisor.rating))),
+                          )}
+                        </span>
                         <span>Top trade-rated safari profile</span>
                       </div>
                     ) : null}
@@ -830,23 +823,37 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 </div>
               </div>
 
-              {downloads.length > 0 ? (
-                <div
-                  className="border-t px-5 py-3 text-center text-sm md:px-8 md:text-2xl"
-                  style={{
-                    borderColor: theme.borderColor,
-                    backgroundColor: `${theme.highlight}26`,
-                    color: theme.accent,
-                  }}
-                >
-                  {downloads[0].label}
+              <div
+                className="border-t px-4 py-4 md:px-6"
+                style={{ borderColor: theme.borderColor }}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div
+                    className="text-sm font-semibold uppercase tracking-[0.14em]"
+                    style={{ color: theme.accent }}
+                  >
+                    Camp preview
+                  </div>
+                  {downloads.length > 0 ? (
+                    <a
+                      href={downloads[0].url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.42)",
+                        color: theme.accent,
+                      }}
+                    >
+                      Download Fact Sheet
+                    </a>
+                  ) : null}
                 </div>
-              ) : null}
 
-              {heroGallery.length > 0 ? (
-                <div className="px-4 py-4 md:px-6">
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {heroGallery.map((image) => (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {roomImages.length > 0 ? (
+                    roomImages.slice(0, 4).map((image) => (
                       <div
                         key={`${image.src}-${image.label}`}
                         className="overflow-hidden rounded-[12px] border"
@@ -858,30 +865,54 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                           className="aspect-[4/2.3] w-full object-cover"
                         />
                       </div>
-                    ))}
-                  </div>
+                    ))
+                  ) : (
+                    Array.from({ length: 4 }).map((_, index) => (
+                      <div
+                        key={`empty-room-${index}`}
+                        className="rounded-[12px] border"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.36)",
+                        }}
+                      >
+                        <div className="aspect-[4/2.3] w-full" />
+                      </div>
+                    ))
+                  )}
                 </div>
-              ) : null}
+              </div>
 
-              <div className="border-t px-4 py-4 md:px-6" style={{ borderColor: theme.borderColor }}>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+              <div
+                className="border-t px-4 py-4 md:px-6"
+                style={{ borderColor: theme.borderColor }}
+              >
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
                   {bestFacts.map((fact, index) => (
-                    <div
-                      key={`${fact.label}-${index}`}
-                      className="rounded-[12px] border px-4 py-3"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.42)",
-                      }}
-                    >
-                      <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: theme.mutedText }}>
+                    <div key={`${fact.label}-${index}`} className="flex h-full flex-col">
+                      <div
+                        className="rounded-t-[10px] border border-b-0 px-4 py-2 text-center text-[11px] uppercase tracking-[0.14em]"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.22)",
+                        }}
+                      >
                         {fact.label}
                       </div>
-                      <div className="mt-2 text-lg font-semibold md:text-2xl">
-                        {fact.value}
-                      </div>
-                      <div className="mt-1 text-xs md:text-sm" style={{ color: theme.mutedText }}>
-                        {fact.sub}
+
+                      <div
+                        className="flex min-h-[128px] flex-1 flex-col items-center justify-center rounded-b-[10px] border px-3 py-4 text-center"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.40)",
+                        }}
+                      >
+                        <div className="line-clamp-3 text-[22px] font-semibold leading-tight md:text-[28px]">
+                          {fact.value}
+                        </div>
+                        <div className="mt-2 text-sm" style={{ color: theme.mutedText }}>
+                          {fact.sub}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -892,9 +923,15 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
           <section className="px-4 pb-4 md:px-8">
             <div className="grid gap-5 lg:grid-cols-[1.15fr_430px]">
-              <div className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7" style={{ borderColor: theme.borderColor }}>
+              <div
+                className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7"
+                style={{ borderColor: theme.borderColor }}
+              >
                 <h3 className="text-3xl font-semibold md:text-5xl">{listing.name}</h3>
-                <p className="mt-4 max-w-3xl text-base leading-8 md:text-xl" style={{ color: theme.mutedText }}>
+                <p
+                  className="mt-4 max-w-3xl text-base leading-8 md:text-xl"
+                  style={{ color: theme.mutedText }}
+                >
                   {overviewCopy}
                 </p>
 
@@ -917,10 +954,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {downloads.length > 0 ? (
                     <PrimaryAction href={downloads[0].url} theme={theme}>
-                      Request Trade Pack
+                      Fact Sheet
                     </PrimaryAction>
                   ) : (
-                    <PrimaryButton theme={theme}>Request Trade Pack</PrimaryButton>
+                    <PrimaryButton theme={theme}>Fact Sheet</PrimaryButton>
                   )}
 
                   {tradeActions.enquiryEmail ? (
@@ -930,38 +967,38 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       )}`}
                       theme={theme}
                     >
-                      Check Availability
+                      Ask for Details
                     </PrimaryAction>
                   ) : (
-                    <PrimaryButton theme={theme}>Check Availability</PrimaryButton>
+                    <PrimaryButton theme={theme}>Ask for Details</PrimaryButton>
                   )}
 
                   {tradeActions.enquiryEmail ? (
                     <SecondaryAction
                       href={`mailto:${tradeActions.enquiryEmail}?subject=${encodeURIComponent(
-                        tradeActions.enquirySubject,
+                        `STO Request: ${listing.name}`,
                       )}`}
                       theme={theme}
                     >
-                      Request Quote
+                      Ask for STO
                     </SecondaryAction>
                   ) : (
-                    <SecondaryButton theme={theme}>Request Quote</SecondaryButton>
+                    <SecondaryButton theme={theme}>Ask for STO</SecondaryButton>
                   )}
 
-                  {website ? (
-                    <SecondaryAction href={website} theme={theme}>
-                      Visit Website
-                    </SecondaryAction>
-                  ) : tradeActions.enquiryWhatsApp ? (
+                  {tradeActions.enquiryWhatsApp ? (
                     <SecondaryAction
                       href={formatWhatsappLink(tradeActions.enquiryWhatsApp)}
                       theme={theme}
                     >
-                      WhatsApp
+                      Quick Message
+                    </SecondaryAction>
+                  ) : website ? (
+                    <SecondaryAction href={website} theme={theme}>
+                      Visit Website
                     </SecondaryAction>
                   ) : (
-                    <SecondaryButton theme={theme}>Share with Client</SecondaryButton>
+                    <SecondaryButton theme={theme}>Visit Website</SecondaryButton>
                   )}
                 </div>
               </div>
@@ -969,184 +1006,212 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           </section>
 
           <div className="px-4 pb-2 pt-3 md:px-8">
-            <DossierTabs theme={theme} />
+            <DossierTabs
+              theme={theme}
+              activeTab={activeTab}
+              onChange={setActiveTab}
+            />
           </div>
 
           <section className="px-4 pb-8 md:px-8 md:pb-10">
             <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
               <div className="space-y-8">
-                {rateRows.length > 0 ? (
-                  <DossierCard title="PUBLIC RACK RATES" accent="2026" theme={theme}>
-                    <div
-                      className="overflow-hidden rounded-[16px] border"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.42)",
-                      }}
-                    >
-                      <div
-                        className="grid grid-cols-3 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] md:grid-cols-[1.2fr_1.5fr_1fr]"
-                        style={{ borderColor: theme.borderColor, color: theme.mutedText }}
-                      >
-                        <span>Season</span>
-                        <span>Dates</span>
-                        <span>Rack PPPN</span>
-                      </div>
-
-                      {rateRows.map((row, index) => (
-                        <div
-                          key={`${row.season}-${row.dates}-${index}`}
-                          className="grid grid-cols-3 px-4 py-3 text-sm md:grid-cols-[1.2fr_1.5fr_1fr] md:text-lg"
-                          style={{
-                            borderTop:
-                              index === 0 ? "none" : `1px solid ${theme.borderColor}`,
-                          }}
-                        >
-                          <span className="font-medium">{row.season || "—"}</span>
-                          <span>{row.dates || "—"}</span>
-                          <span>{row.rackPPPN || "—"}</span>
-                        </div>
+                {activeTab === "rooms" ? (
+                  <DossierCard title="ROOMS" theme={theme}>
+                    <div className="flex flex-wrap gap-2">
+                      {roomConfigs.map((item) => (
+                        <SoftTag key={item} text={item} theme={theme} />
                       ))}
                     </div>
 
-                    {rateNotes.length > 0 ? (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {rateNotes.map((note) => (
-                          <SoftTag key={note} text={note} theme={theme} />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {supplements.length > 0 ? (
-                      <div className="mt-5 border-t pt-4" style={{ borderColor: theme.borderColor }}>
+                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                      {roomImages.length > 0 ? (
+                        roomImages.slice(0, 4).map((image) => (
+                          <div
+                            key={`${image.src}-${image.label}`}
+                            className="overflow-hidden rounded-[14px] border"
+                            style={{
+                              borderColor: theme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                            }}
+                          >
+                            <img
+                              src={image.src}
+                              alt={image.label}
+                              className="aspect-[4/2.6] w-full object-cover"
+                            />
+                          </div>
+                        ))
+                      ) : (
                         <div
-                          className="text-sm font-semibold uppercase tracking-[0.16em]"
-                          style={{ color: theme.mutedText }}
-                        >
-                          Supplements
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {supplements.map((item) => (
-                            <SoftTag key={item} text={item} theme={theme} />
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </DossierCard>
-                ) : null}
-
-                {(includedExperiences.length > 0 || paidExperiences.length > 0) ? (
-                  <DossierCard title="EXPERIENCES" theme={theme}>
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <ExperienceCard title="Included" items={includedExperiences} theme={theme} />
-                      <ExperienceCard title="Paid" items={paidExperiences} theme={theme} />
-                    </div>
-                  </DossierCard>
-                ) : null}
-
-                {policyRows.length > 0 ? (
-                  <DossierCard title="POLICIES" theme={theme}>
-                    <div className="grid gap-3">
-                      {policyRows.map((row, index) => (
-                        <div
-                          key={`${row.label}-${index}`}
-                          className="rounded-[16px] border px-4 py-4"
+                          className="rounded-[14px] border px-4 py-4 text-sm"
                           style={{
                             borderColor: theme.borderColor,
                             backgroundColor: "rgba(255,255,255,0.42)",
+                            color: theme.mutedText,
                           }}
                         >
-                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: theme.mutedText }}>
-                            {row.label}
-                          </div>
-                          <div className="mt-2 whitespace-pre-line text-sm leading-7 md:text-base">
-                            {row.value}
-                          </div>
+                          Room imagery will appear here.
                         </div>
-                      ))}
+                      )}
+                    </div>
+                  </DossierCard>
+                ) : null}
+
+                {activeTab === "activities" ? (
+                  <DossierCard title="ACTIVITIES" theme={theme}>
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <ExperienceCard
+                        title="Included"
+                        items={includedExperiences}
+                        theme={theme}
+                      />
+                      <ExperienceCard
+                        title="Paid"
+                        items={paidExperiences}
+                        theme={theme}
+                      />
+                    </div>
+
+                    {activitiesSummary ? (
+                      <div
+                        className="mt-5 rounded-[16px] border px-4 py-4 text-sm leading-7 md:text-base"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.accent,
+                        }}
+                      >
+                        {activitiesSummary}
+                      </div>
+                    ) : null}
+                  </DossierCard>
+                ) : null}
+
+                {activeTab === "experience" ? (
+                  <DossierCard title="EXPERIENCE" theme={theme}>
+                    <div
+                      className="whitespace-pre-line text-base leading-8 md:text-[18px]"
+                      style={{ color: theme.mutedText }}
+                    >
+                      {experienceCopy}
                     </div>
                   </DossierCard>
                 ) : null}
               </div>
 
               <aside className="space-y-6">
-                {downloads.length > 0 ? (
-                  <DossierCard title="DOWNLOADS" theme={theme}>
-                    <div className="space-y-3">
-                      {downloads.map((item, index) => (
-                        <a
-                          key={`${item.label}-${index}`}
-                          href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
-                          style={{
-                            borderColor: theme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
-                            color: theme.accent,
-                          }}
-                        >
-                          {item.label}
-                        </a>
-                      ))}
-                    </div>
+                {activeTab === "contact" ? (
+                  <DossierCard title="CONTACT" theme={theme}>
+                    {contactGroups.length > 0 ? (
+                      <div className="space-y-5">
+                        {contactGroups.map((group) => (
+                          <div key={group.title}>
+                            <div
+                              className="text-[11px] uppercase tracking-[0.18em]"
+                              style={{ color: theme.mutedText }}
+                            >
+                              {group.title}
+                            </div>
+
+                            <div className="mt-3 space-y-3">
+                              {group.items.map((item, index) => (
+                                <div
+                                  key={`${group.title}-${index}`}
+                                  className="rounded-[16px] border px-4 py-4"
+                                  style={{
+                                    borderColor: theme.borderColor,
+                                    backgroundColor: "rgba(255,255,255,0.42)",
+                                  }}
+                                >
+                                  {item.name ? (
+                                    <div className="text-base font-semibold md:text-lg">
+                                      {item.name}
+                                    </div>
+                                  ) : null}
+                                  {item.role ? (
+                                    <div
+                                      className="mt-1 text-sm md:text-base"
+                                      style={{ color: theme.mutedText }}
+                                    >
+                                      {item.role}
+                                    </div>
+                                  ) : null}
+                                  {item.email ? (
+                                    <a
+                                      href={`mailto:${item.email}`}
+                                      className="mt-3 block text-sm underline md:text-base"
+                                    >
+                                      {item.email}
+                                    </a>
+                                  ) : null}
+                                  {item.phone ? (
+                                    <div className="mt-2 text-sm md:text-base">{item.phone}</div>
+                                  ) : null}
+                                  {item.whatsapp ? (
+                                    <a
+                                      href={formatWhatsappLink(item.whatsapp)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="mt-2 block text-sm underline md:text-base"
+                                    >
+                                      WhatsApp
+                                    </a>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        className="rounded-[16px] border px-4 py-4 text-sm"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.mutedText,
+                        }}
+                      >
+                        Contact details will appear here.
+                      </div>
+                    )}
                   </DossierCard>
                 ) : null}
 
-                {contactGroups.length > 0 ? (
-                  <DossierCard title="CONTACT" theme={theme}>
-                    <div className="space-y-5">
-                      {contactGroups.map((group) => (
-                        <div key={group.title}>
-                          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: theme.mutedText }}>
-                            {group.title}
-                          </div>
-
-                          <div className="mt-3 space-y-3">
-                            {group.items.map((item, index) => (
-                              <div
-                                key={`${group.title}-${index}`}
-                                className="rounded-[16px] border px-4 py-4"
-                                style={{
-                                  borderColor: theme.borderColor,
-                                  backgroundColor: "rgba(255,255,255,0.42)",
-                                }}
-                              >
-                                {item.name ? (
-                                  <div className="text-base font-semibold md:text-lg">{item.name}</div>
-                                ) : null}
-                                {item.role ? (
-                                  <div className="mt-1 text-sm md:text-base" style={{ color: theme.mutedText }}>
-                                    {item.role}
-                                  </div>
-                                ) : null}
-                                {item.email ? (
-                                  <a
-                                    href={`mailto:${item.email}`}
-                                    className="mt-3 block text-sm underline md:text-base"
-                                  >
-                                    {item.email}
-                                  </a>
-                                ) : null}
-                                {item.phone ? (
-                                  <div className="mt-2 text-sm md:text-base">{item.phone}</div>
-                                ) : null}
-                                {item.whatsapp ? (
-                                  <a
-                                    href={formatWhatsappLink(item.whatsapp)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 block text-sm underline md:text-base"
-                                  >
-                                    WhatsApp
-                                  </a>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                {activeTab === "downloads" ? (
+                  <DossierCard title="DOWNLOADS" theme={theme}>
+                    {downloads.length > 0 ? (
+                      <div className="space-y-3">
+                        {downloads.map((item, index) => (
+                          <a
+                            key={`${item.label}-${index}`}
+                            href={item.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-[16px] border px-4 py-3 text-sm font-medium md:text-base"
+                            style={{
+                              borderColor: theme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                              color: theme.accent,
+                            }}
+                          >
+                            {item.label}
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        className="rounded-[16px] border px-4 py-4 text-sm"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.mutedText,
+                        }}
+                      >
+                        No downloads available yet.
+                      </div>
+                    )}
                   </DossierCard>
                 ) : null}
 
@@ -1206,49 +1271,60 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   );
 }
 
-function DossierTabs(props: { theme: ThemeState }) {
-  const tabs = [
-    "Overview",
-    "Rates",
-    "Experiences",
-    "Policies",
-    "Downloads",
-    "Contact",
+function DossierTabs(props: {
+  theme: ThemeState;
+  activeTab: ProfileTab;
+  onChange: (tab: ProfileTab) => void;
+}) {
+  const tabs: Array<{ key: ProfileTab; label: string }> = [
+    { key: "rooms", label: "Rooms" },
+    { key: "activities", label: "Activities" },
+    { key: "experience", label: "Experience" },
+    { key: "contact", label: "Contact" },
+    { key: "downloads", label: "Downloads" },
   ];
 
   return (
     <>
       <div className="hidden md:flex md:flex-wrap md:gap-2">
-        {tabs.map((tab, index) => (
-          <div
-            key={tab}
-            className="rounded-t-[14px] border px-5 py-3 text-sm font-medium"
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => props.onChange(tab.key)}
+            className="rounded-t-[14px] border px-5 py-3 text-sm font-medium transition"
             style={{
               borderColor: props.theme.borderColor,
               backgroundColor:
-                index === 0 ? `${props.theme.highlight}22` : "rgba(255,255,255,0.36)",
+                props.activeTab === tab.key
+                  ? `${props.theme.highlight}22`
+                  : "rgba(255,255,255,0.36)",
               color: props.theme.accent,
             }}
           >
-            {tab}
-          </div>
+            {tab.label}
+          </button>
         ))}
       </div>
 
       <div className="flex flex-wrap gap-2 md:hidden">
-        {tabs.map((tab, index) => (
-          <div
-            key={tab}
-            className="rounded-full border px-4 py-2 text-xs font-medium"
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => props.onChange(tab.key)}
+            className="rounded-full border px-4 py-2 text-xs font-medium transition"
             style={{
               borderColor: props.theme.borderColor,
               backgroundColor:
-                index === 0 ? `${props.theme.highlight}22` : "rgba(255,255,255,0.36)",
+                props.activeTab === tab.key
+                  ? `${props.theme.highlight}22`
+                  : "rgba(255,255,255,0.36)",
               color: props.theme.accent,
             }}
           >
-            {tab}
-          </div>
+            {tab.label}
+          </button>
         ))}
       </div>
     </>
@@ -1257,7 +1333,6 @@ function DossierTabs(props: { theme: ThemeState }) {
 
 function DossierCard(props: {
   title: string;
-  accent?: string;
   theme: ThemeState;
   children: ReactNode;
 }) {
@@ -1274,14 +1349,6 @@ function DossierCard(props: {
         <h3 className="text-xl font-semibold tracking-[0.08em] md:text-3xl">
           {props.title}
         </h3>
-        {props.accent ? (
-          <span
-            className="pb-1 text-lg font-medium tracking-[0.18em] md:text-2xl"
-            style={{ color: props.theme.highlight }}
-          >
-            {props.accent}
-          </span>
-        ) : null}
       </div>
       <div className="mt-5">{props.children}</div>
     </section>
@@ -1301,12 +1368,17 @@ function ExperienceCard(props: {
         backgroundColor: "rgba(255,255,255,0.42)",
       }}
     >
-      <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: props.theme.mutedText }}>
+      <div
+        className="text-[11px] uppercase tracking-[0.18em]"
+        style={{ color: props.theme.mutedText }}
+      >
         {props.title}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {props.items.length > 0 ? (
-          props.items.map((item) => <SoftTag key={item} text={item} theme={props.theme} />)
+          props.items.map((item) => (
+            <SoftTag key={item} text={item} theme={props.theme} />
+          ))
         ) : (
           <span style={{ color: props.theme.mutedText }}>None listed</span>
         )}
