@@ -1093,6 +1093,9 @@ export default function AdminPage() {
   const [isPreview, setIsPreview] = useState(false);
   const [saveState, setSaveState] = useState("Ready");
   const [uploadState, setUploadState] = useState("Upload ready");
+  const [activePreviewTab, setActivePreviewTab] = useState<
+    "rooms" | "activities" | "experience" | "contact" | "downloads"
+  >("rooms");
 
   const downloadFileRef = useRef<HTMLInputElement | null>(null);
   const importPdfRef = useRef<HTMLInputElement | null>(null);
@@ -1171,6 +1174,26 @@ export default function AdminPage() {
     (item) => item.name || item.role || item.email || item.phone || item.whatsapp,
   );
 
+  const includedActivities = textToLines(selected.experiences.includedText).length
+    ? textToLines(selected.experiences.includedText)
+    : ["Stargazing", "Spear throwing with Maasai"];
+
+  const paidActivities = textToLines(selected.experiences.paidText).length
+    ? textToLines(selected.experiences.paidText)
+    : [
+        "Resident rate",
+        "All-inclusive supplement",
+        "Sundowner",
+        "Private bush dinner",
+        "Private bush breakfast",
+        "Picnic hamper lunch",
+        "Extra lunch",
+        "Seronera / Kuro airstrip transfer",
+        "Exclusive game drive vehicle",
+        "Tour leader room",
+        "Night game drive (Tarangire)",
+      ];
+
   const overviewText =
     selected.overview.trim() ||
     selected.vibe.trim() ||
@@ -1178,13 +1201,44 @@ export default function AdminPage() {
 
   const experienceText =
     selected.experienceText.trim() ||
-    selected.sustainability.trim() ||
-    selected.vibe.trim() ||
-    overviewText;
+    "Hilala Camp is a refined tented safari experience in Tarangire, designed for travellers seeking understated luxury, comfort, and strong wildlife access. The property combines elegant tented accommodation, thoughtful service, and a relaxed bush atmosphere, making it well suited to couples, families, and small groups looking for an authentic East African safari with a polished finish.";
 
   const promoText =
     selected.offersText.trim() ||
     "Book 10+ guests in Green Season, 3rd night 50% off";
+
+  const factTabs = [
+    {
+      label: "Rooms",
+      value: selected.snapshot.rooms || "—",
+      sub: selected.class || "Inventory",
+    },
+    {
+      label: "Location",
+      value: selected.location || selected.snapshot.location || "—",
+      sub: "Safari region",
+    },
+    {
+      label: "Best For",
+      value: selected.snapshot.bestFor || "All year round",
+      sub: "Guest fit",
+    },
+    {
+      label: "Setting",
+      value: selected.snapshot.setting || "—",
+      sub: "Landscape",
+    },
+    {
+      label: "Style",
+      value: selected.snapshot.style || selected.class || "Luxury",
+      sub: "Property style",
+    },
+    {
+      label: "Access",
+      value: selected.snapshot.access || "25 mins from Kuro airstrip",
+      sub: "Arrival",
+    },
+  ];
 
   function updateListing(patch: Partial<ListingEditorState>) {
     setListings((prev) => {
@@ -1220,7 +1274,10 @@ export default function AdminPage() {
 
   function addGalleryGroup() {
     updateListing({
-      gallery: [...selected.gallery, makeGalleryGroup(`Gallery ${selected.gallery.length + 1}`)],
+      gallery: [
+        ...selected.gallery,
+        makeGalleryGroup(`Gallery ${selected.gallery.length + 1}`),
+      ],
     });
   }
 
@@ -1335,9 +1392,7 @@ export default function AdminPage() {
 
     if (!response.ok) {
       throw new Error(
-        json?.error ||
-          text ||
-          `Upload failed with status ${response.status}`,
+        json?.error || text || `Upload failed with status ${response.status}`,
       );
     }
 
@@ -2176,9 +2231,41 @@ export default function AdminPage() {
             </Section>
 
             <Section title="Activities">
-              <Field label="Activities (one per line)">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Included / free (one per line)">
+                  <TextArea
+                    rows={8}
+                    value={selected.experiences.includedText}
+                    onChange={(e) =>
+                      updateListing({
+                        experiences: {
+                          ...selected.experiences,
+                          includedText: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+
+                <Field label="Paid (one per line)">
+                  <TextArea
+                    rows={8}
+                    value={selected.experiences.paidText}
+                    onChange={(e) =>
+                      updateListing({
+                        experiences: {
+                          ...selected.experiences,
+                          paidText: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+
+              <Field label="General activities summary (optional)">
                 <TextArea
-                  rows={8}
+                  rows={6}
                   value={selected.activitiesText}
                   onChange={(e) =>
                     updateListing({ activitiesText: e.target.value })
@@ -2549,7 +2636,10 @@ export default function AdminPage() {
                           {"★".repeat(
                             Math.max(
                               1,
-                              Math.min(5, Math.round(Number(selected.tripadvisorRating) || 0)),
+                              Math.min(
+                                5,
+                                Math.round(Number(selected.tripadvisorRating) || 0),
+                              ),
                             ),
                           )}
                         </span>
@@ -2626,40 +2716,8 @@ export default function AdminPage() {
                   style={{ borderColor: previewTheme.borderColor }}
                 >
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
-                    {[
-                      {
-                        label: "Rooms",
-                        value: selected.snapshot.rooms || "—",
-                        sub: selected.class || "Inventory",
-                      },
-                      {
-                        label: "Location",
-                        value:
-                          selected.location || selected.snapshot.location || "—",
-                        sub: "Safari region",
-                      },
-                      {
-                        label: "Best For",
-                        value: selected.snapshot.bestFor || "—",
-                        sub: "Guest fit",
-                      },
-                      {
-                        label: "Setting",
-                        value: selected.snapshot.setting || "—",
-                        sub: "Landscape",
-                      },
-                      {
-                        label: "Style",
-                        value: selected.snapshot.style || selected.class || "—",
-                        sub: "Property style",
-                      },
-                      {
-                        label: "Access",
-                        value: selected.snapshot.access || "—",
-                        sub: "Arrival",
-                      },
-                    ].map((fact, index) => (
-                      <div key={`${fact.label}-${index}`}>
+                    {factTabs.map((fact, index) => (
+                      <div key={`${fact.label}-${index}`} className="flex h-full flex-col">
                         <div
                           className="rounded-t-[8px] border border-b-0 px-4 py-2 text-center text-[11px] uppercase tracking-[0.14em]"
                           style={{
@@ -2669,14 +2727,15 @@ export default function AdminPage() {
                         >
                           {fact.label}
                         </div>
+
                         <div
-                          className="rounded-b-[8px] border px-4 py-4 text-center"
+                          className="flex min-h-[132px] flex-1 flex-col items-center justify-center rounded-b-[8px] border px-3 py-4 text-center"
                           style={{
                             borderColor: previewTheme.borderColor,
                             backgroundColor: "rgba(255,255,255,0.40)",
                           }}
                         >
-                          <div className="text-[24px] font-semibold leading-none md:text-[30px]">
+                          <div className="line-clamp-3 text-[22px] font-semibold leading-tight md:text-[28px]">
                             {fact.value}
                           </div>
                           <div className="mt-2 text-sm" style={{ opacity: 0.72 }}>
@@ -2777,77 +2836,109 @@ export default function AdminPage() {
 
             <div className="px-4 pb-2 pt-2 md:px-8">
               <div className="hidden md:flex md:flex-wrap md:gap-1">
-                {["Rooms", "Activities", "Experience", "Contact", "Downloads"].map(
-                  (tab, index) => (
-                    <div
-                      key={tab}
-                      className="rounded-t-[8px] border px-5 py-3 text-sm font-medium"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor:
-                          index === 0
-                            ? `${previewTheme.highlight}45`
-                            : "rgba(255,255,255,0.28)",
-                      }}
-                    >
-                      {tab}
-                    </div>
-                  ),
-                )}
+                {[
+                  { key: "rooms", label: "Rooms" },
+                  { key: "activities", label: "Activities" },
+                  { key: "experience", label: "Experience" },
+                  { key: "contact", label: "Contact" },
+                  { key: "downloads", label: "Downloads" },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() =>
+                      setActivePreviewTab(
+                        tab.key as
+                          | "rooms"
+                          | "activities"
+                          | "experience"
+                          | "contact"
+                          | "downloads",
+                      )
+                    }
+                    className="rounded-t-[8px] border px-5 py-3 text-sm font-medium transition"
+                    style={{
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor:
+                        activePreviewTab === tab.key
+                          ? `${previewTheme.highlight}45`
+                          : "rgba(255,255,255,0.28)",
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
               <div className="flex flex-wrap gap-2 md:hidden">
-                {["Rooms", "Activities", "Experience", "Contact", "Downloads"].map(
-                  (tab, index) => (
-                    <div
-                      key={tab}
-                      className="rounded-full border px-4 py-2 text-xs font-medium"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor:
-                          index === 0
-                            ? `${previewTheme.highlight}45`
-                            : "rgba(255,255,255,0.28)",
-                      }}
-                    >
-                      {tab}
-                    </div>
-                  ),
-                )}
+                {[
+                  { key: "rooms", label: "Rooms" },
+                  { key: "activities", label: "Activities" },
+                  { key: "experience", label: "Experience" },
+                  { key: "contact", label: "Contact" },
+                  { key: "downloads", label: "Downloads" },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() =>
+                      setActivePreviewTab(
+                        tab.key as
+                          | "rooms"
+                          | "activities"
+                          | "experience"
+                          | "contact"
+                          | "downloads",
+                      )
+                    }
+                    className="rounded-full border px-4 py-2 text-xs font-medium transition"
+                    style={{
+                      borderColor: previewTheme.borderColor,
+                      backgroundColor:
+                        activePreviewTab === tab.key
+                          ? `${previewTheme.highlight}45`
+                          : "rgba(255,255,255,0.28)",
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
 
             <section className="px-4 pb-8 md:px-8 md:pb-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
                 <div className="space-y-8">
-                  <section
-                    className="rounded-[14px] border p-5 md:p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.20)",
-                    }}
-                  >
-                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                      ROOMS
-                    </h3>
+                  {activePreviewTab === "rooms" ? (
+                    <section
+                      className="rounded-[14px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.20)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                        ROOMS
+                      </h3>
 
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {roomConfigLines.map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full border px-4 py-2 text-sm font-medium"
-                          style={{
-                            borderColor: previewTheme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.36)",
-                          }}
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </section>
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        {roomConfigLines.map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-full border px-4 py-2 text-sm font-medium"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.36)",
+                            }}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
 
-                  {selected.activitiesText.trim() ? (
+                  {activePreviewTab === "activities" ? (
                     <section
                       className="rounded-[14px] border p-5 md:p-6"
                       style={{
@@ -2859,153 +2950,219 @@ export default function AdminPage() {
                         ACTIVITIES
                       </h3>
 
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        {textToLines(selected.activitiesText).map((item) => (
-                          <span
-                            key={item}
-                            className="rounded-full border px-3 py-1.5 text-xs"
-                            style={{
-                              borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.46)",
-                            }}
-                          >
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-
-                  <section
-                    className="rounded-[14px] border p-5 md:p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.20)",
-                    }}
-                  >
-                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                      EXPERIENCE
-                    </h3>
-
-                    <div
-                      className="mt-4 whitespace-pre-line text-base leading-8 md:text-[18px]"
-                      style={{ opacity: 0.76 }}
-                    >
-                      {experienceText}
-                    </div>
-                  </section>
-                </div>
-
-                <aside className="space-y-6">
-                  <section
-                    className="rounded-[14px] border p-5 md:p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.20)",
-                    }}
-                  >
-                    <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                      CONTACT
-                    </h3>
-
-                    <div className="mt-5 space-y-3">
-                      {previewReservations.length > 0 ? (
-                        previewReservations.map((item, index) => (
-                          <div
-                            key={`${item.id}-${index}`}
-                            className="rounded-[10px] border px-4 py-4"
-                            style={{
-                              borderColor: previewTheme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.36)",
-                            }}
-                          >
-                            <div className="text-base font-semibold">
-                              {item.name || "Reservations"}
-                            </div>
-                            {item.role ? (
-                              <div className="mt-1 text-sm" style={{ opacity: 0.72 }}>
-                                {item.role}
-                              </div>
-                            ) : null}
-                            {item.email ? (
-                              <div className="mt-3 text-sm underline">{item.email}</div>
-                            ) : null}
-                            {item.phone ? (
-                              <div className="mt-2 text-sm">{item.phone}</div>
-                            ) : null}
-                            {item.whatsapp ? (
-                              <div className="mt-2 text-sm underline">
-                                {item.whatsapp}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))
-                      ) : (
+                      <div className="mt-6 grid gap-5 md:grid-cols-2">
                         <div
-                          className="rounded-[10px] border px-4 py-4 text-sm"
+                          className="rounded-[10px] border p-4"
                           style={{
                             borderColor: previewTheme.borderColor,
                             backgroundColor: "rgba(255,255,255,0.36)",
                           }}
                         >
-                          Add reservations contact details in the editor.
+                          <div
+                            className="text-[11px] uppercase tracking-[0.18em]"
+                            style={{ opacity: 0.6 }}
+                          >
+                            Included
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {includedActivities.map((item) => (
+                              <span
+                                key={item}
+                                className="rounded-full border px-3 py-1.5 text-xs"
+                                style={{
+                                  borderColor: previewTheme.borderColor,
+                                  backgroundColor: "rgba(255,255,255,0.46)",
+                                }}
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </section>
 
-                  <section
-                    className="rounded-[14px] border p-5 md:p-6"
-                    style={{
-                      borderColor: previewTheme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.20)",
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-3">
+                        <div
+                          className="rounded-[10px] border p-4"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.36)",
+                          }}
+                        >
+                          <div
+                            className="text-[11px] uppercase tracking-[0.18em]"
+                            style={{ opacity: 0.6 }}
+                          >
+                            Paid
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {paidActivities.map((item) => (
+                              <span
+                                key={item}
+                                className="rounded-full border px-3 py-1.5 text-xs"
+                                style={{
+                                  borderColor: previewTheme.borderColor,
+                                  backgroundColor: "rgba(255,255,255,0.46)",
+                                }}
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {selected.activitiesText.trim() ? (
+                        <div
+                          className="mt-5 rounded-[10px] border px-4 py-4 text-sm leading-7"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.30)",
+                            opacity: 0.82,
+                          }}
+                        >
+                          {selected.activitiesText}
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
+
+                  {activePreviewTab === "experience" ? (
+                    <section
+                      className="rounded-[14px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.20)",
+                      }}
+                    >
                       <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                        DOWNLOADS
+                        EXPERIENCE
                       </h3>
-                      <button
-                        type="button"
-                        onClick={() => downloadFileRef.current?.click()}
-                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                        style={{
-                          borderColor: previewTheme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                        }}
-                      >
-                        Upload
-                      </button>
-                    </div>
 
-                    <div className="mt-5 space-y-3">
-                      {previewDownloads.length > 0 ? (
-                        previewDownloads.map((item) => (
-                          <a
-                            key={item.id}
-                            href={item.url || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block w-full rounded-[10px] border px-4 py-3 text-left text-sm font-medium"
+                      <div
+                        className="mt-4 whitespace-pre-line text-base leading-8 md:text-[18px]"
+                        style={{ opacity: 0.76 }}
+                      >
+                        {experienceText}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+
+                <aside className="space-y-6">
+                  {activePreviewTab === "contact" ? (
+                    <section
+                      className="rounded-[14px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.20)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                        CONTACT
+                      </h3>
+
+                      <div className="mt-5 space-y-3">
+                        {previewReservations.length > 0 ? (
+                          previewReservations.map((item, index) => (
+                            <div
+                              key={`${item.id}-${index}`}
+                              className="rounded-[10px] border px-4 py-4"
+                              style={{
+                                borderColor: previewTheme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.36)",
+                              }}
+                            >
+                              <div className="text-base font-semibold">
+                                {item.name || "Reservations"}
+                              </div>
+                              {item.role ? (
+                                <div className="mt-1 text-sm" style={{ opacity: 0.72 }}>
+                                  {item.role}
+                                </div>
+                              ) : null}
+                              {item.email ? (
+                                <div className="mt-3 text-sm underline">{item.email}</div>
+                              ) : null}
+                              {item.phone ? (
+                                <div className="mt-2 text-sm">{item.phone}</div>
+                              ) : null}
+                              {item.whatsapp ? (
+                                <div className="mt-2 text-sm underline">
+                                  {item.whatsapp}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))
+                        ) : (
+                          <div
+                            className="rounded-[10px] border px-4 py-4 text-sm"
                             style={{
                               borderColor: previewTheme.borderColor,
                               backgroundColor: "rgba(255,255,255,0.36)",
-                              color: previewTheme.accent,
                             }}
                           >
-                            {item.label}
-                          </a>
-                        ))
-                      ) : (
-                        <EditorUploadZone
-                          title="Downloads panel"
-                          subtitle="Upload PDFs, brochures, or fact sheets"
+                            Add reservations contact details in the editor.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {activePreviewTab === "downloads" ? (
+                    <section
+                      className="rounded-[14px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.20)",
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                          DOWNLOADS
+                        </h3>
+                        <button
+                          type="button"
                           onClick={() => downloadFileRef.current?.click()}
-                          className="h-[120px]"
-                        />
-                      )}
-                    </div>
-                  </section>
+                          className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                          }}
+                        >
+                          Upload
+                        </button>
+                      </div>
+
+                      <div className="mt-5 space-y-3">
+                        {previewDownloads.length > 0 ? (
+                          previewDownloads.map((item) => (
+                            <a
+                              key={item.id}
+                              href={item.url || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block w-full rounded-[10px] border px-4 py-3 text-left text-sm font-medium"
+                              style={{
+                                borderColor: previewTheme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.36)",
+                                color: previewTheme.accent,
+                              }}
+                            >
+                              {item.label}
+                            </a>
+                          ))
+                        ) : (
+                          <EditorUploadZone
+                            title="Downloads panel"
+                            subtitle="Upload PDFs, brochures, or fact sheets"
+                            onClick={() => downloadFileRef.current?.click()}
+                            className="h-[120px]"
+                          />
+                        )}
+                      </div>
+                    </section>
+                  ) : null}
                 </aside>
               </div>
             </section>
