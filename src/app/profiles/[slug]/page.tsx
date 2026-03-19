@@ -37,19 +37,22 @@ type ApiListingRecord = {
 };
 
 type ProfileTab =
-  | "overview"
   | "rooms"
-  | "experiences"
+  | "activities"
+  | "experience"
   | "contact"
   | "downloads";
 
-type GalleryImage = {
-  src: string;
-  label: string;
+type ContactGroup = {
+  title: string;
+  items: Array<{
+    name: string;
+    role: string;
+    email: string;
+    phone: string;
+    whatsapp: string;
+  }>;
 };
-
-const MAX_ROOM_IMAGES = 20;
-const HERO_PREVIEW_COUNT = 5;
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e9e1d8",
@@ -60,12 +63,12 @@ const DEFAULT_THEME: ThemeState = {
   mutedText: "rgba(95, 71, 47, 0.72)",
 };
 
-const DEFAULT_INCLUDED_EXPERIENCES = [
+const DEFAULT_INCLUDED_ACTIVITIES = [
   "Stargazing",
   "Spear throwing with Maasai",
 ];
 
-const DEFAULT_PAID_EXPERIENCES = [
+const DEFAULT_PAID_ACTIVITIES = [
   "Resident rate",
   "All-inclusive supplement",
   "Sundowner",
@@ -79,7 +82,16 @@ const DEFAULT_PAID_EXPERIENCES = [
   "Night game drive (Tarangire)",
 ];
 
-const DEFAULT_ROOM_CONFIGS = ["Double", "Twin", "Triple", "Single", "Family"];
+const DEFAULT_ROOM_CONFIGS = [
+  "Double",
+  "Twin",
+  "Triple",
+  "Single",
+  "Family",
+];
+
+const MAX_PROPERTY_IMAGES = 20;
+const HERO_STRIP_VISIBLE = 5;
 
 function getRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -109,10 +121,6 @@ function getStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function clampImages<T>(items: T[], max = MAX_ROOM_IMAGES): T[] {
-  return items.slice(0, max);
-}
-
 function normalizeResponse(json: unknown): ApiListingRecord[] {
   if (Array.isArray(json)) {
     return json as ApiListingRecord[];
@@ -129,6 +137,10 @@ function normalizeResponse(json: unknown): ApiListingRecord[] {
   }
 
   return [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 function getTheme(listing: ApiListingRecord): ThemeState {
@@ -197,7 +209,6 @@ function getOverview(listing: ApiListingRecord): string {
   return (
     getString(data.overview) ||
     getString(data.description) ||
-    getString(data.vibe) ||
     ""
   );
 }
@@ -263,69 +274,51 @@ function getRoomConfigs(listing: ApiListingRecord): string[] {
   const data = getData(listing);
   const configs = getStringArray(data.roomConfigs);
   if (configs.length > 0) return configs;
-
   return DEFAULT_ROOM_CONFIGS;
 }
 
-function dedupeGalleryImages(images: GalleryImage[]): GalleryImage[] {
-  return Array.from(new Map(images.map((item) => [item.src, item])).values());
-}
-
-function getRoomBlastImages(listing: ApiListingRecord): GalleryImage[] {
+function getAllPropertyImages(
+  listing: ApiListingRecord,
+): Array<{ src: string; label: string }> {
   const data = getData(listing);
+  const results: Array<{ src: string; label: string }> = [];
 
   const roomImages = getStringArray(data.roomImages);
-  if (roomImages.length > 0) {
-    return clampImages(
-      dedupeGalleryImages(
-        roomImages.map((src, index) => ({
-          src,
-          label: `Property image ${index + 1}`,
-        })),
-      ),
-    );
-  }
-
-  const flatImages = getStringArray(data.images);
-  if (flatImages.length > 0) {
-    return clampImages(
-      dedupeGalleryImages(
-        flatImages.map((src, index) => ({
-          src,
-          label: `Property image ${index + 1}`,
-        })),
-      ),
-    );
-  }
+  roomImages.forEach((src, index) => {
+    results.push({
+      src,
+      label: `Property image ${index + 1}`,
+    });
+  });
 
   const gallery = data.gallery;
   if (Array.isArray(gallery)) {
-    const images: GalleryImage[] = [];
-
-    for (const group of gallery) {
+    gallery.forEach((group, groupIndex) => {
       const groupRecord = getRecord(group);
-      const label = getString(groupRecord.label) || "Gallery";
-      const items = groupRecord.images;
+      const groupLabel = getString(groupRecord.label) || `Gallery ${groupIndex + 1}`;
+      const images = getStringArray(groupRecord.images);
 
-      if (!Array.isArray(items)) continue;
-
-      items.forEach((item, index) => {
-        const src = getString(item);
-        if (src) {
-          images.push({
-            src,
-            label: `${label} ${index + 1}`,
-          });
-        }
+      images.forEach((src, imageIndex) => {
+        results.push({
+          src,
+          label: `${groupLabel} ${imageIndex + 1}`,
+        });
       });
-    }
-
-    if (images.length > 0) {
-      return clampImages(dedupeGalleryImages(images));
-    }
+    });
   }
 
-  return [];
+  const directImages = getStringArray(data.images);
+  directImages.forEach((src, index) => {
+    results.push({
+      src,
+      label: `Property image ${index + 1}`,
+    });
+  });
+
+  return Array.from(new Map(results.map((item) => [item.src, item])).values()).slice(
+    0,
+    MAX_PROPERTY_IMAGES,
+  );
 }
 
 function getHeroImage(listing: ApiListingRecord): string {
@@ -337,8 +330,8 @@ function getHeroImage(listing: ApiListingRecord): string {
   const hero = getString(data.heroImage);
   if (hero) return hero;
 
-  const roomImages = getRoomBlastImages(listing);
-  if (roomImages.length > 0) return roomImages[0].src;
+  const allImages = getAllPropertyImages(listing);
+  if (allImages.length > 0) return allImages[0].src;
 
   return "";
 }
@@ -365,20 +358,10 @@ function getIncludedExperiences(listing: ApiListingRecord): string[] {
   if (included.length > 0) return included;
 
   const data = getData(listing);
-
-  const activitiesText = getString(data.activitiesText);
-  if (activitiesText) {
-    const lines = activitiesText
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean);
-    if (lines.length > 0) return lines;
-  }
-
   const freeActivities = getStringArray(data.freeActivities);
   if (freeActivities.length > 0) return freeActivities;
 
-  return DEFAULT_INCLUDED_EXPERIENCES;
+  return DEFAULT_INCLUDED_ACTIVITIES;
 }
 
 function getPaidExperiences(listing: ApiListingRecord): string[] {
@@ -390,12 +373,15 @@ function getPaidExperiences(listing: ApiListingRecord): string[] {
   const paidActivities = getStringArray(data.paidActivities);
   if (paidActivities.length > 0) return paidActivities;
 
-  return DEFAULT_PAID_EXPERIENCES;
+  return DEFAULT_PAID_ACTIVITIES;
 }
 
-function getDownloads(
-  listing: ApiListingRecord,
-): Array<{ label: string; url: string }> {
+function getActivitiesSummary(listing: ApiListingRecord): string {
+  const data = getData(listing);
+  return getString(data.activitiesText);
+}
+
+function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: string }> {
   const data = getData(listing);
   const source = data.downloads || data.downloadables;
 
@@ -425,16 +411,7 @@ function getDownloads(
   return Array.from(new Map(results.map((item) => [item.url, item])).values());
 }
 
-function getContactGroups(listing: ApiListingRecord): Array<{
-  title: string;
-  items: Array<{
-    name: string;
-    role: string;
-    email: string;
-    phone: string;
-    whatsapp: string;
-  }>;
-}> {
+function getContactGroups(listing: ApiListingRecord): ContactGroup[] {
   const data = getData(listing);
   const contacts = getRecord(data.contacts);
 
@@ -452,11 +429,11 @@ function getContactGroups(listing: ApiListingRecord): Array<{
           whatsapp: getString(row.whatsapp),
         };
       })
-      .filter((item) =>
-        Boolean(
+      .filter((item) => {
+        return Boolean(
           item.name || item.role || item.email || item.phone || item.whatsapp,
-        ),
-      );
+        );
+      });
   };
 
   const reservations = normalizeList(contacts.reservations);
@@ -484,18 +461,13 @@ function getContactGroups(listing: ApiListingRecord): Array<{
     getString(data.reservationsPhone);
 
   const directWhatsapp =
-    getString(data.contactWhatsapp) || getString(data.whatsapp);
+    getString(data.contactWhatsapp) ||
+    getString(data.whatsapp);
 
   const directName = getString(data.contactName);
   const directRole = getString(data.contactTitle) || "Reservations / Sales";
 
-  if (
-    directName ||
-    directRole ||
-    directEmail ||
-    directPhone ||
-    directWhatsapp
-  ) {
+  if (directName || directRole || directEmail || directPhone || directWhatsapp) {
     return [
       {
         title: "Reservations",
@@ -559,6 +531,49 @@ function getOverviewCopy(listing: ApiListingRecord): string {
   return "A trade-facing safari dossier built for quick qualification, faster quoting, and elegant client-ready sharing.";
 }
 
+function getExperienceItems(listing: ApiListingRecord): string[] {
+  const data = getData(listing);
+
+  const explicitExperienceLines = uniqueStrings(
+    getString(data.experienceText)
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+
+  if (explicitExperienceLines.length > 0) {
+    return explicitExperienceLines;
+  }
+
+  const activitiesSummaryLines = uniqueStrings(
+    getString(data.activitiesText)
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+
+  const included = getIncludedExperiences(listing);
+  const paid = getPaidExperiences(listing);
+
+  const merged = uniqueStrings([
+    ...activitiesSummaryLines,
+    ...included,
+    ...paid,
+  ]);
+
+  if (merged.length > 0) {
+    return merged.slice(0, 16);
+  }
+
+  return [
+    "Bush breakfast",
+    "Sundowner",
+    "Private bush dinner",
+    "Night game drive",
+    "Picnic hamper lunch",
+  ];
+}
+
 function getBestFacts(listing: ApiListingRecord) {
   const snapshot = getQuickSnapshot(listing);
   const location = getLocation(listing);
@@ -602,13 +617,27 @@ function formatWhatsappLink(value: string): string {
   return `https://wa.me/${value.replace(/[^\d]/g, "")}`;
 }
 
+function getWrappedVisibleImages<T>(
+  items: T[],
+  startIndex: number,
+  visibleCount: number,
+): T[] {
+  if (items.length === 0) return [];
+  if (items.length <= visibleCount) return items;
+
+  const result: T[] = [];
+  for (let i = 0; i < visibleCount; i += 1) {
+    result.push(items[(startIndex + i) % items.length]);
+  }
+  return result;
+}
+
 export default function ProfilePage({ params }: ProfilePageProps) {
   const slug = params.slug;
   const [listing, setListing] = useState<ApiListingRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
-  const [heroGalleryIndex, setHeroGalleryIndex] = useState(0);
-  const [roomsGalleryIndex, setRoomsGalleryIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<ProfileTab>("rooms");
+  const [heroStripIndex, setHeroStripIndex] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -657,10 +686,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   );
 
   useEffect(() => {
-    setHeroGalleryIndex(0);
-    setRoomsGalleryIndex(0);
-    setActiveTab("overview");
-  }, [slug, listing?.id]);
+    setHeroStripIndex(0);
+  }, [listing?.slug]);
 
   if (isLoading) {
     return (
@@ -734,10 +761,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const website = getWebsite(listing);
   const logoImage = getLogoImage(listing);
   const heroImage = getHeroImage(listing);
-  const allRoomImages = getRoomBlastImages(listing);
-  const heroPreviewImages = allRoomImages.slice(0, HERO_PREVIEW_COUNT);
+  const propertyImages = getAllPropertyImages(listing);
   const includedExperiences = getIncludedExperiences(listing);
   const paidExperiences = getPaidExperiences(listing);
+  const activitiesSummary = getActivitiesSummary(listing);
   const downloads = getDownloads(listing);
   const contactGroups = getContactGroups(listing);
   const tradeActions = getTradeActions(listing);
@@ -747,23 +774,32 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const subLabel = getTradeProfileSub(listing);
   const bestFacts = getBestFacts(listing);
   const roomConfigs = getRoomConfigs(listing);
+  const experienceItems = getExperienceItems(listing);
   const statusLabel = getString(listing.status).toLowerCase();
 
-  const safeHeroIndex =
-    heroPreviewImages.length > 0
-      ? Math.min(heroGalleryIndex, heroPreviewImages.length - 1)
+  const safeHeroStripIndex =
+    propertyImages.length > 0
+      ? Math.min(heroStripIndex, Math.max(propertyImages.length - 1, 0))
       : 0;
 
-  const safeRoomsIndex =
-    allRoomImages.length > 0
-      ? Math.min(roomsGalleryIndex, allRoomImages.length - 1)
-      : 0;
+  const visibleHeroStripImages = getWrappedVisibleImages(
+    propertyImages,
+    safeHeroStripIndex,
+    HERO_STRIP_VISIBLE,
+  );
 
-  const currentHeroPreview =
-    heroPreviewImages.length > 0 ? heroPreviewImages[safeHeroIndex] : null;
+  function moveHeroStrip(direction: "prev" | "next") {
+    if (propertyImages.length <= 1) return;
 
-  const currentRoomsImage =
-    allRoomImages.length > 0 ? allRoomImages[safeRoomsIndex] : null;
+    if (direction === "prev") {
+      setHeroStripIndex((prev) =>
+        prev === 0 ? propertyImages.length - 1 : prev - 1,
+      );
+      return;
+    }
+
+    setHeroStripIndex((prev) => (prev + 1) % propertyImages.length);
+  }
 
   return (
     <main
@@ -887,19 +923,18 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 className="border-t px-4 py-4 md:px-6"
                 style={{ borderColor: theme.borderColor }}
               >
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div
                     className="text-sm font-semibold uppercase tracking-[0.14em]"
                     style={{ color: theme.accent }}
                   >
-                    Property preview
+                    Camp preview
                   </div>
 
-                  {downloads.length > 0 ? (
-                    <a
-                      href={downloads[0].url}
-                      target="_blank"
-                      rel="noreferrer"
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveHeroStrip("prev")}
                       className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
                       style={{
                         borderColor: theme.borderColor,
@@ -907,108 +942,82 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         color: theme.accent,
                       }}
                     >
-                      Download Fact Sheet
-                    </a>
-                  ) : null}
-                </div>
+                      Prev
+                    </button>
 
-                {heroPreviewImages.length > 0 ? (
-                  <div className="space-y-3">
-                    <div
-                      className="overflow-hidden rounded-[14px] border"
+                    <button
+                      type="button"
+                      onClick={() => moveHeroStrip("next")}
+                      className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
                       style={{
                         borderColor: theme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.36)",
+                        backgroundColor: "rgba(255,255,255,0.42)",
+                        color: theme.accent,
                       }}
                     >
-                      <img
-                        src={currentHeroPreview?.src}
-                        alt={currentHeroPreview?.label || "Property preview"}
-                        className="aspect-[16/6] w-full object-cover"
-                      />
-                    </div>
+                      Next
+                    </button>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setHeroGalleryIndex((prev) =>
-                            prev === 0 ? heroPreviewImages.length - 1 : prev - 1,
-                          )
-                        }
-                        className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
+                    {downloads.length > 0 ? (
+                      <a
+                        href={downloads[0].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
                         style={{
                           borderColor: theme.borderColor,
                           backgroundColor: "rgba(255,255,255,0.42)",
                           color: theme.accent,
                         }}
                       >
-                        Prev
-                      </button>
+                        Fact Sheet
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setHeroGalleryIndex((prev) =>
-                            prev === heroPreviewImages.length - 1 ? 0 : prev + 1,
-                          )
-                        }
-                        className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
-                        style={{
-                          borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                          color: theme.accent,
-                        }}
-                      >
-                        Next
-                      </button>
+                {propertyImages.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                    {visibleHeroStripImages.map((image, visibleIndex) => {
+                      const realIndex =
+                        propertyImages.length <= HERO_STRIP_VISIBLE
+                          ? visibleIndex
+                          : (safeHeroStripIndex + visibleIndex) % propertyImages.length;
 
-                      <div
-                        className="ml-auto text-[11px] uppercase tracking-[0.14em]"
-                        style={{ color: theme.mutedText }}
-                      >
-                        {safeHeroIndex + 1} / {heroPreviewImages.length}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-5 gap-3">
-                      {heroPreviewImages.map((image, index) => (
-                        <button
-                          key={`${image.src}-${image.label}`}
-                          type="button"
-                          onClick={() => setHeroGalleryIndex(index)}
-                          className="overflow-hidden rounded-[12px] border"
+                      return (
+                        <div
+                          key={`${image.src}-${realIndex}`}
+                          className="group overflow-hidden rounded-[12px] border"
                           style={{
-                            borderColor:
-                              safeHeroIndex === index
-                                ? theme.highlight
-                                : theme.borderColor,
+                            borderColor: theme.borderColor,
                             backgroundColor: "rgba(255,255,255,0.36)",
-                            boxShadow:
-                              safeHeroIndex === index
-                                ? `0 0 0 1px ${theme.highlight} inset`
-                                : "none",
                           }}
                         >
-                          <img
-                            src={image.src}
-                            alt={image.label}
-                            className="aspect-[4/2.3] w-full object-cover"
-                          />
-                        </button>
-                      ))}
-                    </div>
+                          <div className="overflow-hidden">
+                            <img
+                              src={image.src}
+                              alt={image.label}
+                              className="aspect-[4/2.3] w-full object-cover transition duration-300 group-hover:scale-110"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div
-                    className="rounded-[14px] border px-4 py-4 text-sm"
-                    style={{
-                      borderColor: theme.borderColor,
-                      backgroundColor: "rgba(255,255,255,0.42)",
-                      color: theme.mutedText,
-                    }}
-                  >
-                    Property photos will appear here.
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div
+                        key={`empty-room-${index}`}
+                        className="rounded-[12px] border"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.36)",
+                        }}
+                      >
+                        <div className="aspect-[4/2.3] w-full" />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1037,10 +1046,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                           backgroundColor: "rgba(255,255,255,0.40)",
                         }}
                       >
-                        <div className="line-clamp-2 text-[20px] font-semibold leading-tight md:text-[24px]">
+                        <div className="line-clamp-3 text-[22px] font-semibold leading-tight md:text-[28px]">
                           {fact.value}
                         </div>
-                        <div className="mt-2 text-xs md:text-sm" style={{ color: theme.mutedText }}>
+                        <div className="mt-2 text-sm" style={{ color: theme.mutedText }}>
                           {fact.sub}
                         </div>
                       </div>
@@ -1146,17 +1155,6 @@ export default function ProfilePage({ params }: ProfilePageProps) {
           <section className="px-4 pb-8 md:px-8 md:pb-10">
             <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
               <div className="space-y-8">
-                {activeTab === "overview" ? (
-                  <DossierCard title="OVERVIEW" theme={theme}>
-                    <div
-                      className="whitespace-pre-line text-base leading-8 md:text-[18px]"
-                      style={{ color: theme.mutedText }}
-                    >
-                      {overviewCopy}
-                    </div>
-                  </DossierCard>
-                ) : null}
-
                 {activeTab === "rooms" ? (
                   <DossierCard title="ROOMS" theme={theme}>
                     <div className="flex flex-wrap gap-2">
@@ -1165,110 +1163,44 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       ))}
                     </div>
 
-                    {allRoomImages.length > 0 ? (
-                      <div className="mt-5 space-y-4">
-                        <div
-                          className="overflow-hidden rounded-[16px] border"
-                          style={{
-                            borderColor: theme.borderColor,
-                            backgroundColor: "rgba(255,255,255,0.42)",
-                          }}
-                        >
-                          <img
-                            src={currentRoomsImage?.src}
-                            alt={currentRoomsImage?.label || "Property image"}
-                            className="aspect-[16/8.2] w-full object-cover"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRoomsGalleryIndex((prev) =>
-                                prev === 0 ? allRoomImages.length - 1 : prev - 1,
-                              )
-                            }
-                            className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
-                            style={{
-                              borderColor: theme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.42)",
-                              color: theme.accent,
-                            }}
-                          >
-                            Prev
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRoomsGalleryIndex((prev) =>
-                                prev === allRoomImages.length - 1 ? 0 : prev + 1,
-                              )
-                            }
-                            className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
-                            style={{
-                              borderColor: theme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.42)",
-                              color: theme.accent,
-                            }}
-                          >
-                            Next
-                          </button>
-
+                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                      {propertyImages.length > 0 ? (
+                        propertyImages.map((image, index) => (
                           <div
-                            className="ml-auto text-[11px] uppercase tracking-[0.14em]"
-                            style={{ color: theme.mutedText }}
+                            key={`${image.src}-${index}`}
+                            className="group overflow-hidden rounded-[14px] border"
+                            style={{
+                              borderColor: theme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                            }}
                           >
-                            {safeRoomsIndex + 1} / {allRoomImages.length}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                          {allRoomImages.map((image, index) => (
-                            <button
-                              key={`${image.src}-${image.label}-${index}`}
-                              type="button"
-                              onClick={() => setRoomsGalleryIndex(index)}
-                              className="overflow-hidden rounded-[14px] border"
-                              style={{
-                                borderColor:
-                                  safeRoomsIndex === index
-                                    ? theme.highlight
-                                    : theme.borderColor,
-                                backgroundColor: "rgba(255,255,255,0.42)",
-                                boxShadow:
-                                  safeRoomsIndex === index
-                                    ? `0 0 0 1px ${theme.highlight} inset`
-                                    : "none",
-                              }}
-                            >
+                            <div className="overflow-hidden">
                               <img
                                 src={image.src}
                                 alt={image.label}
-                                className="aspect-[4/2.8] w-full object-cover"
+                                className="aspect-[4/2.8] w-full object-cover transition duration-300 group-hover:scale-110"
                               />
-                            </button>
-                          ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div
+                          className="rounded-[14px] border px-4 py-4 text-sm"
+                          style={{
+                            borderColor: theme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                            color: theme.mutedText,
+                          }}
+                        >
+                          Room imagery will appear here.
                         </div>
-                      </div>
-                    ) : (
-                      <div
-                        className="mt-5 rounded-[14px] border px-4 py-4 text-sm"
-                        style={{
-                          borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                          color: theme.mutedText,
-                        }}
-                      >
-                        Property photos will appear here.
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </DossierCard>
                 ) : null}
 
-                {activeTab === "experiences" ? (
-                  <DossierCard title="EXPERIENCES" theme={theme}>
+                {activeTab === "activities" ? (
+                  <DossierCard title="ACTIVITIES" theme={theme}>
                     <div className="grid gap-5 md:grid-cols-2">
                       <ExperienceCard
                         title="Included"
@@ -1280,6 +1212,29 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         items={paidExperiences}
                         theme={theme}
                       />
+                    </div>
+
+                    {activitiesSummary ? (
+                      <div
+                        className="mt-5 rounded-[16px] border px-4 py-4 text-sm leading-7 md:text-base"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.accent,
+                        }}
+                      >
+                        {activitiesSummary}
+                      </div>
+                    ) : null}
+                  </DossierCard>
+                ) : null}
+
+                {activeTab === "experience" ? (
+                  <DossierCard title="EXPERIENCE" theme={theme}>
+                    <div className="flex flex-wrap gap-2">
+                      {experienceItems.map((item) => (
+                        <SoftTag key={item} text={item} theme={theme} />
+                      ))}
                     </div>
                   </DossierCard>
                 ) : null}
@@ -1331,7 +1286,9 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                                     </a>
                                   ) : null}
                                   {item.phone ? (
-                                    <div className="mt-2 text-sm md:text-base">{item.phone}</div>
+                                    <div className="mt-2 text-sm md:text-base">
+                                      {item.phone}
+                                    </div>
                                   ) : null}
                                   {item.whatsapp ? (
                                     <a
@@ -1462,9 +1419,9 @@ function DossierTabs(props: {
   onChange: (tab: ProfileTab) => void;
 }) {
   const tabs: Array<{ key: ProfileTab; label: string }> = [
-    { key: "overview", label: "Overview" },
     { key: "rooms", label: "Rooms" },
-    { key: "experiences", label: "Experiences" },
+    { key: "activities", label: "Activities" },
+    { key: "experience", label: "Experience" },
     { key: "contact", label: "Contact" },
     { key: "downloads", label: "Downloads" },
   ];
@@ -1485,10 +1442,6 @@ function DossierTabs(props: {
                   ? `${props.theme.highlight}22`
                   : "rgba(255,255,255,0.36)",
               color: props.theme.accent,
-              boxShadow:
-                props.activeTab === tab.key
-                  ? `inset 0 -2px 0 ${props.theme.highlight}`
-                  : "none",
             }}
           >
             {tab.label}
