@@ -226,7 +226,8 @@ type PdfImportResponse = {
   error?: string;
 };
 
-const STORAGE_KEY = "safaritrade-admin-v5";
+const STORAGE_KEY = "safaritrade-admin-v6";
+const MAX_ROOM_IMAGES = 20;
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e8e1d8",
@@ -242,6 +243,25 @@ const DEFAULT_ROOM_CONFIGS = [
   "Triple",
   "Single",
   "Family",
+];
+
+const DEFAULT_INCLUDED_ACTIVITIES = [
+  "Stargazing",
+  "Spear throwing with Maasai",
+];
+
+const DEFAULT_PAID_ACTIVITIES = [
+  "Resident rate",
+  "All-inclusive supplement",
+  "Sundowner",
+  "Private bush dinner",
+  "Private bush breakfast",
+  "Picnic hamper lunch",
+  "Extra lunch",
+  "Seronera / Kuro airstrip transfer",
+  "Exclusive game drive vehicle",
+  "Tour leader room",
+  "Night game drive (Tarangire)",
 ];
 
 function uid() {
@@ -293,6 +313,10 @@ function textToLines(value: string): string[] {
 
 function linesToText(value: unknown): string {
   return getStringArray(value).join("\n");
+}
+
+function clampRoomImages(images: string[]): string[] {
+  return images.filter(Boolean).slice(0, MAX_ROOM_IMAGES);
 }
 
 async function parseResponseSafely<T = unknown>(response: Response): Promise<{
@@ -536,6 +560,10 @@ function normalizeDownloads(value: unknown): DownloadItem[] {
     .filter((item) => item.label || item.url);
 }
 
+function dedupeImages(images: string[]) {
+  return Array.from(new Set(images.filter(Boolean)));
+}
+
 function fromApiListing(listing: ApiListingRecord): ListingEditorState {
   const base = makeEmptyListing();
   const data = getRecord(listing.data);
@@ -569,10 +597,19 @@ function fromApiListing(listing: ApiListingRecord): ListingEditorState {
     getString(data.locationLabel) ||
     getString(data.location);
 
-  const roomImages =
-    getStringArray(data.roomImages).length > 0
-      ? getStringArray(data.roomImages)
-      : gallery.slice(0, 4).map((group) => group.images[0]).filter(Boolean);
+  const fallbackGalleryImages = gallery
+    .flatMap((group) => group.images)
+    .filter(Boolean);
+
+  const roomImages = clampRoomImages(
+    dedupeImages(
+      getStringArray(data.roomImages).length > 0
+        ? getStringArray(data.roomImages)
+        : flatImages.length > 0
+          ? flatImages
+          : fallbackGalleryImages,
+    ),
+  );
 
   return {
     ...base,
@@ -709,7 +746,7 @@ function toApiPayload(listing: ListingEditorState) {
     data: {
       overview: listing.overview.trim() || listing.vibe.trim() || null,
       roomConfigs: textToLines(listing.roomConfigsText),
-      roomImages: listing.roomImages.filter(Boolean),
+      roomImages: clampRoomImages(dedupeImages(listing.roomImages)),
       activitiesText: listing.activitiesText.trim() || null,
       experienceText: listing.experienceText.trim() || null,
 
@@ -1002,12 +1039,14 @@ function SmallButton(props: {
   onClick?: () => void;
   children: React.ReactNode;
   type?: "button" | "submit";
+  disabled?: boolean;
 }) {
   return (
     <button
       type={props.type || "button"}
       onClick={props.onClick}
-      className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white"
+      disabled={props.disabled}
+      className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
     >
       {props.children}
     </button>
@@ -1094,8 +1133,10 @@ export default function AdminPage() {
   const [saveState, setSaveState] = useState("Ready");
   const [uploadState, setUploadState] = useState("Upload ready");
   const [activePreviewTab, setActivePreviewTab] = useState<
-    "rooms" | "activities" | "experience" | "contact" | "downloads"
-  >("rooms");
+    "overview" | "rooms" | "experiences" | "contact" | "downloads"
+  >("overview");
+  const [heroSliderIndex, setHeroSliderIndex] = useState(0);
+  const [roomsSliderIndex, setRoomsSliderIndex] = useState(0);
 
   const downloadFileRef = useRef<HTMLInputElement | null>(null);
   const importPdfRef = useRef<HTMLInputElement | null>(null);
@@ -1157,6 +1198,11 @@ export default function AdminPage() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(listings));
   }, [listings]);
 
+  useEffect(() => {
+    setHeroSliderIndex(0);
+    setRoomsSliderIndex(0);
+  }, [selectedIndex, selected.roomImages, selected.gallery]);
+
   const profileSlug = useMemo(() => {
     return selected.slug.trim() || slugify(selected.name);
   }, [selected.slug, selected.name]);
@@ -1176,36 +1222,44 @@ export default function AdminPage() {
 
   const includedActivities = textToLines(selected.experiences.includedText).length
     ? textToLines(selected.experiences.includedText)
-    : ["Stargazing", "Spear throwing with Maasai"];
+    : DEFAULT_INCLUDED_ACTIVITIES;
 
   const paidActivities = textToLines(selected.experiences.paidText).length
     ? textToLines(selected.experiences.paidText)
-    : [
-        "Resident rate",
-        "All-inclusive supplement",
-        "Sundowner",
-        "Private bush dinner",
-        "Private bush breakfast",
-        "Picnic hamper lunch",
-        "Extra lunch",
-        "Seronera / Kuro airstrip transfer",
-        "Exclusive game drive vehicle",
-        "Tour leader room",
-        "Night game drive (Tarangire)",
-      ];
+    : DEFAULT_PAID_ACTIVITIES;
 
   const overviewText =
     selected.overview.trim() ||
     selected.vibe.trim() ||
     "A luxury safari property profile designed for quick trade qualification, elegant presentation, and fast quoting.";
 
-  const experienceText =
+  const campFeelText =
     selected.experienceText.trim() ||
-    "Hilala Camp is a refined tented safari experience in Tarangire, designed for travellers seeking understated luxury, comfort, and strong wildlife access. The property combines elegant tented accommodation, thoughtful service, and a relaxed bush atmosphere, making it well suited to couples, families, and small groups looking for an authentic East African safari with a polished finish.";
+    "Use this area for the feel of the camp, service style, atmosphere, and the kind of stay a travel designer should picture for guests.";
 
   const promoText =
     selected.offersText.trim() ||
     "Book 10+ guests in Green Season, 3rd night 50% off";
+
+  const fallbackPreviewImages = dedupeImages(
+    selected.gallery.flatMap((group) => group.images),
+  );
+
+  const previewRoomImages = clampRoomImages(
+    dedupeImages(
+      selected.roomImages.length > 0 ? selected.roomImages : fallbackPreviewImages,
+    ),
+  );
+
+  const safeHeroSliderIndex =
+    previewRoomImages.length > 0
+      ? Math.min(heroSliderIndex, previewRoomImages.length - 1)
+      : 0;
+
+  const safeRoomsSliderIndex =
+    previewRoomImages.length > 0
+      ? Math.min(roomsSliderIndex, previewRoomImages.length - 1)
+      : 0;
 
   const factTabs = [
     {
@@ -1439,25 +1493,43 @@ export default function AdminPage() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
+    const remainingSlots = Math.max(0, MAX_ROOM_IMAGES - selected.roomImages.length);
+
+    if (remainingSlots <= 0) {
+      setUploadState(`Room gallery limit reached (${MAX_ROOM_IMAGES} images max)`);
+      e.target.value = "";
+      return;
+    }
+
     try {
       setUploadState("Uploading room images...");
       const uploadedUrls: string[] = [];
 
-      for (const file of files) {
+      for (const file of files.slice(0, remainingSlots)) {
         if (!file.type.startsWith("image/")) continue;
         const uploaded = await uploadFile(file);
         uploadedUrls.push(uploaded.url);
       }
 
+      const nextImages = clampRoomImages(
+        dedupeImages([...selected.roomImages, ...uploadedUrls]),
+      );
+
       updateListing({
-        roomImages: [...selected.roomImages, ...uploadedUrls],
+        roomImages: nextImages,
       });
 
-      setUploadState(
-        uploadedUrls.length > 0
-          ? `${uploadedUrls.length} room image(s) uploaded`
-          : "No valid image files selected",
-      );
+      if (files.length > remainingSlots) {
+        setUploadState(
+          `${uploadedUrls.length} uploaded. Limit is ${MAX_ROOM_IMAGES} images.`,
+        );
+      } else {
+        setUploadState(
+          uploadedUrls.length > 0
+            ? `${uploadedUrls.length} room image(s) uploaded`
+            : "No valid image files selected",
+        );
+      }
     } catch (error) {
       setUploadState(error instanceof Error ? error.message : "Upload failed");
     } finally {
@@ -1489,7 +1561,7 @@ export default function AdminPage() {
       const next = [...selected.roomImages];
       next[targetIndex] = uploaded.url;
 
-      updateListing({ roomImages: next });
+      updateListing({ roomImages: clampRoomImages(next) });
       setUploadState("Image replaced");
     } catch (error) {
       setUploadState(error instanceof Error ? error.message : "Replace failed");
@@ -1687,6 +1759,32 @@ export default function AdminPage() {
     }
   }
 
+  function moveHeroSlider(direction: "prev" | "next") {
+    if (previewRoomImages.length === 0) return;
+    setHeroSliderIndex((prev) =>
+      direction === "prev"
+        ? prev === 0
+          ? previewRoomImages.length - 1
+          : prev - 1
+        : prev === previewRoomImages.length - 1
+          ? 0
+          : prev + 1,
+    );
+  }
+
+  function moveRoomsSlider(direction: "prev" | "next") {
+    if (previewRoomImages.length === 0) return;
+    setRoomsSliderIndex((prev) =>
+      direction === "prev"
+        ? prev === 0
+          ? previewRoomImages.length - 1
+          : prev - 1
+        : prev === previewRoomImages.length - 1
+          ? 0
+          : prev + 1,
+    );
+  }
+
   const previewTheme = selected.theme;
 
   return (
@@ -1852,9 +1950,12 @@ export default function AdminPage() {
                   Upload hero
                 </SmallButton>
 
-                <SmallButton onClick={() => roomGalleryAppendRef.current?.click()}>
+                <SmallButton
+                  onClick={() => roomGalleryAppendRef.current?.click()}
+                  disabled={selected.roomImages.length >= MAX_ROOM_IMAGES}
+                >
                   <Upload size={14} />
-                  Upload room blast images
+                  Upload property images
                 </SmallButton>
 
                 <SmallButton onClick={() => downloadFileRef.current?.click()}>
@@ -1882,56 +1983,66 @@ export default function AdminPage() {
               <div className="grid gap-3">
                 <Field label="Page background">
                   <TextInput
+                    type="color"
                     value={selected.theme.pageBg}
                     onChange={(e) =>
                       updateListing({
                         theme: { ...selected.theme, pageBg: e.target.value },
                       })
                     }
+                    className="h-12 cursor-pointer p-2"
                   />
                 </Field>
 
                 <Field label="Block background">
                   <TextInput
+                    type="color"
                     value={selected.theme.blockBg}
                     onChange={(e) =>
                       updateListing({
                         theme: { ...selected.theme, blockBg: e.target.value },
                       })
                     }
+                    className="h-12 cursor-pointer p-2"
                   />
                 </Field>
 
                 <Field label="Accent text">
                   <TextInput
+                    type="color"
                     value={selected.theme.accent}
                     onChange={(e) =>
                       updateListing({
                         theme: { ...selected.theme, accent: e.target.value },
                       })
                     }
+                    className="h-12 cursor-pointer p-2"
                   />
                 </Field>
 
                 <Field label="Highlight">
                   <TextInput
+                    type="color"
                     value={selected.theme.highlight}
                     onChange={(e) =>
                       updateListing({
                         theme: { ...selected.theme, highlight: e.target.value },
                       })
                     }
+                    className="h-12 cursor-pointer p-2"
                   />
                 </Field>
 
                 <Field label="Border color">
                   <TextInput
+                    type="color"
                     value={selected.theme.borderColor}
                     onChange={(e) =>
                       updateListing({
                         theme: { ...selected.theme, borderColor: e.target.value },
                       })
                     }
+                    className="h-12 cursor-pointer p-2"
                   />
                 </Field>
               </div>
@@ -2059,9 +2170,9 @@ export default function AdminPage() {
                 />
               </Field>
 
-              <Field label="Main overview">
+              <Field label="Main overview / camp feel">
                 <TextArea
-                  rows={5}
+                  rows={6}
                   value={selected.overview}
                   onChange={(e) => updateListing({ overview: e.target.value })}
                 />
@@ -2161,7 +2272,7 @@ export default function AdminPage() {
               </Field>
             </Section>
 
-            <Section title="Rooms">
+            <Section title="Property Images">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Room configurations (one per line)">
                   <TextArea
@@ -2173,12 +2284,19 @@ export default function AdminPage() {
                   />
                 </Field>
 
-                <Field label="Room blast images">
+                <Field label={`Main property images (${selected.roomImages.length}/${MAX_ROOM_IMAGES})`}>
                   <div className="flex flex-wrap gap-2">
-                    <SmallButton onClick={() => roomGalleryAppendRef.current?.click()}>
+                    <SmallButton
+                      onClick={() => roomGalleryAppendRef.current?.click()}
+                      disabled={selected.roomImages.length >= MAX_ROOM_IMAGES}
+                    >
                       <Upload size={14} />
-                      Upload room images
+                      Upload property images
                     </SmallButton>
+                  </div>
+
+                  <div className="mt-2 text-xs text-white/50">
+                    These images feed the slider under the hero and the Rooms tab gallery.
                   </div>
 
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -2200,14 +2318,14 @@ export default function AdminPage() {
                         >
                           <img
                             src={image}
-                            alt={`Room image ${index + 1}`}
+                            alt={`Property image ${index + 1}`}
                             className="aspect-[4/3] w-full object-cover"
                           />
                         </button>
 
                         <div className="flex items-center justify-between border-t border-white/10 px-3 py-2">
                           <span className="text-xs text-white/60">
-                            Room image {index + 1}
+                            Image {index + 1}
                           </span>
                           <button
                             type="button"
@@ -2222,7 +2340,7 @@ export default function AdminPage() {
 
                     {selected.roomImages.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-sm text-white/45">
-                        No room blast images yet.
+                        No property images yet.
                       </div>
                     ) : null}
                   </div>
@@ -2230,7 +2348,7 @@ export default function AdminPage() {
               </div>
             </Section>
 
-            <Section title="Activities">
+            <Section title="Experiences">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Included / free (one per line)">
                   <TextArea
@@ -2263,7 +2381,7 @@ export default function AdminPage() {
                 </Field>
               </div>
 
-              <Field label="General activities summary (optional)">
+              <Field label="Experiences summary / notes (optional)">
                 <TextArea
                   rows={6}
                   value={selected.activitiesText}
@@ -2274,8 +2392,8 @@ export default function AdminPage() {
               </Field>
             </Section>
 
-            <Section title="Experience">
-              <Field label="Experience summary">
+            <Section title="Camp Feel / Narrative">
+              <Field label="Optional extra descriptive paragraph">
                 <TextArea
                   rows={8}
                   value={selected.experienceText}
@@ -2668,47 +2786,110 @@ export default function AdminPage() {
                 <div className="px-4 py-4 md:px-6">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="text-sm font-semibold uppercase tracking-[0.14em]">
-                      Room blast images
+                      Property preview
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => roomGalleryAppendRef.current?.click()}
-                      className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.42)",
-                      }}
-                    >
-                      Upload
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs opacity-70">
+                        {previewRoomImages.length}/{MAX_ROOM_IMAGES}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => roomGalleryAppendRef.current?.click()}
+                        disabled={selected.roomImages.length >= MAX_ROOM_IMAGES}
+                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{
+                          borderColor: previewTheme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                        }}
+                      >
+                        Upload
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {selected.roomImages.length > 0 ? (
-                      selected.roomImages.slice(0, 4).map((image, index) => (
-                        <EditablePreviewImage
-                          key={`${image}-${index}`}
-                          src={image}
-                          alt={`Room image ${index + 1}`}
-                          onTrigger={() => openRoomReplacePicker(index)}
-                          className="aspect-[4/2.25]"
-                          borderColor={previewTheme.borderColor}
-                          emptyTitle={`Room image ${index + 1}`}
-                          emptySubtitle="Upload room image"
+                  {previewRoomImages.length > 0 ? (
+                    <div className="space-y-3">
+                      <div
+                        className="overflow-hidden rounded-[12px] border"
+                        style={{
+                          borderColor: previewTheme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.30)",
+                        }}
+                      >
+                        <img
+                          src={previewRoomImages[safeHeroSliderIndex]}
+                          alt={`Property preview ${safeHeroSliderIndex + 1}`}
+                          className="aspect-[16/6] w-full object-cover"
                         />
-                      ))
-                    ) : (
-                      Array.from({ length: 4 }).map((_, index) => (
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => moveHeroSlider("prev")}
+                          className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                          }}
+                        >
+                          Prev
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveHeroSlider("next")}
+                          className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.42)",
+                          }}
+                        >
+                          Next
+                        </button>
+
+                        <div className="ml-auto text-xs opacity-70">
+                          {safeHeroSliderIndex + 1} / {previewRoomImages.length}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                        {previewRoomImages.slice(0, 5).map((image, index) => (
+                          <button
+                            key={`${image}-${index}`}
+                            type="button"
+                            onClick={() => setHeroSliderIndex(index)}
+                            className="overflow-hidden rounded-[10px] border"
+                            style={{
+                              borderColor:
+                                safeHeroSliderIndex === index
+                                  ? previewTheme.highlight
+                                  : previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.28)",
+                            }}
+                          >
+                            <img
+                              src={image}
+                              alt={`Thumbnail ${index + 1}`}
+                              className="aspect-[4/2.25] w-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                      {Array.from({ length: 4 }).map((_, index) => (
                         <EditorUploadZone
                           key={`room-empty-${index}`}
-                          title={`Room image ${index + 1}`}
-                          subtitle="Upload room blast image"
+                          title={`Property image ${index + 1}`}
+                          subtitle="Upload property image"
                           onClick={() => roomGalleryAppendRef.current?.click()}
                           className="aspect-[4/2.25]"
                         />
-                      ))
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -2735,7 +2916,7 @@ export default function AdminPage() {
                             backgroundColor: "rgba(255,255,255,0.40)",
                           }}
                         >
-                          <div className="line-clamp-3 text-[22px] font-semibold leading-tight md:text-[28px]">
+                          <div className="line-clamp-2 text-[20px] font-semibold leading-tight md:text-[24px]">
                             {fact.value}
                           </div>
                           <div className="mt-2 text-sm" style={{ opacity: 0.72 }}>
@@ -2837,9 +3018,9 @@ export default function AdminPage() {
             <div className="px-4 pb-2 pt-2 md:px-8">
               <div className="hidden md:flex md:flex-wrap md:gap-1">
                 {[
+                  { key: "overview", label: "Overview" },
                   { key: "rooms", label: "Rooms" },
-                  { key: "activities", label: "Activities" },
-                  { key: "experience", label: "Experience" },
+                  { key: "experiences", label: "Experiences" },
                   { key: "contact", label: "Contact" },
                   { key: "downloads", label: "Downloads" },
                 ].map((tab) => (
@@ -2849,9 +3030,9 @@ export default function AdminPage() {
                     onClick={() =>
                       setActivePreviewTab(
                         tab.key as
+                          | "overview"
                           | "rooms"
-                          | "activities"
-                          | "experience"
+                          | "experiences"
                           | "contact"
                           | "downloads",
                       )
@@ -2872,9 +3053,9 @@ export default function AdminPage() {
 
               <div className="flex flex-wrap gap-2 md:hidden">
                 {[
+                  { key: "overview", label: "Overview" },
                   { key: "rooms", label: "Rooms" },
-                  { key: "activities", label: "Activities" },
-                  { key: "experience", label: "Experience" },
+                  { key: "experiences", label: "Experiences" },
                   { key: "contact", label: "Contact" },
                   { key: "downloads", label: "Downloads" },
                 ].map((tab) => (
@@ -2884,9 +3065,9 @@ export default function AdminPage() {
                     onClick={() =>
                       setActivePreviewTab(
                         tab.key as
+                          | "overview"
                           | "rooms"
-                          | "activities"
-                          | "experience"
+                          | "experiences"
                           | "contact"
                           | "downloads",
                       )
@@ -2909,6 +3090,40 @@ export default function AdminPage() {
             <section className="px-4 pb-8 md:px-8 md:pb-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
                 <div className="space-y-8">
+                  {activePreviewTab === "overview" ? (
+                    <section
+                      className="rounded-[14px] border p-5 md:p-6"
+                      style={{
+                        borderColor: previewTheme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.20)",
+                      }}
+                    >
+                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
+                        OVERVIEW
+                      </h3>
+
+                      <div
+                        className="mt-4 whitespace-pre-line text-base leading-8 md:text-[18px]"
+                        style={{ opacity: 0.76 }}
+                      >
+                        {overviewText}
+                      </div>
+
+                      {selected.experienceText.trim() ? (
+                        <div
+                          className="mt-5 rounded-[10px] border px-4 py-4 text-sm leading-7 md:text-base"
+                          style={{
+                            borderColor: previewTheme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.30)",
+                            opacity: 0.82,
+                          }}
+                        >
+                          {campFeelText}
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
+
                   {activePreviewTab === "rooms" ? (
                     <section
                       className="rounded-[14px] border p-5 md:p-6"
@@ -2935,10 +3150,81 @@ export default function AdminPage() {
                           </span>
                         ))}
                       </div>
+
+                      {previewRoomImages.length > 0 ? (
+                        <div className="mt-6 space-y-4">
+                          <div
+                            className="overflow-hidden rounded-[12px] border"
+                            style={{
+                              borderColor: previewTheme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.30)",
+                            }}
+                          >
+                            <img
+                              src={previewRoomImages[safeRoomsSliderIndex]}
+                              alt={`Room gallery ${safeRoomsSliderIndex + 1}`}
+                              className="aspect-[16/8] w-full object-cover"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => moveRoomsSlider("prev")}
+                              className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                              style={{
+                                borderColor: previewTheme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.42)",
+                              }}
+                            >
+                              Prev
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveRoomsSlider("next")}
+                              className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                              style={{
+                                borderColor: previewTheme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.42)",
+                              }}
+                            >
+                              Next
+                            </button>
+
+                            <div className="ml-auto text-xs opacity-70">
+                              {safeRoomsSliderIndex + 1} / {previewRoomImages.length}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            {previewRoomImages.map((image, index) => (
+                              <button
+                                key={`${image}-${index}`}
+                                type="button"
+                                onClick={() => setRoomsSliderIndex(index)}
+                                className="overflow-hidden rounded-xl border"
+                                style={{
+                                  borderColor:
+                                    safeRoomsSliderIndex === index
+                                      ? previewTheme.highlight
+                                      : previewTheme.borderColor,
+                                  backgroundColor: "rgba(255,255,255,0.28)",
+                                }}
+                              >
+                                <img
+                                  src={image}
+                                  alt={`Room image ${index + 1}`}
+                                  className="aspect-[4/3] w-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </section>
                   ) : null}
 
-                  {activePreviewTab === "activities" ? (
+                  {activePreviewTab === "experiences" ? (
                     <section
                       className="rounded-[14px] border p-5 md:p-6"
                       style={{
@@ -2947,7 +3233,7 @@ export default function AdminPage() {
                       }}
                     >
                       <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                        ACTIVITIES
+                        EXPERIENCES
                       </h3>
 
                       <div className="mt-6 grid gap-5 md:grid-cols-2">
@@ -3024,27 +3310,6 @@ export default function AdminPage() {
                           {selected.activitiesText}
                         </div>
                       ) : null}
-                    </section>
-                  ) : null}
-
-                  {activePreviewTab === "experience" ? (
-                    <section
-                      className="rounded-[14px] border p-5 md:p-6"
-                      style={{
-                        borderColor: previewTheme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.20)",
-                      }}
-                    >
-                      <h3 className="text-xl font-semibold tracking-[0.08em] md:text-[22px]">
-                        EXPERIENCE
-                      </h3>
-
-                      <div
-                        className="mt-4 whitespace-pre-line text-base leading-8 md:text-[18px]"
-                        style={{ opacity: 0.76 }}
-                      >
-                        {experienceText}
-                      </div>
                     </section>
                   ) : null}
                 </div>
