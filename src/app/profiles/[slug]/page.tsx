@@ -43,6 +43,14 @@ type ProfileTab =
   | "contact"
   | "downloads";
 
+type GalleryImage = {
+  src: string;
+  label: string;
+};
+
+const MAX_ROOM_IMAGES = 20;
+const HERO_PREVIEW_COUNT = 5;
+
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e9e1d8",
   blockBg: "#f7f2eb",
@@ -99,6 +107,10 @@ function getStringArray(value: unknown): string[] {
     .filter((item) => typeof item === "string")
     .map((item) => String(item).trim())
     .filter(Boolean);
+}
+
+function clampImages<T>(items: T[], max = MAX_ROOM_IMAGES): T[] {
+  return items.slice(0, max);
 }
 
 function normalizeResponse(json: unknown): ApiListingRecord[] {
@@ -255,22 +267,26 @@ function getRoomConfigs(listing: ApiListingRecord): string[] {
   return DEFAULT_ROOM_CONFIGS;
 }
 
-function getRoomBlastImages(
-  listing: ApiListingRecord,
-): Array<{ src: string; label: string }> {
+function dedupeGalleryImages(images: GalleryImage[]): GalleryImage[] {
+  return Array.from(new Map(images.map((item) => [item.src, item])).values());
+}
+
+function getRoomBlastImages(listing: ApiListingRecord): GalleryImage[] {
   const data = getData(listing);
   const roomImages = getStringArray(data.roomImages);
 
   if (roomImages.length > 0) {
-    return roomImages.map((src, index) => ({
-      src,
-      label: `Room image ${index + 1}`,
-    }));
+    return clampImages(
+      roomImages.map((src, index) => ({
+        src,
+        label: `Room image ${index + 1}`,
+      })),
+    );
   }
 
   const gallery = data.gallery;
   if (Array.isArray(gallery)) {
-    const images: Array<{ src: string; label: string }> = [];
+    const images: GalleryImage[] = [];
 
     for (const group of gallery) {
       const groupRecord = getRecord(group);
@@ -291,17 +307,16 @@ function getRoomBlastImages(
     }
 
     if (images.length > 0) {
-      return Array.from(
-        new Map(images.map((item) => [item.src, item])).values(),
-      ).slice(0, 4);
+      return clampImages(dedupeGalleryImages(images));
     }
   }
 
-  const directImages = getStringArray(data.images).slice(0, 4);
-  return directImages.map((src, index) => ({
+  const directImages = getStringArray(data.images).map((src, index) => ({
     src,
     label: `Gallery ${index + 1}`,
   }));
+
+  return clampImages(dedupeGalleryImages(directImages));
 }
 
 function getHeroImage(listing: ApiListingRecord): string {
@@ -597,6 +612,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const [listing, setListing] = useState<ApiListingRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ProfileTab>("rooms");
+  const [heroGalleryIndex, setHeroGalleryIndex] = useState(0);
+  const [roomsGalleryIndex, setRoomsGalleryIndex] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -643,6 +660,12 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     () => (listing ? getTheme(listing) : DEFAULT_THEME),
     [listing],
   );
+
+  useEffect(() => {
+    setHeroGalleryIndex(0);
+    setRoomsGalleryIndex(0);
+    setActiveTab("rooms");
+  }, [slug, listing?.id]);
 
   if (isLoading) {
     return (
@@ -718,7 +741,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const website = getWebsite(listing);
   const logoImage = getLogoImage(listing);
   const heroImage = getHeroImage(listing);
-  const roomImages = getRoomBlastImages(listing);
+  const allRoomImages = getRoomBlastImages(listing);
+  const heroPreviewImages = allRoomImages.slice(0, HERO_PREVIEW_COUNT);
   const includedExperiences = getIncludedExperiences(listing);
   const paidExperiences = getPaidExperiences(listing);
   const activitiesSummary = getActivitiesSummary(listing);
@@ -732,6 +756,22 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const bestFacts = getBestFacts(listing);
   const roomConfigs = getRoomConfigs(listing);
   const statusLabel = getString(listing.status).toLowerCase();
+
+  const safeHeroIndex =
+    heroPreviewImages.length > 0
+      ? Math.min(heroGalleryIndex, heroPreviewImages.length - 1)
+      : 0;
+
+  const safeRoomsIndex =
+    allRoomImages.length > 0
+      ? Math.min(roomsGalleryIndex, allRoomImages.length - 1)
+      : 0;
+
+  const currentHeroPreview =
+    heroPreviewImages.length > 0 ? heroPreviewImages[safeHeroIndex] : null;
+
+  const currentRoomsImage =
+    allRoomImages.length > 0 ? allRoomImages[safeRoomsIndex] : null;
 
   return (
     <main
@@ -870,42 +910,121 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                     className="text-sm font-semibold uppercase tracking-[0.14em]"
                     style={{ color: theme.accent }}
                   >
-                    Camp preview
+                    Property preview
                   </div>
-                  {downloads.length > 0 ? (
-                    <a
-                      href={downloads[0].url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                      style={{
-                        borderColor: theme.borderColor,
-                        backgroundColor: "rgba(255,255,255,0.42)",
-                        color: theme.accent,
-                      }}
-                    >
-                      Download Fact Sheet
-                    </a>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {downloads.length > 0 ? (
+                      <a
+                        href={downloads[0].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.accent,
+                        }}
+                      >
+                        Download Fact Sheet
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  {roomImages.length > 0 ? (
-                    roomImages.slice(0, 4).map((image) => (
-                      <div
-                        key={`${image.src}-${image.label}`}
-                        className="overflow-hidden rounded-[12px] border"
-                        style={{ borderColor: theme.borderColor }}
+                {heroPreviewImages.length > 0 ? (
+                  <div className="space-y-3">
+                    <div
+                      className="overflow-hidden rounded-[14px] border"
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.36)",
+                      }}
+                    >
+                      <img
+                        src={currentHeroPreview?.src}
+                        alt={currentHeroPreview?.label || "Property preview"}
+                        className="aspect-[16/6] w-full object-cover"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHeroGalleryIndex((prev) =>
+                            prev === 0
+                              ? heroPreviewImages.length - 1
+                              : prev - 1,
+                          )
+                        }
+                        className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.accent,
+                        }}
                       >
-                        <img
-                          src={image.src}
-                          alt={image.label}
-                          className="aspect-[4/2.3] w-full object-cover"
-                        />
+                        Prev
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHeroGalleryIndex((prev) =>
+                            prev === heroPreviewImages.length - 1
+                              ? 0
+                              : prev + 1,
+                          )
+                        }
+                        className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.accent,
+                        }}
+                      >
+                        Next
+                      </button>
+
+                      <div
+                        className="ml-auto text-[11px] uppercase tracking-[0.14em]"
+                        style={{ color: theme.mutedText }}
+                      >
+                        {safeHeroIndex + 1} / {heroPreviewImages.length}
                       </div>
-                    ))
-                  ) : (
-                    Array.from({ length: 4 }).map((_, index) => (
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-3">
+                      {heroPreviewImages.map((image, index) => (
+                        <button
+                          key={`${image.src}-${image.label}`}
+                          type="button"
+                          onClick={() => setHeroGalleryIndex(index)}
+                          className="overflow-hidden rounded-[12px] border"
+                          style={{
+                            borderColor:
+                              safeHeroIndex === index
+                                ? theme.highlight
+                                : theme.borderColor,
+                            backgroundColor: "rgba(255,255,255,0.36)",
+                            boxShadow:
+                              safeHeroIndex === index
+                                ? `0 0 0 1px ${theme.highlight} inset`
+                                : "none",
+                          }}
+                        >
+                          <img
+                            src={image.src}
+                            alt={image.label}
+                            className="aspect-[4/2.3] w-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {Array.from({ length: 4 }).map((_, index) => (
                       <div
                         key={`empty-room-${index}`}
                         className="rounded-[12px] border"
@@ -916,9 +1035,9 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       >
                         <div className="aspect-[4/2.3] w-full" />
                       </div>
-                    ))
-                  )}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div
@@ -1070,37 +1189,105 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                       ))}
                     </div>
 
-                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                      {roomImages.length > 0 ? (
-                        roomImages.slice(0, 4).map((image) => (
-                          <div
-                            key={`${image.src}-${image.label}`}
-                            className="overflow-hidden rounded-[14px] border"
-                            style={{
-                              borderColor: theme.borderColor,
-                              backgroundColor: "rgba(255,255,255,0.42)",
-                            }}
-                          >
-                            <img
-                              src={image.src}
-                              alt={image.label}
-                              className="aspect-[4/2.6] w-full object-cover"
-                            />
-                          </div>
-                        ))
-                      ) : (
+                    {allRoomImages.length > 0 ? (
+                      <div className="mt-5 space-y-4">
                         <div
-                          className="rounded-[14px] border px-4 py-4 text-sm"
+                          className="overflow-hidden rounded-[16px] border"
                           style={{
                             borderColor: theme.borderColor,
                             backgroundColor: "rgba(255,255,255,0.42)",
-                            color: theme.mutedText,
                           }}
                         >
-                          Room imagery will appear here.
+                          <img
+                            src={currentRoomsImage?.src}
+                            alt={currentRoomsImage?.label || "Room image"}
+                            className="aspect-[16/8.2] w-full object-cover"
+                          />
                         </div>
-                      )}
-                    </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRoomsGalleryIndex((prev) =>
+                                prev === 0 ? allRoomImages.length - 1 : prev - 1,
+                              )
+                            }
+                            className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
+                            style={{
+                              borderColor: theme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                              color: theme.accent,
+                            }}
+                          >
+                            Prev
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRoomsGalleryIndex((prev) =>
+                                prev === allRoomImages.length - 1 ? 0 : prev + 1,
+                              )
+                            }
+                            className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
+                            style={{
+                              borderColor: theme.borderColor,
+                              backgroundColor: "rgba(255,255,255,0.42)",
+                              color: theme.accent,
+                            }}
+                          >
+                            Next
+                          </button>
+
+                          <div
+                            className="ml-auto text-[11px] uppercase tracking-[0.14em]"
+                            style={{ color: theme.mutedText }}
+                          >
+                            {safeRoomsIndex + 1} / {allRoomImages.length}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                          {allRoomImages.map((image, index) => (
+                            <button
+                              key={`${image.src}-${image.label}-${index}`}
+                              type="button"
+                              onClick={() => setRoomsGalleryIndex(index)}
+                              className="overflow-hidden rounded-[14px] border"
+                              style={{
+                                borderColor:
+                                  safeRoomsIndex === index
+                                    ? theme.highlight
+                                    : theme.borderColor,
+                                backgroundColor: "rgba(255,255,255,0.42)",
+                                boxShadow:
+                                  safeRoomsIndex === index
+                                    ? `0 0 0 1px ${theme.highlight} inset`
+                                    : "none",
+                              }}
+                            >
+                              <img
+                                src={image.src}
+                                alt={image.label}
+                                className="aspect-[4/2.8] w-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="mt-5 rounded-[14px] border px-4 py-4 text-sm"
+                        style={{
+                          borderColor: theme.borderColor,
+                          backgroundColor: "rgba(255,255,255,0.42)",
+                          color: theme.mutedText,
+                        }}
+                      >
+                        Room imagery will appear here.
+                      </div>
+                    )}
                   </DossierCard>
                 ) : null}
 
