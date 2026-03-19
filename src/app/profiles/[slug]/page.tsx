@@ -36,7 +36,12 @@ type ApiListingRecord = {
   data?: Record<string, unknown> | null;
 };
 
-type ProfileTab = "rooms" | "activities" | "experience" | "contact" | "downloads";
+type ProfileTab =
+  | "rooms"
+  | "activities"
+  | "experience"
+  | "contact"
+  | "downloads";
 
 const DEFAULT_THEME: ThemeState = {
   pageBg: "#e9e1d8",
@@ -66,13 +71,7 @@ const DEFAULT_PAID_ACTIVITIES = [
   "Night game drive (Tarangire)",
 ];
 
-const DEFAULT_ROOM_CONFIGS = [
-  "Double",
-  "Twin",
-  "Triple",
-  "Single",
-  "Family",
-];
+const DEFAULT_ROOM_CONFIGS = ["Double", "Twin", "Triple", "Single", "Family"];
 
 function getRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -256,7 +255,9 @@ function getRoomConfigs(listing: ApiListingRecord): string[] {
   return DEFAULT_ROOM_CONFIGS;
 }
 
-function getRoomBlastImages(listing: ApiListingRecord): Array<{ src: string; label: string }> {
+function getRoomBlastImages(
+  listing: ApiListingRecord,
+): Array<{ src: string; label: string }> {
   const data = getData(listing);
   const roomImages = getStringArray(data.roomImages);
 
@@ -290,7 +291,9 @@ function getRoomBlastImages(listing: ApiListingRecord): Array<{ src: string; lab
     }
 
     if (images.length > 0) {
-      return Array.from(new Map(images.map((item) => [item.src, item])).values()).slice(0, 4);
+      return Array.from(
+        new Map(images.map((item) => [item.src, item])).values(),
+      ).slice(0, 4);
     }
   }
 
@@ -364,7 +367,9 @@ function getActivitiesSummary(listing: ApiListingRecord): string {
   return getString(data.activitiesText);
 }
 
-function getDownloads(listing: ApiListingRecord): Array<{ label: string; url: string }> {
+function getDownloads(
+  listing: ApiListingRecord,
+): Array<{ label: string; url: string }> {
   const data = getData(listing);
   const source = data.downloads || data.downloadables;
 
@@ -453,13 +458,18 @@ function getContactGroups(listing: ApiListingRecord): Array<{
     getString(data.reservationsPhone);
 
   const directWhatsapp =
-    getString(data.contactWhatsapp) ||
-    getString(data.whatsapp);
+    getString(data.contactWhatsapp) || getString(data.whatsapp);
 
   const directName = getString(data.contactName);
   const directRole = getString(data.contactTitle) || "Reservations / Sales";
 
-  if (directName || directRole || directEmail || directPhone || directWhatsapp) {
+  if (
+    directName ||
+    directRole ||
+    directEmail ||
+    directPhone ||
+    directWhatsapp
+  ) {
     return [
       {
         title: "Reservations",
@@ -487,19 +497,24 @@ function getTradeActions(listing: ApiListingRecord) {
     getString(data.enquiryEmail) ||
     getString(data.contactEmail) ||
     getString(data.email) ||
-    contactGroups.flatMap((group) => group.items).find((item) => item.email)?.email ||
+    contactGroups
+      .flatMap((group) => group.items)
+      .find((item) => item.email)?.email ||
     "";
 
   const fallbackWhatsApp =
     getString(data.enquiryWhatsApp) ||
     getString(data.whatsapp) ||
-    contactGroups.flatMap((group) => group.items).find((item) => item.whatsapp)?.whatsapp ||
+    contactGroups
+      .flatMap((group) => group.items)
+      .find((item) => item.whatsapp)?.whatsapp ||
     "";
 
   return {
     enquiryEmail: fallbackEmail,
     enquiryWhatsApp: fallbackWhatsApp,
-    enquirySubject: getString(data.enquirySubject) || `Trade Request: ${listing.name}`,
+    enquirySubject:
+      getString(data.enquirySubject) || `Trade Request: ${listing.name}`,
   };
 }
 
@@ -602,7 +617,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
         const json = await response.json();
         const listings = normalizeResponse(json);
-        const match = listings.find((item) => isValidPropertyProfile(item, slug)) || null;
+        const match =
+          listings.find((item) => isValidPropertyProfile(item, slug)) || null;
 
         if (mounted) {
           setListing(match);
@@ -623,13 +639,19 @@ export default function ProfilePage({ params }: ProfilePageProps) {
     };
   }, [slug]);
 
-  const theme = useMemo(() => (listing ? getTheme(listing) : DEFAULT_THEME), [listing]);
+  const theme = useMemo(
+    () => (listing ? getTheme(listing) : DEFAULT_THEME),
+    [listing],
+  );
 
   if (isLoading) {
     return (
       <main
         className="min-h-screen"
-        style={{ backgroundColor: DEFAULT_THEME.pageBg, color: DEFAULT_THEME.accent }}
+        style={{
+          backgroundColor: DEFAULT_THEME.pageBg,
+          color: DEFAULT_THEME.accent,
+        }}
       >
         <div className="mx-auto max-w-[1280px] px-4 py-12 md:px-6">
           <div
@@ -639,10 +661,15 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               backgroundColor: DEFAULT_THEME.blockBg,
             }}
           >
-            <div className="text-sm uppercase tracking-[0.22em]" style={{ color: DEFAULT_THEME.mutedText }}>
+            <div
+              className="text-sm uppercase tracking-[0.22em]"
+              style={{ color: DEFAULT_THEME.mutedText }}
+            >
               SafariTrade
             </div>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight">Loading profile…</h1>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight">
+              Loading profile…
+            </h1>
           </div>
         </div>
       </main>
@@ -660,7 +687,8 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             Profile not found
           </h1>
           <p className="mt-4 max-w-2xl text-white/65">
-            This trade profile does not exist yet or the link is no longer active.
+            This trade profile does not exist yet or the link is no longer
+            active.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -736,7 +764,9 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   className="mb-4 text-[13px] font-semibold uppercase tracking-[0.32em]"
                   style={{ color: theme.accent, opacity: 0.8 }}
                 >
-                  {label || listing.companySlug?.replace(/-/g, " ") || "SafariTrade"}
+                  {label ||
+                    listing.companySlug?.replace(/-/g, " ") ||
+                    "SafariTrade"}
                 </div>
               )}
 
@@ -747,7 +777,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 {listing.name}
               </h1>
 
-              <p className="mt-3 text-sm md:text-xl" style={{ color: theme.mutedText }}>
+              <p
+                className="mt-3 text-sm md:text-xl"
+                style={{ color: theme.mutedText }}
+              >
                 {[label, location, propertyClass].filter(Boolean).join(" · ")}
               </p>
 
@@ -806,14 +839,19 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                     </h2>
 
                     <p className="mt-3 text-sm md:text-2xl">
-                      {[label, location, propertyClass].filter(Boolean).join(" · ")}
+                      {[label, location, propertyClass]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
 
                     {tripadvisor.rating !== null ? (
                       <div className="mt-4 flex items-center justify-center gap-3 text-xs font-medium uppercase tracking-[0.20em] md:text-base">
                         <span>
                           {"★".repeat(
-                            Math.max(1, Math.min(5, Math.round(tripadvisor.rating))),
+                            Math.max(
+                              1,
+                              Math.min(5, Math.round(tripadvisor.rating)),
+                            ),
                           )}
                         </span>
                         <span>Top trade-rated safari profile</span>
@@ -889,7 +927,10 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               >
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
                   {bestFacts.map((fact, index) => (
-                    <div key={`${fact.label}-${index}`} className="flex h-full flex-col">
+                    <div
+                      key={`${fact.label}-${index}`}
+                      className="flex h-full flex-col"
+                    >
                       <div
                         className="rounded-t-[10px] border border-b-0 px-4 py-2 text-center text-[11px] uppercase tracking-[0.14em]"
                         style={{
@@ -907,10 +948,13 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                           backgroundColor: "rgba(255,255,255,0.40)",
                         }}
                       >
-                        <div className="line-clamp-3 text-[22px] font-semibold leading-tight md:text-[28px]">
+                        <div className="line-clamp-2 text-[20px] font-semibold leading-tight md:text-[24px]">
                           {fact.value}
                         </div>
-                        <div className="mt-2 text-sm" style={{ color: theme.mutedText }}>
+                        <div
+                          className="mt-2 text-xs md:text-sm"
+                          style={{ color: theme.mutedText }}
+                        >
                           {fact.sub}
                         </div>
                       </div>
@@ -927,7 +971,9 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7"
                 style={{ borderColor: theme.borderColor }}
               >
-                <h3 className="text-3xl font-semibold md:text-5xl">{listing.name}</h3>
+                <h3 className="text-3xl font-semibold md:text-5xl">
+                  {listing.name}
+                </h3>
                 <p
                   className="mt-4 max-w-3xl text-base leading-8 md:text-xl"
                   style={{ color: theme.mutedText }}
@@ -1146,7 +1192,9 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                                     </a>
                                   ) : null}
                                   {item.phone ? (
-                                    <div className="mt-2 text-sm md:text-base">{item.phone}</div>
+                                    <div className="mt-2 text-sm md:text-base">
+                                      {item.phone}
+                                    </div>
                                   ) : null}
                                   {item.whatsapp ? (
                                     <a
@@ -1300,6 +1348,10 @@ function DossierTabs(props: {
                   ? `${props.theme.highlight}22`
                   : "rgba(255,255,255,0.36)",
               color: props.theme.accent,
+              boxShadow:
+                props.activeTab === tab.key
+                  ? `inset 0 -2px 0 ${props.theme.highlight}`
+                  : "none",
             }}
           >
             {tab.label}
