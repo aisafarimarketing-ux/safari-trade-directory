@@ -37,9 +37,9 @@ type ApiListingRecord = {
 };
 
 type ProfileTab =
+  | "overview"
   | "rooms"
-  | "activities"
-  | "experience"
+  | "experiences"
   | "contact"
   | "downloads";
 
@@ -60,12 +60,12 @@ const DEFAULT_THEME: ThemeState = {
   mutedText: "rgba(95, 71, 47, 0.72)",
 };
 
-const DEFAULT_INCLUDED_ACTIVITIES = [
+const DEFAULT_INCLUDED_EXPERIENCES = [
   "Stargazing",
   "Spear throwing with Maasai",
 ];
 
-const DEFAULT_PAID_ACTIVITIES = [
+const DEFAULT_PAID_EXPERIENCES = [
   "Resident rate",
   "All-inclusive supplement",
   "Sundowner",
@@ -197,7 +197,7 @@ function getOverview(listing: ApiListingRecord): string {
   return (
     getString(data.overview) ||
     getString(data.description) ||
-    getString(data.experienceText) ||
+    getString(data.vibe) ||
     ""
   );
 }
@@ -273,14 +273,28 @@ function dedupeGalleryImages(images: GalleryImage[]): GalleryImage[] {
 
 function getRoomBlastImages(listing: ApiListingRecord): GalleryImage[] {
   const data = getData(listing);
-  const roomImages = getStringArray(data.roomImages);
 
+  const roomImages = getStringArray(data.roomImages);
   if (roomImages.length > 0) {
     return clampImages(
-      roomImages.map((src, index) => ({
-        src,
-        label: `Room image ${index + 1}`,
-      })),
+      dedupeGalleryImages(
+        roomImages.map((src, index) => ({
+          src,
+          label: `Property image ${index + 1}`,
+        })),
+      ),
+    );
+  }
+
+  const flatImages = getStringArray(data.images);
+  if (flatImages.length > 0) {
+    return clampImages(
+      dedupeGalleryImages(
+        flatImages.map((src, index) => ({
+          src,
+          label: `Property image ${index + 1}`,
+        })),
+      ),
     );
   }
 
@@ -311,12 +325,7 @@ function getRoomBlastImages(listing: ApiListingRecord): GalleryImage[] {
     }
   }
 
-  const directImages = getStringArray(data.images).map((src, index) => ({
-    src,
-    label: `Gallery ${index + 1}`,
-  }));
-
-  return clampImages(dedupeGalleryImages(directImages));
+  return [];
 }
 
 function getHeroImage(listing: ApiListingRecord): string {
@@ -330,9 +339,6 @@ function getHeroImage(listing: ApiListingRecord): string {
 
   const roomImages = getRoomBlastImages(listing);
   if (roomImages.length > 0) return roomImages[0].src;
-
-  const directImages = getStringArray(data.images);
-  if (directImages.length > 0) return directImages[0];
 
   return "";
 }
@@ -359,10 +365,20 @@ function getIncludedExperiences(listing: ApiListingRecord): string[] {
   if (included.length > 0) return included;
 
   const data = getData(listing);
+
+  const activitiesText = getString(data.activitiesText);
+  if (activitiesText) {
+    const lines = activitiesText
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (lines.length > 0) return lines;
+  }
+
   const freeActivities = getStringArray(data.freeActivities);
   if (freeActivities.length > 0) return freeActivities;
 
-  return DEFAULT_INCLUDED_ACTIVITIES;
+  return DEFAULT_INCLUDED_EXPERIENCES;
 }
 
 function getPaidExperiences(listing: ApiListingRecord): string[] {
@@ -374,12 +390,7 @@ function getPaidExperiences(listing: ApiListingRecord): string[] {
   const paidActivities = getStringArray(data.paidActivities);
   if (paidActivities.length > 0) return paidActivities;
 
-  return DEFAULT_PAID_ACTIVITIES;
-}
-
-function getActivitiesSummary(listing: ApiListingRecord): string {
-  const data = getData(listing);
-  return getString(data.activitiesText);
+  return DEFAULT_PAID_EXPERIENCES;
 }
 
 function getDownloads(
@@ -441,11 +452,11 @@ function getContactGroups(listing: ApiListingRecord): Array<{
           whatsapp: getString(row.whatsapp),
         };
       })
-      .filter((item) => {
-        return Boolean(
+      .filter((item) =>
+        Boolean(
           item.name || item.role || item.email || item.phone || item.whatsapp,
-        );
-      });
+        ),
+      );
   };
 
   const reservations = normalizeList(contacts.reservations);
@@ -512,24 +523,19 @@ function getTradeActions(listing: ApiListingRecord) {
     getString(data.enquiryEmail) ||
     getString(data.contactEmail) ||
     getString(data.email) ||
-    contactGroups
-      .flatMap((group) => group.items)
-      .find((item) => item.email)?.email ||
+    contactGroups.flatMap((group) => group.items).find((item) => item.email)?.email ||
     "";
 
   const fallbackWhatsApp =
     getString(data.enquiryWhatsApp) ||
     getString(data.whatsapp) ||
-    contactGroups
-      .flatMap((group) => group.items)
-      .find((item) => item.whatsapp)?.whatsapp ||
+    contactGroups.flatMap((group) => group.items).find((item) => item.whatsapp)?.whatsapp ||
     "";
 
   return {
     enquiryEmail: fallbackEmail,
     enquiryWhatsApp: fallbackWhatsApp,
-    enquirySubject:
-      getString(data.enquirySubject) || `Trade Request: ${listing.name}`,
+    enquirySubject: getString(data.enquirySubject) || `Trade Request: ${listing.name}`,
   };
 }
 
@@ -551,17 +557,6 @@ function getOverviewCopy(listing: ApiListingRecord): string {
   if (vibe) return vibe;
 
   return "A trade-facing safari dossier built for quick qualification, faster quoting, and elegant client-ready sharing.";
-}
-
-function getExperienceCopy(listing: ApiListingRecord): string {
-  const data = getData(listing);
-
-  return (
-    getString(data.experienceText) ||
-    getString(data.experienceSummary) ||
-    getString(data.sustainability) ||
-    getOverviewCopy(listing)
-  );
 }
 
 function getBestFacts(listing: ApiListingRecord) {
@@ -611,7 +606,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const slug = params.slug;
   const [listing, setListing] = useState<ApiListingRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ProfileTab>("rooms");
+  const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
   const [heroGalleryIndex, setHeroGalleryIndex] = useState(0);
   const [roomsGalleryIndex, setRoomsGalleryIndex] = useState(0);
 
@@ -664,7 +659,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   useEffect(() => {
     setHeroGalleryIndex(0);
     setRoomsGalleryIndex(0);
-    setActiveTab("rooms");
+    setActiveTab("overview");
   }, [slug, listing?.id]);
 
   if (isLoading) {
@@ -710,8 +705,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
             Profile not found
           </h1>
           <p className="mt-4 max-w-2xl text-white/65">
-            This trade profile does not exist yet or the link is no longer
-            active.
+            This trade profile does not exist yet or the link is no longer active.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -737,7 +731,6 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const location = getLocation(listing);
   const propertyClass = getClassLabel(listing);
   const overviewCopy = getOverviewCopy(listing);
-  const experienceCopy = getExperienceCopy(listing);
   const website = getWebsite(listing);
   const logoImage = getLogoImage(listing);
   const heroImage = getHeroImage(listing);
@@ -745,7 +738,6 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const heroPreviewImages = allRoomImages.slice(0, HERO_PREVIEW_COUNT);
   const includedExperiences = getIncludedExperiences(listing);
   const paidExperiences = getPaidExperiences(listing);
-  const activitiesSummary = getActivitiesSummary(listing);
   const downloads = getDownloads(listing);
   const contactGroups = getContactGroups(listing);
   const tradeActions = getTradeActions(listing);
@@ -804,9 +796,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   className="mb-4 text-[13px] font-semibold uppercase tracking-[0.32em]"
                   style={{ color: theme.accent, opacity: 0.8 }}
                 >
-                  {label ||
-                    listing.companySlug?.replace(/-/g, " ") ||
-                    "SafariTrade"}
+                  {label || listing.companySlug?.replace(/-/g, " ") || "SafariTrade"}
                 </div>
               )}
 
@@ -817,10 +807,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 {listing.name}
               </h1>
 
-              <p
-                className="mt-3 text-sm md:text-xl"
-                style={{ color: theme.mutedText }}
-              >
+              <p className="mt-3 text-sm md:text-xl" style={{ color: theme.mutedText }}>
                 {[label, location, propertyClass].filter(Boolean).join(" · ")}
               </p>
 
@@ -879,19 +866,14 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                     </h2>
 
                     <p className="mt-3 text-sm md:text-2xl">
-                      {[label, location, propertyClass]
-                        .filter(Boolean)
-                        .join(" · ")}
+                      {[label, location, propertyClass].filter(Boolean).join(" · ")}
                     </p>
 
                     {tripadvisor.rating !== null ? (
                       <div className="mt-4 flex items-center justify-center gap-3 text-xs font-medium uppercase tracking-[0.20em] md:text-base">
                         <span>
                           {"★".repeat(
-                            Math.max(
-                              1,
-                              Math.min(5, Math.round(tripadvisor.rating)),
-                            ),
+                            Math.max(1, Math.min(5, Math.round(tripadvisor.rating))),
                           )}
                         </span>
                         <span>Top trade-rated safari profile</span>
@@ -912,23 +894,22 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                   >
                     Property preview
                   </div>
-                  <div className="flex items-center gap-2">
-                    {downloads.length > 0 ? (
-                      <a
-                        href={downloads[0].url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                        style={{
-                          borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                          color: theme.accent,
-                        }}
-                      >
-                        Download Fact Sheet
-                      </a>
-                    ) : null}
-                  </div>
+
+                  {downloads.length > 0 ? (
+                    <a
+                      href={downloads[0].url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                      style={{
+                        borderColor: theme.borderColor,
+                        backgroundColor: "rgba(255,255,255,0.42)",
+                        color: theme.accent,
+                      }}
+                    >
+                      Download Fact Sheet
+                    </a>
+                  ) : null}
                 </div>
 
                 {heroPreviewImages.length > 0 ? (
@@ -952,9 +933,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         type="button"
                         onClick={() =>
                           setHeroGalleryIndex((prev) =>
-                            prev === 0
-                              ? heroPreviewImages.length - 1
-                              : prev - 1,
+                            prev === 0 ? heroPreviewImages.length - 1 : prev - 1,
                           )
                         }
                         className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
@@ -971,9 +950,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         type="button"
                         onClick={() =>
                           setHeroGalleryIndex((prev) =>
-                            prev === heroPreviewImages.length - 1
-                              ? 0
-                              : prev + 1,
+                            prev === heroPreviewImages.length - 1 ? 0 : prev + 1,
                           )
                         }
                         className="rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
@@ -1023,19 +1000,15 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div
-                        key={`empty-room-${index}`}
-                        className="rounded-[12px] border"
-                        style={{
-                          borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.36)",
-                        }}
-                      >
-                        <div className="aspect-[4/2.3] w-full" />
-                      </div>
-                    ))}
+                  <div
+                    className="rounded-[14px] border px-4 py-4 text-sm"
+                    style={{
+                      borderColor: theme.borderColor,
+                      backgroundColor: "rgba(255,255,255,0.42)",
+                      color: theme.mutedText,
+                    }}
+                  >
+                    Property photos will appear here.
                   </div>
                 )}
               </div>
@@ -1046,10 +1019,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               >
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
                   {bestFacts.map((fact, index) => (
-                    <div
-                      key={`${fact.label}-${index}`}
-                      className="flex h-full flex-col"
-                    >
+                    <div key={`${fact.label}-${index}`} className="flex h-full flex-col">
                       <div
                         className="rounded-t-[10px] border border-b-0 px-4 py-2 text-center text-[11px] uppercase tracking-[0.14em]"
                         style={{
@@ -1070,10 +1040,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         <div className="line-clamp-2 text-[20px] font-semibold leading-tight md:text-[24px]">
                           {fact.value}
                         </div>
-                        <div
-                          className="mt-2 text-xs md:text-sm"
-                          style={{ color: theme.mutedText }}
-                        >
+                        <div className="mt-2 text-xs md:text-sm" style={{ color: theme.mutedText }}>
                           {fact.sub}
                         </div>
                       </div>
@@ -1090,9 +1057,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                 className="rounded-[22px] border px-5 py-5 md:px-7 md:py-7"
                 style={{ borderColor: theme.borderColor }}
               >
-                <h3 className="text-3xl font-semibold md:text-5xl">
-                  {listing.name}
-                </h3>
+                <h3 className="text-3xl font-semibold md:text-5xl">{listing.name}</h3>
                 <p
                   className="mt-4 max-w-3xl text-base leading-8 md:text-xl"
                   style={{ color: theme.mutedText }}
@@ -1181,6 +1146,17 @@ export default function ProfilePage({ params }: ProfilePageProps) {
           <section className="px-4 pb-8 md:px-8 md:pb-10">
             <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
               <div className="space-y-8">
+                {activeTab === "overview" ? (
+                  <DossierCard title="OVERVIEW" theme={theme}>
+                    <div
+                      className="whitespace-pre-line text-base leading-8 md:text-[18px]"
+                      style={{ color: theme.mutedText }}
+                    >
+                      {overviewCopy}
+                    </div>
+                  </DossierCard>
+                ) : null}
+
                 {activeTab === "rooms" ? (
                   <DossierCard title="ROOMS" theme={theme}>
                     <div className="flex flex-wrap gap-2">
@@ -1200,7 +1176,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         >
                           <img
                             src={currentRoomsImage?.src}
-                            alt={currentRoomsImage?.label || "Room image"}
+                            alt={currentRoomsImage?.label || "Property image"}
                             className="aspect-[16/8.2] w-full object-cover"
                           />
                         </div>
@@ -1285,14 +1261,14 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                           color: theme.mutedText,
                         }}
                       >
-                        Room imagery will appear here.
+                        Property photos will appear here.
                       </div>
                     )}
                   </DossierCard>
                 ) : null}
 
-                {activeTab === "activities" ? (
-                  <DossierCard title="ACTIVITIES" theme={theme}>
+                {activeTab === "experiences" ? (
+                  <DossierCard title="EXPERIENCES" theme={theme}>
                     <div className="grid gap-5 md:grid-cols-2">
                       <ExperienceCard
                         title="Included"
@@ -1304,30 +1280,6 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                         items={paidExperiences}
                         theme={theme}
                       />
-                    </div>
-
-                    {activitiesSummary ? (
-                      <div
-                        className="mt-5 rounded-[16px] border px-4 py-4 text-sm leading-7 md:text-base"
-                        style={{
-                          borderColor: theme.borderColor,
-                          backgroundColor: "rgba(255,255,255,0.42)",
-                          color: theme.accent,
-                        }}
-                      >
-                        {activitiesSummary}
-                      </div>
-                    ) : null}
-                  </DossierCard>
-                ) : null}
-
-                {activeTab === "experience" ? (
-                  <DossierCard title="EXPERIENCE" theme={theme}>
-                    <div
-                      className="whitespace-pre-line text-base leading-8 md:text-[18px]"
-                      style={{ color: theme.mutedText }}
-                    >
-                      {experienceCopy}
                     </div>
                   </DossierCard>
                 ) : null}
@@ -1379,9 +1331,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
                                     </a>
                                   ) : null}
                                   {item.phone ? (
-                                    <div className="mt-2 text-sm md:text-base">
-                                      {item.phone}
-                                    </div>
+                                    <div className="mt-2 text-sm md:text-base">{item.phone}</div>
                                   ) : null}
                                   {item.whatsapp ? (
                                     <a
@@ -1512,9 +1462,9 @@ function DossierTabs(props: {
   onChange: (tab: ProfileTab) => void;
 }) {
   const tabs: Array<{ key: ProfileTab; label: string }> = [
+    { key: "overview", label: "Overview" },
     { key: "rooms", label: "Rooms" },
-    { key: "activities", label: "Activities" },
-    { key: "experience", label: "Experience" },
+    { key: "experiences", label: "Experiences" },
     { key: "contact", label: "Contact" },
     { key: "downloads", label: "Downloads" },
   ];
